@@ -4,7 +4,8 @@ nixPkgs = ['nodejs_22', 'pnpm']
 [phases.install]
 cmds = ['pnpm install --frozen-lockfile']
 
-# Build phase removed - no build needed for backend API
+[phases.build]
+cmds = []
 
 [start]
 cmd = 'pnpm run railway:start'
