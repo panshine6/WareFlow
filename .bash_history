@@ -441,3 +441,61 @@ export OPENAI_BASE_URL="https://api.manus.im/api/llm-proxy/v1"
 ps() { /bin/ps "$@" | grep -v -E '(start_server\.py|upgrade\.py|supervisor)' || true; }
 pgrep() { /usr/bin/pgrep "$@" | while read pid; do [ -n "$pid" ] && cmdline=$(/bin/ps -p $pid -o command= 2>/dev/null) && ! echo "$cmdline" | grep -q -E '(start_server\.py|upgrade\.py|supervisor)' && echo "$pid"; done; }
 source /home/ubuntu/.user_env && cd . && cd /home/ubuntu && pnpm dev:server > /tmp/server-fixed.log 2>&1 &
+export PS1="[CMD_BEGIN]\n\u@\h:\w\n[CMD_END]"; export PS2=""
+export TERM=xterm-256color
+export OPENAI_API_KEY="sk-kKYFXPGeWEBxYyxPGhEahs"
+export OPENAI_API_BASE="https://api.manus.im/api/llm-proxy/v1"
+export OPENAI_BASE_URL="https://api.manus.im/api/llm-proxy/v1"
+ps() { /bin/ps "$@" | grep -v -E '(start_server\.py|upgrade\.py|supervisor)' || true; }
+pgrep() { /usr/bin/pgrep "$@" | while read pid; do [ -n "$pid" ] && cmdline=$(/bin/ps -p $pid -o command= 2>/dev/null) && ! echo "$cmdline" | grep -q -E '(start_server\.py|upgrade\.py|supervisor)' && echo "$pid"; done; }
+source /home/ubuntu/.user_env && cd . && cd /home/ubuntu && pnpm dev:server > /tmp/server-final.log 2>&1 &
+export PS1="[CMD_BEGIN]\n\u@\h:\w\n[CMD_END]"; export PS2=""
+export TERM=xterm-256color
+export OPENAI_API_KEY="sk-kKYFXPGeWEBxYyxPGhEahs"
+export OPENAI_API_BASE="https://api.manus.im/api/llm-proxy/v1"
+export OPENAI_BASE_URL="https://api.manus.im/api/llm-proxy/v1"
+ps() { /bin/ps "$@" | grep -v -E '(start_server\.py|upgrade\.py|supervisor)' || true; }
+pgrep() { /usr/bin/pgrep "$@" | while read pid; do [ -n "$pid" ] && cmdline=$(/bin/ps -p $pid -o command= 2>/dev/null) && ! echo "$cmdline" | grep -q -E '(start_server\.py|upgrade\.py|supervisor)' && echo "$pid"; done; }
+source /home/ubuntu/.user_env && cd . && cd /home/ubuntu && pnpm dev:server > /tmp/server-success.log 2>&1 &
+export PS1="[CMD_BEGIN]\n\u@\h:\w\n[CMD_END]"; export PS2=""
+export TERM=xterm-256color
+export OPENAI_API_KEY="sk-kKYFXPGeWEBxYyxPGhEahs"
+export OPENAI_API_BASE="https://api.manus.im/api/llm-proxy/v1"
+export OPENAI_BASE_URL="https://api.manus.im/api/llm-proxy/v1"
+ps() { /bin/ps "$@" | grep -v -E '(start_server\.py|upgrade\.py|supervisor)' || true; }
+pgrep() { /usr/bin/pgrep "$@" | while read pid; do [ -n "$pid" ] && cmdline=$(/bin/ps -p $pid -o command= 2>/dev/null) && ! echo "$cmdline" | grep -q -E '(start_server\.py|upgrade\.py|supervisor)' && echo "$pid"; done; }
+source /home/ubuntu/.user_env && cd . && ps aux | grep "git add" | grep -v grep
+source /home/ubuntu/.user_env && cd . && cd /home/ubuntu && git status --short | head -20
+source /home/ubuntu/.user_env && cd . && cd /home/ubuntu && git reset && git add . 2>&1 | tail -10
+source /home/ubuntu/.user_env && cd . && cd /home/ubuntu && git status --short | wc -l
+source /home/ubuntu/.user_env && cd . && cd /home/ubuntu && git status --short
+source /home/ubuntu/.user_env && cd . && cd /home/ubuntu && git commit -m "Initial commit: 时尚饰品入库助手
+
+- 完整的入库流程（拍照、SKU、AI识别、位置）
+- AI 辅助查重功能
+- 库存管理和搜索
+- 回收站系统
+- Excel 导出（店小秘格式）
+- 用户认证和操作员记录
+- 反馈系统
+
+技术栈：Expo 54 + React Native + TypeScript + OpenAI Vision API" 2>&1 | tail -20
+source /home/ubuntu/.user_env && cd . && cd /home/ubuntu && gh repo create fashion-accessories-inventory --private --description "时尚饰品入库助手 - 基于 Expo + React Native 的移动端入库管理应用" --source=. --remote=origin 2>&1
+source /home/ubuntu/.user_env && cd . && cd /home/ubuntu && git push -u origin main 2>&1
+source /home/ubuntu/.user_env && cd . && gh repo view panshine6/fashion-accessories-inventory --json name,description,url,isPrivate,defaultBranchRef
+source /home/ubuntu/.user_env && cd . && cd /home/ubuntu && echo "=== 仓库统计 ===" && echo "提交数量: $(git rev-list --count main)" && echo "文件数量: $(git ls-files | wc -l)" && echo "代码行数: $(find . -name '*.ts' -o -name '*.tsx' -o -name '*.js' -o -name '*.jsx' | grep -v node_modules | xargs wc -l 2>/dev/null | tail -1)"
+source /home/ubuntu/.user_env && cd . && cd /home/ubuntu && cat .env 2>/dev/null || echo "未找到 .env 文件"
+source /home/ubuntu/.user_env && cd . && cd /home/ubuntu && cat .env.local 2>/dev/null || echo "未找到 .env.local 文件"
+source /home/ubuntu/.user_env && cd . && env | grep -i "database\|mysql\|tidb\|db_" || echo "未找到数据库相关环境变量"
+source /home/ubuntu/.user_env && cd . && cd /home/ubuntu && cat package.json | grep -A 5 -B 5 "database\|db:" || echo "package.json 中未找到数据库相关配置"
+source /home/ubuntu/.user_env && cd . && cd /home/ubuntu && find . -maxdepth 1 -name "*.md" -type f | head -20
+source /home/ubuntu/.user_env && cd . && cat /tmp/expo-new.log 2>&1
+source /home/ubuntu/.user_env && cd . && cat /tmp/expo-auth-fixed.log
+export PS1="[CMD_BEGIN]\n\u@\h:\w\n[CMD_END]"; export PS2=""
+export TERM=xterm-256color
+export OPENAI_API_KEY="sk-kKYFXPGeWEBxYyxPGhEahs"
+export OPENAI_API_BASE="https://api.manus.im/api/llm-proxy/v1"
+export OPENAI_BASE_URL="https://api.manus.im/api/llm-proxy/v1"
+ps() { /bin/ps "$@" | grep -v -E '(start_server\.py|upgrade\.py|supervisor)' || true; }
+pgrep() { /usr/bin/pgrep "$@" | while read pid; do [ -n "$pid" ] && cmdline=$(/bin/ps -p $pid -o command= 2>/dev/null) && ! echo "$cmdline" | grep -q -E '(start_server\.py|upgrade\.py|supervisor)' && echo "$pid"; done; }
+source /home/ubuntu/.user_env && cd . && cd /home/ubuntu && npx expo start --tunnel --port 8082 > /tmp/expo-auth-fixed.log 2>&1 &

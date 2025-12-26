@@ -86,8 +86,8 @@ export default function AddProductSkuScreen() {
       // 开始查重流程
       setChecking(true);
 
-      // 获取所有现有产品
-      const allProducts = await ProductStorage.getAll();
+      // 获取所有未删除的产品（已删除的不参与查重）
+      const allProducts = await ProductStorage.getActive();
 
       if (allProducts.length === 0) {
         // 没有现有产品，直接继续
