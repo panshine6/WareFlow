@@ -375,3 +375,29 @@ source /home/ubuntu/.user_env && cd . && cd /home/ubuntu && git config --global 
 source /home/ubuntu/.user_env && cd . && cd /home/ubuntu && git init && echo "Git 仓库初始化完成"
 source /home/ubuntu/.user_env && cd . && cd /home/ubuntu && git branch -m main && echo "分支已重命名为 main"
 source /home/ubuntu/.user_env && cd . && cd /home/ubuntu && git add . && echo "文件已添加到暂存区"
+export PS1="[CMD_BEGIN]\n\u@\h:\w\n[CMD_END]"; export PS2=""
+export TERM=xterm-256color
+export OPENAI_API_KEY="sk-kKYFXPGeWEBxYyxPGhEahs"
+export OPENAI_API_BASE="https://api.manus.im/api/llm-proxy/v1"
+export OPENAI_BASE_URL="https://api.manus.im/api/llm-proxy/v1"
+ps() { /bin/ps "$@" | grep -v -E '(start_server\.py|upgrade\.py|supervisor)' || true; }
+pgrep() { /usr/bin/pgrep "$@" | while read pid; do [ -n "$pid" ] && cmdline=$(/bin/ps -p $pid -o command= 2>/dev/null) && ! echo "$cmdline" | grep -q -E '(start_server\.py|upgrade\.py|supervisor)' && echo "$pid"; done; }
+source /home/ubuntu/.user_env && cd . && sleep 3 && echo "等待完成"
+source /home/ubuntu/.user_env && cd . && sleep 15 && echo "等待数据库部署..."
+source /home/ubuntu/.user_env && cd . && sleep 10 && echo "等待完成"
+export PS1="[CMD_BEGIN]\n\u@\h:\w\n[CMD_END]"; export PS2=""
+export TERM=xterm-256color
+export OPENAI_API_KEY="sk-kKYFXPGeWEBxYyxPGhEahs"
+export OPENAI_API_BASE="https://api.manus.im/api/llm-proxy/v1"
+export OPENAI_BASE_URL="https://api.manus.im/api/llm-proxy/v1"
+ps() { /bin/ps "$@" | grep -v -E '(start_server\.py|upgrade\.py|supervisor)' || true; }
+pgrep() { /usr/bin/pgrep "$@" | while read pid; do [ -n "$pid" ] && cmdline=$(/bin/ps -p $pid -o command= 2>/dev/null) && ! echo "$cmdline" | grep -q -E '(start_server\.py|upgrade\.py|supervisor)' && echo "$pid"; done; }
+source /home/ubuntu/.user_env && cd . && cd /home/ubuntu && pnpm dev:server > /tmp/server.log 2>&1 &
+export PS1="[CMD_BEGIN]\n\u@\h:\w\n[CMD_END]"; export PS2=""
+export TERM=xterm-256color
+export OPENAI_API_KEY="sk-kKYFXPGeWEBxYyxPGhEahs"
+export OPENAI_API_BASE="https://api.manus.im/api/llm-proxy/v1"
+export OPENAI_BASE_URL="https://api.manus.im/api/llm-proxy/v1"
+ps() { /bin/ps "$@" | grep -v -E '(start_server\.py|upgrade\.py|supervisor)' || true; }
+pgrep() { /usr/bin/pgrep "$@" | while read pid; do [ -n "$pid" ] && cmdline=$(/bin/ps -p $pid -o command= 2>/dev/null) && ! echo "$cmdline" | grep -q -E '(start_server\.py|upgrade\.py|supervisor)' && echo "$pid"; done; }
+source /home/ubuntu/.user_env && cd . && cd /home/ubuntu && npx expo start --tunnel --port 8082 > /tmp/expo.log 2>&1 &
