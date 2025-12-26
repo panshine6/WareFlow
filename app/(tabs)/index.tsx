@@ -62,6 +62,9 @@ export default function HomeScreen() {
 
   const totalQuantity = products.reduce((sum, p) => sum + p.quantity, 0);
 
+  // 跳过登录检查 - 直接显示主界面
+  // 注释：如果将来需要登录功能，取消下面的注释
+  /*
   // 如果正在加载认证状态，显示加载指示器
   if (authLoading) {
     return (
@@ -75,6 +78,7 @@ export default function HomeScreen() {
   if (!isAuthenticated) {
     return <WelcomeScreen />;
   }
+  */
 
   return (
     <ThemedView style={styles.container}>
@@ -93,7 +97,8 @@ export default function HomeScreen() {
         <ThemedText type="title" style={styles.title}>
           饰品入库助手
         </ThemedText>
-        {user && (
+        {/* 用户信息已隐藏 - 如需登录功能请取消注释 */}
+        {/* user && (
           <View style={styles.userContainer}>
             <ThemedText style={styles.userName}>
               {user.name || user.email || "用户"}
@@ -102,7 +107,7 @@ export default function HomeScreen() {
               <ThemedText style={styles.logoutButtonText}>登出</ThemedText>
             </Pressable>
           </View>
-        )}
+        ) */}
       </View>
 
         <View style={styles.statsContainer}>
