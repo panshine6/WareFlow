@@ -199,11 +199,7 @@ export default function AddProductSkuScreen() {
             </ThemedText>
 
             <ThemedText style={styles.hint}>
-              {loading
-                ? "正在加载..."
-                : checking
-                  ? "正在查重，请稍候..."
-                  : "请输入产品 SKU 编号"}
+              {loading ? "正在加载..." : checking ? "正在查重，请稍候..." : "请输入产品 SKU 编号"}
             </ThemedText>
 
             <TextInput
@@ -248,7 +244,8 @@ export default function AddProductSkuScreen() {
                   <ActivityIndicator color="#fff" />
                 ) : (
                   <ThemedText style={styles.confirmButtonText}>确定</ThemedText>
-                )}              </Pressable>
+                )}
+              </Pressable>
             </View>
           </View>
         </View>
