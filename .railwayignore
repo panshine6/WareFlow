@@ -1,0 +1,17 @@
+node_modules/
+.expo/
+.expo-shared/
+dist/
+*.log
+.DS_Store
+*.local
+app/
+components/
+hooks/
+constants/
+lib/
+scripts/
+assets/
+*.md
+.git/
+.github/
