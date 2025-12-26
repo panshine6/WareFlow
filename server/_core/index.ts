@@ -1,4 +1,7 @@
 import "dotenv/config";
+// Load environment variables from .env and .env.local
+import "../../scripts/load-env.js";
+
 import express from "express";
 import { createServer } from "http";
 import net from "net";
