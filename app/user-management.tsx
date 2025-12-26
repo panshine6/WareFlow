@@ -6,7 +6,6 @@ import {
   KeyboardAvoidingView,
   Platform,
   Pressable,
-  ScrollView,
   StyleSheet,
   TextInput,
   View,
@@ -182,17 +181,12 @@ export default function UserManagementScreen() {
         style={styles.keyboardView}
         keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 20}
       >
-        <ScrollView
-          style={styles.scrollView}
-          contentContainerStyle={styles.scrollContent}
-          keyboardShouldPersistTaps="handled"
-        >
-          <View style={styles.content}>
         <FlatList
           data={users}
           renderItem={renderUser}
           keyExtractor={(item) => item.id.toString()}
           contentContainerStyle={styles.list}
+          keyboardShouldPersistTaps="handled"
           ListHeaderComponent={
             <View style={styles.listHeader}>
               <ThemedText style={styles.listTitle}>
@@ -200,86 +194,87 @@ export default function UserManagementScreen() {
               </ThemedText>
             </View>
           }
-        />
+          ListFooterComponent={
+            <View style={styles.footerContainer}>
+              {showAddForm ? (
+                <View style={styles.addForm}>
+                  <ThemedText style={styles.formTitle}>添加新操作员</ThemedText>
 
-        {showAddForm ? (
-          <View style={styles.addForm}>
-            <ThemedText style={styles.formTitle}>添加新操作员</ThemedText>
+                  <TextInput
+                    style={[
+                      styles.input,
+                      {
+                        backgroundColor:
+                          colorScheme === "dark"
+                            ? "rgba(255, 255, 255, 0.1)"
+                            : "rgba(0, 0, 0, 0.05)",
+                        color: colorScheme === "dark" ? "#fff" : "#000",
+                      },
+                    ]}
+                    value={newName}
+                    onChangeText={setNewName}
+                    placeholder="姓名"
+                    placeholderTextColor={
+                      colorScheme === "dark"
+                        ? "rgba(255, 255, 255, 0.4)"
+                        : "rgba(0, 0, 0, 0.4)"
+                    }
+                  />
 
-            <TextInput
-              style={[
-                styles.input,
-                {
-                  backgroundColor:
-                    colorScheme === "dark"
-                      ? "rgba(255, 255, 255, 0.1)"
-                      : "rgba(0, 0, 0, 0.05)",
-                  color: colorScheme === "dark" ? "#fff" : "#000",
-                },
-              ]}
-              value={newName}
-              onChangeText={setNewName}
-              placeholder="姓名"
-              placeholderTextColor={
-                colorScheme === "dark"
-                  ? "rgba(255, 255, 255, 0.4)"
-                  : "rgba(0, 0, 0, 0.4)"
-              }
-            />
+                  <TextInput
+                    style={[
+                      styles.input,
+                      {
+                        backgroundColor:
+                          colorScheme === "dark"
+                            ? "rgba(255, 255, 255, 0.1)"
+                            : "rgba(0, 0, 0, 0.05)",
+                        color: colorScheme === "dark" ? "#fff" : "#000",
+                      },
+                    ]}
+                    value={newPin}
+                    onChangeText={setNewPin}
+                    placeholder="PIN 码 (4-6 位数字)"
+                    placeholderTextColor={
+                      colorScheme === "dark"
+                        ? "rgba(255, 255, 255, 0.4)"
+                        : "rgba(0, 0, 0, 0.4)"
+                    }
+                    keyboardType="number-pad"
+                    maxLength={6}
+                    secureTextEntry
+                  />
 
-            <TextInput
-              style={[
-                styles.input,
-                {
-                  backgroundColor:
-                    colorScheme === "dark"
-                      ? "rgba(255, 255, 255, 0.1)"
-                      : "rgba(0, 0, 0, 0.05)",
-                  color: colorScheme === "dark" ? "#fff" : "#000",
-                },
-              ]}
-              value={newPin}
-              onChangeText={setNewPin}
-              placeholder="PIN 码 (4-6 位数字)"
-              placeholderTextColor={
-                colorScheme === "dark"
-                  ? "rgba(255, 255, 255, 0.4)"
-                  : "rgba(0, 0, 0, 0.4)"
-              }
-              keyboardType="number-pad"
-              maxLength={6}
-              secureTextEntry
-            />
-
-            <View style={styles.formButtons}>
-              <Pressable
-                style={[styles.button, styles.cancelButton]}
-                onPress={() => {
-                  setShowAddForm(false);
-                  setNewName("");
-                  setNewPin("");
-                }}
-              >
-                <ThemedText style={styles.cancelButtonText}>取消</ThemedText>
-              </Pressable>
-              <Pressable
-                style={[styles.button, styles.confirmButton]}
-                onPress={handleAddUser}
-              >
-                <ThemedText style={styles.confirmButtonText}>添加</ThemedText>
-              </Pressable>
+                  <View style={styles.formButtons}>
+                    <Pressable
+                      style={[styles.button, styles.cancelButton]}
+                      onPress={() => {
+                        setShowAddForm(false);
+                        setNewName("");
+                        setNewPin("");
+                      }}
+                    >
+                      <ThemedText style={styles.cancelButtonText}>取消</ThemedText>
+                    </Pressable>
+                    <Pressable
+                      style={[styles.button, styles.confirmButton]}
+                      onPress={handleAddUser}
+                    >
+                      <ThemedText style={styles.confirmButtonText}>添加</ThemedText>
+                    </Pressable>
+                  </View>
+                </View>
+              ) : (
+                <Pressable
+                  style={styles.addButton}
+                  onPress={() => setShowAddForm(true)}
+                >
+                  <ThemedText style={styles.addButtonText}>+ 添加操作员</ThemedText>
+                </Pressable>
+              )}
             </View>
-          </View>
-        ) : (
-          <Pressable
-            style={styles.addButton}
-            onPress={() => setShowAddForm(true)}
-          >
-            <ThemedText style={styles.addButtonText}>+ 添加操作员</ThemedText>
-          </Pressable>
-         )}
-          </View>
-        </ScrollView>
+          }
+        />
       </KeyboardAvoidingView>
     </ThemedView>
   );
@@ -308,18 +303,13 @@ const styles = StyleSheet.create({
   keyboardView: {
     flex: 1,
   },
-  scrollView: {
-    flex: 1,
-  },
-  scrollContent: {
-    flexGrow: 1,
-  },
-  content: {
-    flex: 1,
-    paddingHorizontal: 20,
-  },
   list: {
     paddingVertical: 20,
+    paddingHorizontal: 20,
+  },
+  footerContainer: {
+    paddingHorizontal: 20,
+    paddingBottom: 20,
   },
   listHeader: {
     marginBottom: 16,
