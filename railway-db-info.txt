@@ -1,0 +1,22 @@
+Railway MySQL 数据库连接信息
+================================
+
+数据库名称: railway
+用户名: root
+密码: UzHjxAMVBMQTAPkjyFfbilYLEJbqXSWp
+内网端口: 3306
+公网地址: hopper.proxy.rlwy.net:15172
+
+完整的公网连接 URL (DATABASE_URL):
+mysql://root:UzHjxAMVBMQTAPkjyFfbilYLEJbqXSWp@hopper.proxy.rlwy.net:15172/railway
+
+内网连接地址（仅在 Railway 内部使用）:
+mysql.railway.internal:3306
+
+完整的内网连接 URL:
+mysql://root:UzHjxAMVBMQTAPkjyFfbilYLEJbqXSWp@mysql.railway.internal:3306/railway
+
+注意：
+- 公网连接 URL 可以从任何地方访问（包括您的手机应用）
+- 内网连接 URL 只能在 Railway 部署的服务之间使用
+- 对于 Expo 应用，应该使用公网连接 URL
