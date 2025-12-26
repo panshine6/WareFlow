@@ -14,7 +14,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
 import { useColorScheme } from "@/hooks/use-color-scheme";
-import { useAuth } from "@/hooks/use-auth";
+import { UserStorage } from "@/lib/user-storage";
 import { ProductStorage, SettingsStorage } from "@/lib/storage";
 import type { Product } from "@/types/product";
 
@@ -25,7 +25,7 @@ export default function AddProductLocationScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const colorScheme = useColorScheme();
-  const { user } = useAuth();
+  const [currentUser, setCurrentUser] = useState<any>(null);
   const params = useLocalSearchParams<{
     detailImageUri: string;
     overviewImageUri: string;
@@ -39,22 +39,26 @@ export default function AddProductLocationScreen() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
-  // 加载默认存储位置
+  // 加载默认存储位置和当前用户
   useEffect(() => {
-    const loadDefaultLocation = async () => {
+    const loadData = async () => {
       try {
-        const settings = await SettingsStorage.get();
+        const [settings, user] = await Promise.all([
+          SettingsStorage.get(),
+          UserStorage.getCurrentUser(),
+        ]);
         if (settings.defaultLocation) {
           setLocation(settings.defaultLocation);
         }
+        setCurrentUser(user);
       } catch (error) {
-        console.error("Failed to load default location:", error);
+        console.error("Failed to load data:", error);
       } finally {
         setLoading(false);
       }
     };
 
-    loadDefaultLocation();
+    loadData();
   }, []);
 
   // 完成并保存
@@ -68,8 +72,8 @@ export default function AddProductLocationScreen() {
 
     try {
       const quantity = parseInt(params.quantity) || 0;
-      const operatorName = user?.name || user?.email || "未知用户";
-      const operatorId = user?.id?.toString() || "";
+      const operatorName = currentUser?.name || "未知用户";
+      const operatorId = currentUser?.id?.toString() || "1";
 
       // 判断是新款还是合并
       if (params.mergeToProductId) {

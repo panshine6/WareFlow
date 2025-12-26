@@ -1,15 +1,40 @@
-import { Tabs } from "expo-router";
-import React from "react";
+import { Tabs, useRouter } from "expo-router";
+import React, { useEffect, useState } from "react";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { View, ActivityIndicator } from "react-native";
 
 import { HapticTab } from "@/components/haptic-tab";
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import { Colors } from "@/constants/theme";
 import { useColorScheme } from "@/hooks/use-color-scheme";
+import { UserStorage } from "@/lib/user-storage";
 
 export default function TabLayout() {
   const colorScheme = useColorScheme();
   const insets = useSafeAreaInsets();
+  const router = useRouter();
+  const [isChecking, setIsChecking] = useState(true);
+
+  // 检查登录状态
+  useEffect(() => {
+    const checkAuth = async () => {
+      const currentUser = await UserStorage.getCurrentUser();
+      if (!currentUser) {
+        router.replace("/login");
+      } else {
+        setIsChecking(false);
+      }
+    };
+    checkAuth();
+  }, [router]);
+
+  if (isChecking) {
+    return (
+      <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
+        <ActivityIndicator size="large" />
+      </View>
+    );
+  }
 
   return (
     <Tabs

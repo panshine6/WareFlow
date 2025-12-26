@@ -16,7 +16,7 @@ import { ThemedView } from "@/components/themed-view";
 import { WelcomeScreen } from "@/components/welcome-screen";
 import { Colors } from "@/constants/theme";
 import { useColorScheme } from "@/hooks/use-color-scheme";
-import { useAuth } from "@/hooks/use-auth";
+import { UserStorage } from "@/lib/user-storage";
 import { ProductStorage } from "@/lib/storage";
 import type { Product } from "@/types/product";
 
@@ -24,8 +24,7 @@ export default function HomeScreen() {
   const colorScheme = useColorScheme();
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { user, isAuthenticated, loading: authLoading, logout } = useAuth();
-
+  const [currentUser, setCurrentUser] = useState<any>(null);
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -51,7 +50,20 @@ export default function HomeScreen() {
 
   useEffect(() => {
     loadProducts();
+    loadCurrentUser();
   }, []);
+
+  // 加载当前用户
+  const loadCurrentUser = async () => {
+    const user = await UserStorage.getCurrentUser();
+    setCurrentUser(user);
+  };
+
+  // 登出
+  const handleLogout = async () => {
+    await UserStorage.logout();
+    router.replace("/login");
+  };
 
   // 统计数据
   const todayCount = products.filter((p) => {
@@ -97,17 +109,21 @@ export default function HomeScreen() {
         <ThemedText type="title" style={styles.title}>
           饰品入库助手
         </ThemedText>
-        {/* 用户信息已隐藏 - 如需登录功能请取消注释 */}
-        {/* user && (
+        {currentUser && (
           <View style={styles.userContainer}>
             <ThemedText style={styles.userName}>
-              {user.name || user.email || "用户"}
+              {currentUser.name}
             </ThemedText>
-            <Pressable onPress={logout} style={styles.logoutButton}>
+            {currentUser.isAdmin && (
+              <Pressable onPress={() => router.push("/user-management" as any)} style={styles.manageButton}>
+                <ThemedText style={styles.manageButtonText}>管理</ThemedText>
+              </Pressable>
+            )}
+            <Pressable onPress={handleLogout} style={styles.logoutButton}>
               <ThemedText style={styles.logoutButtonText}>登出</ThemedText>
             </Pressable>
           </View>
-        ) */}
+        )}
       </View>
 
         <View style={styles.statsContainer}>
@@ -255,6 +271,18 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     opacity: 0.8,
     fontWeight: "500",
+  },
+  manageButton: {
+    paddingVertical: 4,
+    paddingHorizontal: 12,
+    borderRadius: 6,
+    backgroundColor: "rgba(0, 122, 255, 0.1)",
+  },
+  manageButtonText: {
+    color: "#007AFF",
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: "600",
   },
   logoutButton: {
     paddingVertical: 4,
