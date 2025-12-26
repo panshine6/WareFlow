@@ -1,1 +1,1 @@
-web: pnpm run start:server
+web: pnpm run railway:start

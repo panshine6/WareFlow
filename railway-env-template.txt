@@ -1,0 +1,23 @@
+# Railway 环境变量配置模板
+# 请在 Railway 项目设置中添加以下环境变量
+
+# 1. 数据库连接（必需）
+DATABASE_URL=mysql://root:DYjNhOcmYxDZUPfvqECJTjuqjKZPkRfp@autorack.proxy.rlwy.net:22819/railway
+
+# 2. OpenAI API Key（必需）
+OPENAI_API_KEY=<从环境变量 $OPENAI_API_KEY 获取>
+
+# 3. Node 环境（必需）
+NODE_ENV=production
+
+# 4. 端口（Railway 会自动设置，无需手动添加）
+# PORT=3000
+
+# 5. OAuth 配置（可选，当前使用 NO_LOGIN_MODE）
+# OAUTH_SERVER_URL=
+# OWNER_OPEN_ID=
+
+# 注意事项：
+# - DATABASE_URL 已经包含在上面，直接复制即可
+# - OPENAI_API_KEY 需要从系统环境变量中获取实际值
+# - Railway 会自动设置 PORT 环境变量，不要手动设置
