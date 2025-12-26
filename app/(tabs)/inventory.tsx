@@ -44,10 +44,10 @@ export default function InventoryScreen() {
     enabled: false, // 手动触发
   });
 
-  // 加载产品列表
+  // 加载产品列表（只显示未删除的）
   const loadProducts = async () => {
     try {
-      const data = await ProductStorage.getAll();
+      const data = await ProductStorage.getActive();
       setProducts(data);
       setFilteredProducts(data);
     } catch (error) {
