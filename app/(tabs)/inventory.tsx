@@ -215,49 +215,7 @@ export default function InventoryScreen() {
         </Pressable>
 
         {/* 数据同步区域 */}
-        {dbConfigured && (
-          <View style={styles.syncContainer}>
-            <ThemedText type="subtitle" style={styles.syncTitle}>
-              数据同步
-            </ThemedText>
-            
-            {syncStatus && (
-              <View style={styles.syncStatusContainer}>
-                <View style={styles.syncStatusRow}>
-                  <ThemedText style={styles.syncStatusText}>
-                    本地: {syncStatus.localCount} 条
-                  </ThemedText>
-                  <ThemedText style={styles.syncStatusText}>
-                    云端: {syncStatus.cloudCount} 条
-                  </ThemedText>
-                </View>
-                
-                {syncStatus.lastSyncTime && (
-                  <ThemedText style={styles.syncTimeText}>
-                    最后同步: {new Date(syncStatus.lastSyncTime).toLocaleString('zh-CN', {
-                      year: 'numeric',
-                      month: '2-digit',
-                      day: '2-digit',
-                      hour: '2-digit',
-                      minute: '2-digit',
-                    })}
-                  </ThemedText>
-                )}
-                
-                {!syncStatus.lastSyncTime && (
-                  <ThemedText style={styles.syncTimeText}>
-                    从未同步
-                  </ThemedText>
-                )}
-                
-                {syncStatus.needsSync && (
-                  <ThemedText style={styles.syncWarningText}>
-                    ⚠️ 本地和云端数据不一致
-                  </ThemedText>
-                )}
-              </View>
-            )}
-            
+        <View style={styles.syncContainer}>
             <View style={styles.syncButtonsRow}>
               <Pressable
                 style={[styles.syncButton, styles.uploadButton, syncing && styles.buttonDisabled]}
@@ -280,7 +238,6 @@ export default function InventoryScreen() {
               </Pressable>
             </View>
           </View>
-        )}
       </View>
 
       {/* 产品列表 */}
@@ -420,9 +377,7 @@ const styles = StyleSheet.create({
   },
   syncContainer: {
     marginTop: 16,
-    padding: 16,
-    backgroundColor: "rgba(0, 122, 255, 0.1)",
-    borderRadius: 12,
+    marginBottom: 8,
   },
   syncTitle: {
     marginBottom: 12,
@@ -457,10 +412,15 @@ const styles = StyleSheet.create({
   },
   syncButton: {
     flex: 1,
-    height: 44,
-    borderRadius: 10,
+    height: 50,
+    borderRadius: 12,
     justifyContent: "center",
     alignItems: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
   },
   uploadButton: {
     backgroundColor: "#007AFF",
@@ -470,7 +430,7 @@ const styles = StyleSheet.create({
   },
   syncButtonText: {
     color: "#fff",
-    fontSize: 14,
-    fontWeight: "600",
+    fontSize: 15,
+    fontWeight: "700",
   },
 });
