@@ -18,6 +18,8 @@ import { Colors } from "@/constants/theme";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { UserStorage } from "@/lib/user-storage";
 import { ProductStorage } from "@/lib/storage";
+import { AutoSync } from "@/lib/auto-sync";
+import { trpc } from "@/lib/trpc";
 import type { Product } from "@/types/product";
 
 export default function HomeScreen() {
@@ -28,6 +30,11 @@ export default function HomeScreen() {
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+
+  // 使用 tRPC 同步
+  const downloadQuery = trpc.sync.download.useQuery(undefined, {
+    enabled: false, // 手动触发
+  });
 
   // 加载产品列表（仅显示活跃产品）
   const loadProducts = async () => {
@@ -41,17 +48,49 @@ export default function HomeScreen() {
     }
   };
 
-  // 下拉刷新
+  // 下拉刷新（从云端同步）
   const onRefresh = async () => {
     setRefreshing(true);
-    await loadProducts();
-    setRefreshing(false);
+    try {
+      await AutoSync.downloadFromCloud(
+        downloadQuery,
+        async () => {
+          await loadProducts();
+        },
+        (error) => {
+          console.log("同步失败", error);
+        }
+      );
+    } catch (error) {
+      console.log("同步失败", error);
+    } finally {
+      setRefreshing(false);
+    }
   };
 
   useEffect(() => {
     loadProducts();
     loadCurrentUser();
+    // 进入页面时自动同步
+    autoSyncOnEnter();
   }, []);
+
+  // 进入页面时自动同步
+  const autoSyncOnEnter = async () => {
+    try {
+      await AutoSync.downloadFromCloud(
+        downloadQuery,
+        async () => {
+          await loadProducts();
+        },
+        (error) => {
+          console.log("自动同步失败（静默）", error);
+        }
+      );
+    } catch (error) {
+      console.log("自动同步失败", error);
+    }
+  };
 
   // 加载当前用户
   const loadCurrentUser = async () => {

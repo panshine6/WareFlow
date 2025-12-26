@@ -17,6 +17,8 @@ import { ThemedView } from "@/components/themed-view";
 import { Colors } from "@/constants/theme";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { ProductStorage } from "@/lib/storage";
+import { AutoSync } from "@/lib/auto-sync";
+import { trpc } from "@/lib/trpc";
 import type { Product } from "@/types/product";
 
 /**
@@ -33,6 +35,9 @@ export default function ProductDetailScreen() {
   const [isEditing, setIsEditing] = useState(false);
   const [editedProduct, setEditedProduct] = useState<Product | null>(null);
   const [saving, setSaving] = useState(false);
+
+  // 使用 tRPC 同步
+  const uploadMutation = trpc.sync.upload.useMutation();
 
   // 加载产品数据
   useEffect(() => {
@@ -84,6 +89,18 @@ export default function ProductDetailScreen() {
       await ProductStorage.update(editedProduct.id, editedProduct);
       setProduct(editedProduct);
       setIsEditing(false);
+
+      // 自动上传到云端（静默）
+      try {
+        await AutoSync.uploadToCloud(
+          uploadMutation,
+          () => console.log("编辑后自动上传成功"),
+          (error) => console.log("自动上传失败（静默）", error)
+        );
+      } catch (error) {
+        console.log("自动上传失败", error);
+      }
+
       Alert.alert("成功", "产品信息已更新");
     } catch (error) {
       console.error("Failed to update product:", error);
@@ -110,6 +127,18 @@ export default function ProductDetailScreen() {
           try {
             if (product) {
               await ProductStorage.softDelete(product.id);
+
+              // 自动上传到云端（静默）
+              try {
+                await AutoSync.uploadToCloud(
+                  uploadMutation,
+                  () => console.log("删除后自动上传成功"),
+                  (error) => console.log("自动上传失败（静默）", error)
+                );
+              } catch (error) {
+                console.log("自动上传失败", error);
+              }
+
               Alert.alert("成功", "产品已移至回收站");
               router.replace("/(tabs)");
             }

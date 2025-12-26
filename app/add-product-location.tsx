@@ -16,6 +16,8 @@ import { ThemedView } from "@/components/themed-view";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { UserStorage } from "@/lib/user-storage";
 import { ProductStorage, SettingsStorage } from "@/lib/storage";
+import { AutoSync } from "@/lib/auto-sync";
+import { trpc } from "@/lib/trpc";
 import type { Product } from "@/types/product";
 
 /**
@@ -38,6 +40,9 @@ export default function AddProductLocationScreen() {
   const [location, setLocation] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+
+  // 使用 tRPC 同步
+  const uploadMutation = trpc.sync.upload.useMutation();
 
   // 加载默认存储位置和当前用户
   useEffect(() => {
@@ -105,6 +110,22 @@ export default function AddProductLocationScreen() {
 
       // 更新默认位置
       await SettingsStorage.update({ defaultLocation: location.trim() });
+
+      // 自动上传到云端（静默）
+      try {
+        await AutoSync.uploadToCloud(
+          uploadMutation,
+          () => {
+            console.log("自动上传成功");
+          },
+          (error) => {
+            console.log("自动上传失败（静默）", error);
+          }
+        );
+      } catch (error) {
+        // 静默失败，不影响用户体验
+        console.log("自动上传失败", error);
+      }
 
       // 返回主页
       Alert.alert("成功", "产品入库成功", [

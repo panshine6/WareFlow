@@ -6,6 +6,7 @@ import {
   FlatList,
   Image,
   Pressable,
+  RefreshControl,
   StyleSheet,
   TextInput,
   View,
@@ -18,10 +19,8 @@ import { useColorScheme } from "@/hooks/use-color-scheme";
 import { exportToDianxiaomiFormat } from "@/lib/excel-export";
 import { ProductStorage } from "@/lib/storage";
 import { trpc } from "@/lib/trpc";
+import { AutoSync } from "@/lib/auto-sync";
 import type { Product } from "@/types/product";
-import AsyncStorage from "@react-native-async-storage/async-storage";
-
-const LAST_SYNC_TIME_KEY = "lastSyncTime";
 
 /**
  * 库存列表页面
@@ -37,6 +36,8 @@ export default function InventoryScreen() {
   const [searchQuery, setSearchQuery] = useState("");
   const [exporting, setExporting] = useState(false);
   const [syncing, setSyncing] = useState(false);
+  const [lastSyncTime, setLastSyncTime] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
 
   // 使用 tRPC mutations 和 queries
   const uploadMutation = trpc.sync.upload.useMutation();
@@ -59,7 +60,84 @@ export default function InventoryScreen() {
 
   useEffect(() => {
     loadProducts();
+    loadLastSyncTime();
+    // 进入页面时自动同步
+    autoSyncOnEnter();
+    // 启动定时同步（30 秒）
+    const interval = setInterval(() => {
+      autoSyncInBackground();
+    }, 30000);
+    return () => clearInterval(interval);
   }, []);
+
+  // 加载最后同步时间
+  const loadLastSyncTime = async () => {
+    const time = await AutoSync.getLastSyncTime();
+    setLastSyncTime(time);
+  };
+
+  // 进入页面时自动同步
+  const autoSyncOnEnter = async () => {
+    try {
+      await AutoSync.downloadFromCloud(
+        downloadQuery,
+        async () => {
+          await loadProducts();
+          await loadLastSyncTime();
+        },
+        (error) => {
+          console.log("自动同步失败（静默）", error);
+        }
+      );
+    } catch (error) {
+      // 静默失败，不弹窗
+      console.log("自动同步失败", error);
+    }
+  };
+
+  // 后台定时同步
+  const autoSyncInBackground = async () => {
+    try {
+      const shouldSync = await AutoSync.shouldSync();
+      if (!shouldSync) return;
+
+      await AutoSync.downloadFromCloud(
+        downloadQuery,
+        async () => {
+          await loadProducts();
+          await loadLastSyncTime();
+        },
+        (error) => {
+          console.log("后台同步失败（静默）", error);
+        }
+      );
+    } catch (error) {
+      // 静默失败
+      console.log("后台同步失败", error);
+    }
+  };
+
+  // 下拉刷新
+  const onRefresh = async () => {
+    setRefreshing(true);
+    try {
+      await AutoSync.downloadFromCloud(
+        downloadQuery,
+        async () => {
+          await loadProducts();
+          await loadLastSyncTime();
+          Alert.alert("成功", "已同步最新数据");
+        },
+        (error) => {
+          Alert.alert("同步失败", "请检查网络连接");
+        }
+      );
+    } catch (error) {
+      Alert.alert("同步失败", "请检查网络连接");
+    } finally {
+      setRefreshing(false);
+    }
+  };
 
   // 搜索功能
   useEffect(() => {
@@ -78,50 +156,19 @@ export default function InventoryScreen() {
   const handleUpload = async () => {
     setSyncing(true);
     try {
-      console.log("[Sync] Starting upload to cloud...");
-      
-      // 1. 获取本地所有数据
-      const localProducts = await ProductStorage.getAll();
-      console.log(`[Sync] Found ${localProducts.length} local products`);
-      
-      if (localProducts.length === 0) {
-        Alert.alert("提示", "本地暂无数据可上传");
-        setSyncing(false);
-        return;
-      }
-      
-      // 2. 转换数据格式（确保日期字段正确）
-      const productsToUpload = localProducts.map((p) => ({
-        id: p.id,
-        detailImageUri: p.detailImageUri,
-        overviewImageUri: p.overviewImageUri,
-        sku: p.sku,
-        quantity: p.quantity,
-        storageLocation: p.storageLocation,
-        operatorId: typeof p.operatorId === 'number' ? p.operatorId : 0,
-        operatorName: p.operatorName || "",
-        isDeleted: p.isDeleted ? 1 : 0,
-        deletedAt: p.deletedAt ? new Date(p.deletedAt) : null,
-        createdAt: new Date(p.createdAt),
-        updatedAt: new Date(p.updatedAt || p.createdAt),
-      }));
-      
-      // 3. 上传到云端
-      console.log("[Sync] Uploading to cloud...");
-      const result = await uploadMutation.mutateAsync({
-        products: productsToUpload,
-      });
-      
-      // 4. 更新最后同步时间
-      const now = new Date().toISOString();
-      await AsyncStorage.setItem(LAST_SYNC_TIME_KEY, now);
-      
-      console.log(`[Sync] Upload completed: ${result.count} products`);
-      
-      Alert.alert("上传成功", `已上传 ${result.count} 条数据到云端`);
+      await AutoSync.uploadToCloud(
+        uploadMutation,
+        async () => {
+          await loadLastSyncTime();
+          Alert.alert("成功", "已上传到云端");
+        },
+        (error) => {
+          Alert.alert("上传失败", "请检查网络连接");
+        }
+      );
     } catch (error: any) {
       console.error("[Sync] Upload failed:", error);
-      Alert.alert("上传失败", error.message || "请检查网络连接");
+      Alert.alert("上传失败", "请检查网络连接");
     } finally {
       setSyncing(false);
     }
@@ -139,51 +186,20 @@ export default function InventoryScreen() {
           onPress: async () => {
             setSyncing(true);
             try {
-              console.log("[Sync] Starting download from cloud...");
-              
-              // 1. 从云端获取数据
-              const result = await downloadQuery.refetch();
-              if (!result.data) {
-                throw new Error("无法获取云端数据");
-              }
-              
-              const cloudProducts = result.data.products;
-              console.log(`[Sync] Downloaded ${cloudProducts.length} products from cloud`);
-              
-              // 2. 转换数据格式
-              const localProducts: Product[] = cloudProducts.map((p: any) => ({
-                id: p.id,
-                detailImageUri: p.detailImageUri,
-                overviewImageUri: p.overviewImageUri,
-                sku: p.sku,
-                quantity: p.quantity,
-                storageLocation: p.storageLocation,
-                operatorId: p.operatorId,
-                operatorName: p.operatorName,
-                isDeleted: p.isDeleted === 1,
-                deletedAt: p.deletedAt ? new Date(p.deletedAt as any).toISOString() : undefined,
-                createdAt: new Date(p.createdAt).toISOString(),
-                updatedAt: new Date(p.updatedAt).toISOString(),
-                history: [], // 历史记录需要单独查询
-              }));
-              
-              // 3. 清空本地数据并保存云端数据
-              await AsyncStorage.removeItem("products");
-              await AsyncStorage.setItem("products", JSON.stringify(localProducts));
-              
-              // 4. 更新最后同步时间
-              const now = new Date().toISOString();
-              await AsyncStorage.setItem(LAST_SYNC_TIME_KEY, now);
-              
-              console.log(`[Sync] Download completed: ${localProducts.length} products`);
-              
-              Alert.alert("下载成功", `已从云端下载 ${localProducts.length} 条数据`);
-              
-              // 重新加载产品列表
-              await loadProducts();
+              await AutoSync.downloadFromCloud(
+                downloadQuery,
+                async () => {
+                  await loadProducts();
+                  await loadLastSyncTime();
+                  Alert.alert("成功", "已从云端下载数据");
+                },
+                (error) => {
+                  Alert.alert("下载失败", "请检查网络连接");
+                }
+              );
             } catch (error: any) {
               console.error("[Sync] Download failed:", error);
-              Alert.alert("下载失败", error.message || "请检查网络连接");
+              Alert.alert("下载失败", "请检查网络连接");
             } finally {
               setSyncing(false);
             }
@@ -285,6 +301,10 @@ export default function InventoryScreen() {
                 </ThemedText>
               </Pressable>
             </View>
+            {/* 最后同步时间 */}
+            <ThemedText style={styles.syncTimeText}>
+              最后同步：{AutoSync.formatSyncTime(lastSyncTime)}
+            </ThemedText>
           </View>
       </View>
 
@@ -329,6 +349,13 @@ export default function InventoryScreen() {
                 </View>
               </Pressable>
             )}
+            refreshControl={
+              <RefreshControl
+                refreshing={refreshing}
+                onRefresh={onRefresh}
+                tintColor={colorScheme === "dark" ? "#fff" : "#000"}
+              />
+            }
             contentContainerStyle={styles.listContent}
           />
         )}
@@ -447,7 +474,8 @@ const styles = StyleSheet.create({
   syncTimeText: {
     fontSize: 12,
     opacity: 0.6,
-    marginTop: 4,
+    marginTop: 8,
+    textAlign: "center",
   },
   syncWarningText: {
     fontSize: 12,

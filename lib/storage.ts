@@ -180,6 +180,18 @@ export const ProductStorage = {
   },
 
   /**
+   * 替换所有产品数据（用于从云端同步）
+   */
+  async replaceAll(products: Product[]): Promise<void> {
+    try {
+      await AsyncStorage.setItem(PRODUCTS_KEY, JSON.stringify(products));
+    } catch (error) {
+      console.error("Failed to replace all products:", error);
+      throw error;
+    }
+  },
+
+  /**
    * 按 SKU 搜索产品（仅搜索活跃产品）
    */
   async searchBySku(sku: string): Promise<Product[]> {
