@@ -5,7 +5,9 @@ import {
   ActivityIndicator,
   Alert,
   Keyboard,
+  KeyboardAvoidingView,
   Modal,
+  Platform,
   Pressable,
   StyleSheet,
   TextInput,
@@ -190,64 +192,69 @@ export default function AddProductOverviewScreen() {
         animationType="slide"
         onRequestClose={() => setShowQuantityModal(false)}
       >
-        <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-          <View style={styles.modalOverlay}>
-            <TouchableWithoutFeedback>
-              <View
-                style={[
-                  styles.modalContent,
-                  {
-                    paddingBottom: Math.max(insets.bottom, 24),
-                  },
-                ]}
-              >
-            <ThemedText type="title" style={styles.modalTitle}>
-              确认数量
-            </ThemedText>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          style={styles.keyboardView}
+        >
+          <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+            <View style={styles.modalOverlay}>
+              <TouchableWithoutFeedback>
+                <View
+                  style={[
+                    styles.modalContent,
+                    {
+                      paddingBottom: Math.max(insets.bottom, 24),
+                    },
+                  ]}
+                >
+              <ThemedText type="title" style={styles.modalTitle}>
+                确认数量
+              </ThemedText>
 
-            <ThemedText style={styles.modalHint}>
-              AI 识别到的数量，可手动修改
-            </ThemedText>
+              <ThemedText style={styles.modalHint}>
+                AI 识别到的数量，可手动修改
+              </ThemedText>
 
-            <TextInput
-              style={styles.quantityInput}
-              value={quantity.toString()}
-              onChangeText={(text) => {
-                const num = parseInt(text) || 0;
-                setQuantity(num);
-              }}
-              keyboardType="number-pad"
-              selectTextOnFocus
-            />
-
-            <View style={styles.modalButtons}>
-              <Pressable
-                style={[styles.modalButton, styles.retakeButton]}
-                onPress={() => {
-                  Keyboard.dismiss();
-                  setShowQuantityModal(false);
-                  setOverviewImageUri("");
+              <TextInput
+                style={styles.quantityInput}
+                value={quantity.toString()}
+                onChangeText={(text) => {
+                  const num = parseInt(text) || 0;
+                  setQuantity(num);
                 }}
-              >
-                <ThemedText style={styles.retakeButtonText}>重拍</ThemedText>
-              </Pressable>
+                keyboardType="number-pad"
+                selectTextOnFocus
+              />
 
-              <Pressable
-                style={[styles.modalButton, styles.confirmModalButton]}
-                onPress={() => {
-                  Keyboard.dismiss();
-                  handleConfirmQuantity();
-                }}
-              >
-                <ThemedText style={styles.confirmModalButtonText}>
-                  确认
-                </ThemedText>
-              </Pressable>
-            </View>
+              <View style={styles.modalButtons}>
+                <Pressable
+                  style={[styles.modalButton, styles.retakeButton]}
+                  onPress={() => {
+                    Keyboard.dismiss();
+                    setShowQuantityModal(false);
+                    setOverviewImageUri("");
+                  }}
+                >
+                  <ThemedText style={styles.retakeButtonText}>重拍</ThemedText>
+                </Pressable>
+
+                <Pressable
+                  style={[styles.modalButton, styles.confirmModalButton]}
+                  onPress={() => {
+                    Keyboard.dismiss();
+                    handleConfirmQuantity();
+                  }}
+                >
+                  <ThemedText style={styles.confirmModalButtonText}>
+                    确认
+                  </ThemedText>
+                </Pressable>
               </View>
-            </TouchableWithoutFeedback>
-          </View>
-        </TouchableWithoutFeedback>
+                </View>
+              </TouchableWithoutFeedback>
+            </View>
+          </TouchableWithoutFeedback>
+        </KeyboardAvoidingView>
       </Modal>
     </View>
   );
@@ -319,6 +326,9 @@ const styles = StyleSheet.create({
   },
   placeholder: {
     width: 60,
+  },
+  keyboardView: {
+    flex: 1,
   },
   modalOverlay: {
     flex: 1,
