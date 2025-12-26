@@ -17,9 +17,11 @@ import { ThemedView } from "@/components/themed-view";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { exportToDianxiaomiFormat } from "@/lib/excel-export";
 import { ProductStorage } from "@/lib/storage";
-import { SyncService, type SyncStatus } from "@/lib/sync";
 import { trpc } from "@/lib/trpc";
 import type { Product } from "@/types/product";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+
+const LAST_SYNC_TIME_KEY = "lastSyncTime";
 
 /**
  * 库存列表页面
@@ -35,10 +37,12 @@ export default function InventoryScreen() {
   const [searchQuery, setSearchQuery] = useState("");
   const [exporting, setExporting] = useState(false);
   const [syncing, setSyncing] = useState(false);
-  const [syncStatus, setSyncStatus] = useState<SyncStatus | null>(null);
-  const [dbConfigured, setDbConfigured] = useState(false);
 
-  const trpcClient = trpc.useContext();
+  // 使用 tRPC mutations 和 queries
+  const uploadMutation = trpc.sync.upload.useMutation();
+  const downloadQuery = trpc.sync.download.useQuery(undefined, {
+    enabled: false, // 手动触发
+  });
 
   // 加载产品列表
   const loadProducts = async () => {
@@ -55,32 +59,7 @@ export default function InventoryScreen() {
 
   useEffect(() => {
     loadProducts();
-    checkDatabaseAndLoadStatus();
   }, []);
-
-  // 检查数据库配置并加载同步状态
-  const checkDatabaseAndLoadStatus = async () => {
-    try {
-      const configured = await SyncService.isDatabaseConfigured(trpcClient);
-      setDbConfigured(configured);
-      if (configured) {
-        await loadSyncStatus();
-      }
-    } catch (error) {
-      console.error("Failed to check database:", error);
-      setDbConfigured(false);
-    }
-  };
-
-  // 加载同步状态
-  const loadSyncStatus = async () => {
-    try {
-      const status = await SyncService.getStatus(trpcClient);
-      setSyncStatus(status);
-    } catch (error) {
-      console.error("Failed to load sync status:", error);
-    }
-  };
 
   // 搜索功能
   useEffect(() => {
@@ -99,14 +78,49 @@ export default function InventoryScreen() {
   const handleUpload = async () => {
     setSyncing(true);
     try {
-      const result = await SyncService.uploadToCloud(trpcClient);
-      if (result.success) {
-        Alert.alert("上传成功", `已上传 ${result.count} 条数据到云端`);
-        await loadSyncStatus();
-      } else {
-        Alert.alert("上传失败", result.error || "请重试");
+      console.log("[Sync] Starting upload to cloud...");
+      
+      // 1. 获取本地所有数据
+      const localProducts = await ProductStorage.getAll();
+      console.log(`[Sync] Found ${localProducts.length} local products`);
+      
+      if (localProducts.length === 0) {
+        Alert.alert("提示", "本地暂无数据可上传");
+        setSyncing(false);
+        return;
       }
+      
+      // 2. 转换数据格式（确保日期字段正确）
+      const productsToUpload = localProducts.map((p) => ({
+        id: p.id,
+        detailImageUri: p.detailImageUri,
+        overviewImageUri: p.overviewImageUri,
+        sku: p.sku,
+        quantity: p.quantity,
+        storageLocation: p.storageLocation,
+        operatorId: typeof p.operatorId === 'number' ? p.operatorId : 0,
+        operatorName: p.operatorName || "",
+        isDeleted: p.isDeleted ? 1 : 0,
+        deletedAt: p.deletedAt ? new Date(p.deletedAt) : null,
+        createdAt: new Date(p.createdAt),
+        updatedAt: new Date(p.updatedAt || p.createdAt),
+      }));
+      
+      // 3. 上传到云端
+      console.log("[Sync] Uploading to cloud...");
+      const result = await uploadMutation.mutateAsync({
+        products: productsToUpload,
+      });
+      
+      // 4. 更新最后同步时间
+      const now = new Date().toISOString();
+      await AsyncStorage.setItem(LAST_SYNC_TIME_KEY, now);
+      
+      console.log(`[Sync] Upload completed: ${result.count} products`);
+      
+      Alert.alert("上传成功", `已上传 ${result.count} 条数据到云端`);
     } catch (error: any) {
+      console.error("[Sync] Upload failed:", error);
       Alert.alert("上传失败", error.message || "请检查网络连接");
     } finally {
       setSyncing(false);
@@ -122,19 +136,53 @@ export default function InventoryScreen() {
         { text: "取消", style: "cancel" },
         {
           text: "确定",
-          style: "destructive",
           onPress: async () => {
             setSyncing(true);
             try {
-              const result = await SyncService.downloadFromCloud(trpcClient);
-              if (result.success) {
-                Alert.alert("下载成功", `已下载 ${result.count} 条数据到本地`);
-                await loadSyncStatus();
-                await loadProducts(); // 刷新列表
-              } else {
-                Alert.alert("下载失败", result.error || "请重试");
+              console.log("[Sync] Starting download from cloud...");
+              
+              // 1. 从云端获取数据
+              const result = await downloadQuery.refetch();
+              if (!result.data) {
+                throw new Error("无法获取云端数据");
               }
+              
+              const cloudProducts = result.data.products;
+              console.log(`[Sync] Downloaded ${cloudProducts.length} products from cloud`);
+              
+              // 2. 转换数据格式
+              const localProducts: Product[] = cloudProducts.map((p: any) => ({
+                id: p.id,
+                detailImageUri: p.detailImageUri,
+                overviewImageUri: p.overviewImageUri,
+                sku: p.sku,
+                quantity: p.quantity,
+                storageLocation: p.storageLocation,
+                operatorId: p.operatorId,
+                operatorName: p.operatorName,
+                isDeleted: p.isDeleted === 1,
+                deletedAt: p.deletedAt ? new Date(p.deletedAt as any).toISOString() : undefined,
+                createdAt: new Date(p.createdAt).toISOString(),
+                updatedAt: new Date(p.updatedAt).toISOString(),
+                history: [], // 历史记录需要单独查询
+              }));
+              
+              // 3. 清空本地数据并保存云端数据
+              await AsyncStorage.removeItem("products");
+              await AsyncStorage.setItem("products", JSON.stringify(localProducts));
+              
+              // 4. 更新最后同步时间
+              const now = new Date().toISOString();
+              await AsyncStorage.setItem(LAST_SYNC_TIME_KEY, now);
+              
+              console.log(`[Sync] Download completed: ${localProducts.length} products`);
+              
+              Alert.alert("下载成功", `已从云端下载 ${localProducts.length} 条数据`);
+              
+              // 重新加载产品列表
+              await loadProducts();
             } catch (error: any) {
+              console.error("[Sync] Download failed:", error);
               Alert.alert("下载失败", error.message || "请检查网络连接");
             } finally {
               setSyncing(false);
