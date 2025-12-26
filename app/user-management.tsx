@@ -3,7 +3,10 @@ import { useEffect, useState } from "react";
 import {
   Alert,
   FlatList,
+  KeyboardAvoidingView,
+  Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   TextInput,
   View,
@@ -174,7 +177,17 @@ export default function UserManagementScreen() {
         </ThemedText>
       </View>
 
-      <View style={styles.content}>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        style={styles.keyboardView}
+        keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 20}
+      >
+        <ScrollView
+          style={styles.scrollView}
+          contentContainerStyle={styles.scrollContent}
+          keyboardShouldPersistTaps="handled"
+        >
+          <View style={styles.content}>
         <FlatList
           data={users}
           renderItem={renderUser}
@@ -264,8 +277,10 @@ export default function UserManagementScreen() {
           >
             <ThemedText style={styles.addButtonText}>+ 添加操作员</ThemedText>
           </Pressable>
-        )}
-      </View>
+         )}
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
     </ThemedView>
   );
 }
@@ -289,6 +304,15 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: 28,
+  },
+  keyboardView: {
+    flex: 1,
+  },
+  scrollView: {
+    flex: 1,
+  },
+  scrollContent: {
+    flexGrow: 1,
   },
   content: {
     flex: 1,
