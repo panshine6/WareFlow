@@ -45,12 +45,43 @@
 - ✅ 从云端下载
 - ✅ 同步状态显示
 - ✅ 数据一致性检查
+- ✅ **已修复**：同步按钮在无登录模式下正常显示（2025-12-26）
 
 ### 7. 反馈系统
 - ✅ 问题反馈
 - ✅ 截图捕获
 
 ## 🔧 技术说明
+
+### 关键修复：数据同步 API（2025-12-26）
+
+为了让数据同步功能在无登录模式下正常工作，我们对后端 API 进行了以下修改：
+
+**问题**：
+- 同步按钮不显示，因为 `sync.status` API 需要登录验证
+- 在无登录模式下，API 返回认证错误，导致前端判断数据库未配置
+
+**解决方案**：
+在 `server/routers.ts` 中，将以下 API 端点从 `protectedProcedure` 改为 `publicProcedure`：
+
+```typescript
+sync: router({
+  // 上传本地数据到云端（覆盖）
+  upload: publicProcedure  // 原来是 protectedProcedure
+    .input(z.object({...}))
+    .mutation(async ({ input }) => {...}),
+  
+  // 从云端下载数据到本地（覆盖）
+  download: publicProcedure  // 原来是 protectedProcedure
+    .query(async () => {...}),
+  
+  // 获取同步状态
+  status: publicProcedure  // 原来是 protectedProcedure
+    .query(async () => {...}),
+}),
+```
+
+这样，即使在无登录模式下，应用也可以正常访问同步功能。
 
 ### 修改内容
 

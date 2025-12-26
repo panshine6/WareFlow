@@ -38,7 +38,7 @@ export const appRouter = router({
 
   sync: router({
     // 上传本地数据到云端（覆盖）
-    upload: protectedProcedure
+    upload: publicProcedure
       .input(z.object({
         products: z.array(z.object({
           id: z.string(),
@@ -63,15 +63,14 @@ export const appRouter = router({
         return { success: true, count: input.products.length };
       }),
     
-    // 下载云端数据到本地（覆盖）
-    download: protectedProcedure
-      .query(async () => {
+    // 从云端下载数据到本地（覆盖）
+    download: publicProcedure      .query(async () => {
         const products = await db.getAllProducts();
         return { products };
       }),
     
     // 获取同步状态
-    status: protectedProcedure
+    status: publicProcedure
       .query(async () => {
         const cloudCount = await db.getProductsCount();
         const lastSyncTime = await db.getLastSyncTime();
