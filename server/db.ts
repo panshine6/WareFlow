@@ -197,3 +197,39 @@ export async function addInventoryHistory(data: InsertInventoryHistory) {
   if (!db) throw new Error("Database not available");
   await db.insert(inventoryHistory).values(data);
 }
+
+// ==================== 数据同步相关方法 ====================
+
+export async function getProductsCount() {
+  const db = await getDb();
+  if (!db) return 0;
+  const result = await db.select().from(products);
+  return result.length;
+}
+
+export async function clearAllProducts() {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.delete(inventoryHistory);
+  await db.delete(products);
+}
+
+export async function batchInsertProducts(productsData: InsertProduct[]) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  if (productsData.length === 0) return;
+  
+  // 批量插入产品
+  for (const product of productsData) {
+    await db.insert(products).values(product);
+  }
+}
+
+export async function getLastSyncTime() {
+  const db = await getDb();
+  if (!db) return null;
+  
+  // 获取最后更新的产品时间
+  const result = await db.select().from(products).orderBy(desc(products.updatedAt)).limit(1);
+  return result[0]?.updatedAt || null;
+}

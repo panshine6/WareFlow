@@ -17,6 +17,8 @@ import { ThemedView } from "@/components/themed-view";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { exportToDianxiaomiFormat } from "@/lib/excel-export";
 import { ProductStorage } from "@/lib/storage";
+import { SyncService, type SyncStatus } from "@/lib/sync";
+import { trpc } from "@/lib/trpc";
 import type { Product } from "@/types/product";
 
 /**
@@ -32,6 +34,11 @@ export default function InventoryScreen() {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [exporting, setExporting] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+  const [syncStatus, setSyncStatus] = useState<SyncStatus | null>(null);
+  const [dbConfigured, setDbConfigured] = useState(false);
+
+  const trpcClient = trpc.useContext();
 
   // 加载产品列表
   const loadProducts = async () => {
@@ -48,7 +55,32 @@ export default function InventoryScreen() {
 
   useEffect(() => {
     loadProducts();
+    checkDatabaseAndLoadStatus();
   }, []);
+
+  // 检查数据库配置并加载同步状态
+  const checkDatabaseAndLoadStatus = async () => {
+    try {
+      const configured = await SyncService.isDatabaseConfigured(trpcClient);
+      setDbConfigured(configured);
+      if (configured) {
+        await loadSyncStatus();
+      }
+    } catch (error) {
+      console.error("Failed to check database:", error);
+      setDbConfigured(false);
+    }
+  };
+
+  // 加载同步状态
+  const loadSyncStatus = async () => {
+    try {
+      const status = await SyncService.getStatus(trpcClient);
+      setSyncStatus(status);
+    } catch (error) {
+      console.error("Failed to load sync status:", error);
+    }
+  };
 
   // 搜索功能
   useEffect(() => {
@@ -62,6 +94,56 @@ export default function InventoryScreen() {
       setFilteredProducts(filtered);
     }
   }, [searchQuery, products]);
+
+  // 手动上传到云端
+  const handleUpload = async () => {
+    setSyncing(true);
+    try {
+      const result = await SyncService.uploadToCloud(trpcClient);
+      if (result.success) {
+        Alert.alert("上传成功", `已上传 ${result.count} 条数据到云端`);
+        await loadSyncStatus();
+      } else {
+        Alert.alert("上传失败", result.error || "请重试");
+      }
+    } catch (error: any) {
+      Alert.alert("上传失败", error.message || "请检查网络连接");
+    } finally {
+      setSyncing(false);
+    }
+  };
+
+  // 手动从云端下载
+  const handleDownload = async () => {
+    Alert.alert(
+      "确认下载",
+      "下载云端数据将覆盖本地数据，确定继续吗？",
+      [
+        { text: "取消", style: "cancel" },
+        {
+          text: "确定",
+          style: "destructive",
+          onPress: async () => {
+            setSyncing(true);
+            try {
+              const result = await SyncService.downloadFromCloud(trpcClient);
+              if (result.success) {
+                Alert.alert("下载成功", `已下载 ${result.count} 条数据到本地`);
+                await loadSyncStatus();
+                await loadProducts(); // 刷新列表
+              } else {
+                Alert.alert("下载失败", result.error || "请重试");
+              }
+            } catch (error: any) {
+              Alert.alert("下载失败", error.message || "请检查网络连接");
+            } finally {
+              setSyncing(false);
+            }
+          },
+        },
+      ]
+    );
+  };
 
   // 导出 Excel
   const handleExport = async () => {
@@ -131,6 +213,74 @@ export default function InventoryScreen() {
             {exporting ? "导出中..." : "📊 导出 Excel"}
           </ThemedText>
         </Pressable>
+
+        {/* 数据同步区域 */}
+        {dbConfigured && (
+          <View style={styles.syncContainer}>
+            <ThemedText type="subtitle" style={styles.syncTitle}>
+              数据同步
+            </ThemedText>
+            
+            {syncStatus && (
+              <View style={styles.syncStatusContainer}>
+                <View style={styles.syncStatusRow}>
+                  <ThemedText style={styles.syncStatusText}>
+                    本地: {syncStatus.localCount} 条
+                  </ThemedText>
+                  <ThemedText style={styles.syncStatusText}>
+                    云端: {syncStatus.cloudCount} 条
+                  </ThemedText>
+                </View>
+                
+                {syncStatus.lastSyncTime && (
+                  <ThemedText style={styles.syncTimeText}>
+                    最后同步: {new Date(syncStatus.lastSyncTime).toLocaleString('zh-CN', {
+                      year: 'numeric',
+                      month: '2-digit',
+                      day: '2-digit',
+                      hour: '2-digit',
+                      minute: '2-digit',
+                    })}
+                  </ThemedText>
+                )}
+                
+                {!syncStatus.lastSyncTime && (
+                  <ThemedText style={styles.syncTimeText}>
+                    从未同步
+                  </ThemedText>
+                )}
+                
+                {syncStatus.needsSync && (
+                  <ThemedText style={styles.syncWarningText}>
+                    ⚠️ 本地和云端数据不一致
+                  </ThemedText>
+                )}
+              </View>
+            )}
+            
+            <View style={styles.syncButtonsRow}>
+              <Pressable
+                style={[styles.syncButton, styles.uploadButton, syncing && styles.buttonDisabled]}
+                onPress={handleUpload}
+                disabled={syncing}
+              >
+                <ThemedText style={styles.syncButtonText}>
+                  {syncing ? "同步中..." : "⬆️ 上传到云端"}
+                </ThemedText>
+              </Pressable>
+              
+              <Pressable
+                style={[styles.syncButton, styles.downloadButton, syncing && styles.buttonDisabled]}
+                onPress={handleDownload}
+                disabled={syncing}
+              >
+                <ThemedText style={styles.syncButtonText}>
+                  {syncing ? "同步中..." : "⬇️ 从云端下载"}
+                </ThemedText>
+              </Pressable>
+            </View>
+          </View>
+        )}
       </View>
 
       {/* 产品列表 */}
@@ -267,5 +417,60 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     opacity: 0.7,
     marginBottom: 2,
+  },
+  syncContainer: {
+    marginTop: 16,
+    padding: 16,
+    backgroundColor: "rgba(0, 122, 255, 0.1)",
+    borderRadius: 12,
+  },
+  syncTitle: {
+    marginBottom: 12,
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  syncStatusContainer: {
+    marginBottom: 12,
+  },
+  syncStatusRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginBottom: 6,
+  },
+  syncStatusText: {
+    fontSize: 14,
+    opacity: 0.8,
+  },
+  syncTimeText: {
+    fontSize: 12,
+    opacity: 0.6,
+    marginTop: 4,
+  },
+  syncWarningText: {
+    fontSize: 12,
+    color: "#FF9500",
+    marginTop: 6,
+  },
+  syncButtonsRow: {
+    flexDirection: "row",
+    gap: 12,
+  },
+  syncButton: {
+    flex: 1,
+    height: 44,
+    borderRadius: 10,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  uploadButton: {
+    backgroundColor: "#007AFF",
+  },
+  downloadButton: {
+    backgroundColor: "#5856D6",
+  },
+  syncButtonText: {
+    color: "#fff",
+    fontSize: 14,
+    fontWeight: "600",
   },
 });
