@@ -1,5 +1,0 @@
-name = "fashion-accessories-inventory"
-compatibility_date = "2024-12-27"
-
-[site]
-bucket = "./dist"
