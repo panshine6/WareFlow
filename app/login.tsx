@@ -13,6 +13,7 @@ import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { UserStorage } from "@/lib/user-storage";
+import { APP_VERSION, APP_AUTHOR } from "@/lib/version";
 
 /**
  * PIN 码登录页面
@@ -288,6 +289,16 @@ export default function LoginScreen() {
             </ThemedText>
           </Pressable>
         </View>
+
+        {/* 底部信息：作者和版本号 */}
+        <View style={styles.footer}>
+          <ThemedText style={styles.footerText}>
+            作者：{APP_AUTHOR}
+          </ThemedText>
+          <ThemedText style={styles.footerText}>
+            版本：{APP_VERSION}
+          </ThemedText>
+        </View>
       </View>
     </ThemedView>
   );
@@ -376,5 +387,14 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: "#007AFF",
     fontWeight: "500",
+  },
+  footer: {
+    marginTop: 48,
+    alignItems: "center",
+  },
+  footerText: {
+    fontSize: 12,
+    opacity: 0.5,
+    marginBottom: 4,
   },
 });
