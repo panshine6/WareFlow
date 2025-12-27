@@ -146,7 +146,7 @@ export default function HomeScreen() {
          {/* 顶部标题和用户名 */}
       <View style={styles.titleRow}>
         <ThemedText type="title" style={styles.title}>
-          饰品入库助手
+          Ladybuty饰品库存管理系统
         </ThemedText>
         {currentUser && (
           <View style={styles.userContainer}>
@@ -273,7 +273,7 @@ export default function HomeScreen() {
 
       {/* 版权标识 */}
       <View style={styles.copyrightContainer}>
-        <ThemedText style={styles.copyrightText}>作者：Nate Pan By Manus</ThemedText>
+        <ThemedText style={styles.copyrightText}>作者：潘章杰（By Manus）</ThemedText>
       </View>
     </ThemedView>
   );
