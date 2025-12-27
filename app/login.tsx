@@ -112,16 +112,36 @@ export default function LoginScreen() {
       await UserStorage.setCurrentUser(newUser);
 
       const isAdmin = isFirstUser;
-      Alert.alert(
-        "欢迎",
-        `${name}，您已成功${isAdmin ? "创建管理员账号" : "注册"}！`,
-        [
-          {
-            text: "开始使用",
-            onPress: () => router.replace("/"),
-          },
-        ]
-      );
+      
+      if (isAdmin) {
+        // 管理员账号创建成功，直接进入首页
+        Alert.alert(
+          "欢迎",
+          `${name}，您已成功创建管理员账号！`,
+          [
+            {
+              text: "开始使用",
+              onPress: () => router.replace("/"),
+            },
+          ]
+        );
+      } else {
+        // 普通用户注册成功，提示并切换到登录界面
+        Alert.alert(
+          "注册成功",
+          `${name}，您已注册成功！请使用 PIN 码登录。`,
+          [
+            {
+              text: "去登录",
+              onPress: () => {
+                setIsCreateMode(false);
+                setName("");
+                setPin("");
+              },
+            },
+          ]
+        );
+      }
     } catch (error: any) {
       console.error("Create user error:", error);
       Alert.alert("创建失败", error.message || "请重试");
