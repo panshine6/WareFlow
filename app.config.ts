@@ -26,6 +26,18 @@ const config: ExpoConfig = {
   name: env.appName,
   slug: env.appSlug,
   version: "1.0.0",
+  owner: "panshine6",
+  extra: {
+    eas: {
+      projectId: "0f415cb3-1cf9-4d4f-9a3e-dede63dd2193"
+    }
+  },
+  updates: {
+    url: "https://u.expo.dev/0f415cb3-1cf9-4d4f-9a3e-dede63dd2193"
+  },
+  runtimeVersion: {
+    policy: "appVersion"
+  },
   orientation: "portrait",
   icon: "./assets/images/icon.png",
   scheme: env.scheme,
