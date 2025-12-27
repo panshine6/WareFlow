@@ -184,7 +184,10 @@ export default function LoginScreen() {
         ]}
       >
         <View style={styles.header}>
-          <ThemedText type="title" style={styles.title}>
+          <ThemedText type="title" style={styles.appTitle}>
+            Ladybuty饰品库存管理系统
+          </ThemedText>
+          <ThemedText type="subtitle" style={styles.title}>
             {showCreateMode
               ? isFirstUser
                 ? "创建管理员账号"
@@ -322,8 +325,14 @@ const styles = StyleSheet.create({
     marginBottom: 48,
     alignItems: "center",
   },
+  appTitle: {
+    fontSize: 24,
+    marginBottom: 8,
+    textAlign: "center",
+    color: "#007AFF",
+  },
   title: {
-    fontSize: 32,
+    fontSize: 20,
     marginBottom: 12,
     textAlign: "center",
   },
