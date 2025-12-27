@@ -8,6 +8,7 @@ import {
   Pressable,
   StyleSheet,
   TextInput,
+  TouchableOpacity,
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -170,12 +171,13 @@ export default function UserManagementScreen() {
         <ThemedText style={styles.userPin}>PIN: {item.pin}</ThemedText>
       </View>
       {!item.isAdmin && item.id !== currentUser?.id && (
-        <Pressable
+        <TouchableOpacity
           style={styles.deleteButton}
           onPress={() => handleDeleteUser(item)}
+          activeOpacity={0.7}
         >
           <ThemedText style={styles.deleteButtonText}>删除</ThemedText>
-        </Pressable>
+        </TouchableOpacity>
       )}
     </View>
   );
