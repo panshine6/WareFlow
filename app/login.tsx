@@ -2,6 +2,7 @@ import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import {
   Alert,
+  Platform,
   Pressable,
   StyleSheet,
   TextInput,
@@ -29,6 +30,16 @@ export default function LoginScreen() {
   const [isCreateMode, setIsCreateMode] = useState(false); // 是否是创建账号模式
   const [loading, setLoading] = useState(false);
 
+  // 跨平台的 alert 函数
+  const showAlert = (title: string, message: string, onOk?: () => void) => {
+    if (Platform.OS === "web") {
+      window.alert(`${title}\n\n${message}`);
+      if (onOk) onOk();
+    } else {
+      Alert.alert(title, message, [{ text: "确定", onPress: onOk }]);
+    }
+  };
+
   // 检查是否是首次使用
   useEffect(() => {
     const checkFirstUser = async () => {
@@ -42,17 +53,17 @@ export default function LoginScreen() {
   // 处理登录
   const handleLogin = async () => {
     if (!pin.trim()) {
-      Alert.alert("提示", "请输入 PIN 码");
+      showAlert("提示", "请输入 PIN 码");
       return;
     }
 
     if (pin.length < 4 || pin.length > 6) {
-      Alert.alert("提示", "PIN 码必须是 4-6 位数字");
+      showAlert("提示", "PIN 码必须是 4-6 位数字");
       return;
     }
 
     if (!/^\d+$/.test(pin)) {
-      Alert.alert("提示", "PIN 码只能包含数字");
+      showAlert("提示", "PIN 码只能包含数字");
       return;
     }
 
@@ -63,7 +74,7 @@ export default function LoginScreen() {
       const user = await UserStorage.findByPin(pin);
 
       if (!user) {
-        Alert.alert("登录失败", "PIN 码不正确");
+        showAlert("登录失败", "PIN 码不正确");
         setLoading(false);
         return;
       }
@@ -75,7 +86,7 @@ export default function LoginScreen() {
       router.replace("/");
     } catch (error: any) {
       console.error("Login error:", error);
-      Alert.alert("登录失败", error.message || "请重试");
+      showAlert("登录失败", error.message || "请重试");
     } finally {
       setLoading(false);
     }
@@ -84,22 +95,22 @@ export default function LoginScreen() {
   // 处理创建用户
   const handleCreateUser = async () => {
     if (!name.trim()) {
-      Alert.alert("提示", "请输入姓名");
+      showAlert("提示", "请输入姓名");
       return;
     }
 
     if (!pin.trim()) {
-      Alert.alert("提示", "请输入 PIN 码");
+      showAlert("提示", "请输入 PIN 码");
       return;
     }
 
     if (pin.length < 4 || pin.length > 6) {
-      Alert.alert("提示", "PIN 码必须是 4-6 位数字");
+      showAlert("提示", "PIN 码必须是 4-6 位数字");
       return;
     }
 
     if (!/^\d+$/.test(pin)) {
-      Alert.alert("提示", "PIN 码只能包含数字");
+      showAlert("提示", "PIN 码只能包含数字");
       return;
     }
 
@@ -116,36 +127,18 @@ export default function LoginScreen() {
       
       if (isAdmin) {
         // 管理员账号创建成功，直接进入首页
-        Alert.alert(
-          "欢迎",
-          `${name}，您已成功创建管理员账号！`,
-          [
-            {
-              text: "开始使用",
-              onPress: () => router.replace("/"),
-            },
-          ]
-        );
+        showAlert("欢迎", `${name}，您已成功创建管理员账号！`, () => router.replace("/"));
       } else {
         // 普通用户注册成功，提示并切换到登录界面
-        Alert.alert(
-          "注册成功",
-          `${name}，您已注册成功！请使用 PIN 码登录。`,
-          [
-            {
-              text: "去登录",
-              onPress: () => {
-                setIsCreateMode(false);
-                setName("");
-                setPin("");
-              },
-            },
-          ]
-        );
+        showAlert("注册成功", `${name}，您已注册成功！请使用 PIN 码登录。`, () => {
+          setIsCreateMode(false);
+          setName("");
+          setPin("");
+        });
       }
     } catch (error: any) {
       console.error("Create user error:", error);
-      Alert.alert("创建失败", error.message || "请重试");
+      showAlert("创建失败", error.message || "请重试");
     } finally {
       setLoading(false);
     }
