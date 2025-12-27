@@ -2,6 +2,7 @@ import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import {
   Alert,
+  FlatList,
   Platform,
   Pressable,
   StyleSheet,
@@ -15,6 +16,7 @@ import { ThemedView } from "@/components/themed-view";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { UserStorage } from "@/lib/user-storage";
 import { APP_VERSION, APP_AUTHOR } from "@/lib/version";
+import type { User } from "@/types/user";
 
 /**
  * PIN 码登录页面
@@ -29,6 +31,8 @@ export default function LoginScreen() {
   const [isFirstUser, setIsFirstUser] = useState<boolean | null>(null); // null = 加载中
   const [isCreateMode, setIsCreateMode] = useState(false); // 是否是创建账号模式
   const [loading, setLoading] = useState(false);
+  const [users, setUsers] = useState<User[]>([]); // 所有用户列表
+  const [selectedUser, setSelectedUser] = useState<User | null>(null); // 选中的用户
 
   // 跨平台的 alert 函数
   const showAlert = (title: string, message: string, onOk?: () => void) => {
@@ -40,18 +44,29 @@ export default function LoginScreen() {
     }
   };
 
-  // 检查是否是首次使用
+  // 检查是否是首次使用，并加载用户列表
   useEffect(() => {
     const checkFirstUser = async () => {
       const hasUsers = await UserStorage.hasUsers();
       setIsFirstUser(!hasUsers);
       setIsCreateMode(!hasUsers); // 如果没有用户，默认进入创建模式
+
+      if (hasUsers) {
+        // 加载所有用户
+        const allUsers = await UserStorage.getAll();
+        setUsers(allUsers);
+      }
     };
     checkFirstUser();
   }, []);
 
   // 处理登录
   const handleLogin = async () => {
+    if (!selectedUser) {
+      showAlert("提示", "请先选择要登录的账号");
+      return;
+    }
+
     if (!pin.trim()) {
       showAlert("提示", "请输入 PIN 码");
       return;
@@ -70,17 +85,15 @@ export default function LoginScreen() {
     setLoading(true);
 
     try {
-      // 查找用户
-      const user = await UserStorage.findByPin(pin);
-
-      if (!user) {
+      // 验证 PIN 码是否匹配选中的用户
+      if (selectedUser.pin !== pin) {
         showAlert("登录失败", "PIN 码不正确");
         setLoading(false);
         return;
       }
 
       // 设置当前用户
-      await UserStorage.setCurrentUser(user);
+      await UserStorage.setCurrentUser(selectedUser);
 
       // 跳转到首页
       router.replace("/");
@@ -124,17 +137,27 @@ export default function LoginScreen() {
       await UserStorage.setCurrentUser(newUser);
 
       const isAdmin = isFirstUser;
-      
+
       if (isAdmin) {
         // 管理员账号创建成功，直接进入首页
-        showAlert("欢迎", `${name}，您已成功创建管理员账号！`, () => router.replace("/"));
+        showAlert("欢迎", `${name}，您已成功创建管理员账号！`, () =>
+          router.replace("/")
+        );
       } else {
         // 普通用户注册成功，提示并切换到登录界面
-        showAlert("注册成功", `${name}，您已注册成功！请使用 PIN 码登录。`, () => {
-          setIsCreateMode(false);
-          setName("");
-          setPin("");
-        });
+        showAlert(
+          "注册成功",
+          `${name}，您已注册成功！请使用 PIN 码登录。`,
+          async () => {
+            setIsCreateMode(false);
+            setName("");
+            setPin("");
+            setSelectedUser(null);
+            // 重新加载用户列表
+            const allUsers = await UserStorage.getAll();
+            setUsers(allUsers);
+          }
+        );
       }
     } catch (error: any) {
       console.error("Create user error:", error);
@@ -149,6 +172,19 @@ export default function LoginScreen() {
     setIsCreateMode(!isCreateMode);
     setPin("");
     setName("");
+    setSelectedUser(null);
+  };
+
+  // 选择用户
+  const handleSelectUser = (user: User) => {
+    setSelectedUser(user);
+    setPin(""); // 清空 PIN 码
+  };
+
+  // 取消选择用户
+  const handleCancelSelect = () => {
+    setSelectedUser(null);
+    setPin("");
   };
 
   // 加载中状态
@@ -164,6 +200,34 @@ export default function LoginScreen() {
 
   // 显示创建账号界面
   const showCreateMode = isCreateMode;
+
+  // 渲染用户选择项
+  const renderUserItem = ({ item }: { item: User }) => (
+    <Pressable
+      style={[
+        styles.userItem,
+        {
+          backgroundColor:
+            colorScheme === "dark"
+              ? "rgba(255, 255, 255, 0.1)"
+              : "rgba(0, 0, 0, 0.05)",
+        },
+      ]}
+      onPress={() => handleSelectUser(item)}
+    >
+      <View style={styles.userAvatar}>
+        <ThemedText style={styles.userAvatarText}>
+          {item.name.charAt(0).toUpperCase()}
+        </ThemedText>
+      </View>
+      <View style={styles.userInfo}>
+        <ThemedText style={styles.userName}>{item.name}</ThemedText>
+        {item.isAdmin && (
+          <ThemedText style={styles.adminBadge}>管理员</ThemedText>
+        )}
+      </View>
+    </Pressable>
+  );
 
   return (
     <ThemedView style={styles.container}>
@@ -185,6 +249,8 @@ export default function LoginScreen() {
               ? isFirstUser
                 ? "创建管理员账号"
                 : "创建新账号"
+              : selectedUser
+              ? `${selectedUser.name} 登录`
               : "操作员登录"}
           </ThemedText>
           <ThemedText style={styles.subtitle}>
@@ -192,12 +258,15 @@ export default function LoginScreen() {
               ? isFirstUser
                 ? "首次使用，请创建管理员账号"
                 : "请填写您的信息"
-              : "请输入您的 PIN 码"}
+              : selectedUser
+              ? "请输入您的 PIN 码"
+              : "请选择您的账号"}
           </ThemedText>
         </View>
 
         <View style={styles.form}>
-          {showCreateMode && (
+          {showCreateMode ? (
+            // 创建账号模式
             <>
               <ThemedText style={styles.label}>姓名</ThemedText>
               <TextInput
@@ -222,59 +291,150 @@ export default function LoginScreen() {
                 autoFocus
                 returnKeyType="next"
               />
+
+              <ThemedText style={styles.label}>PIN 码</ThemedText>
+              <TextInput
+                style={[
+                  styles.input,
+                  styles.pinInput,
+                  {
+                    backgroundColor:
+                      colorScheme === "dark"
+                        ? "rgba(255, 255, 255, 0.1)"
+                        : "rgba(0, 0, 0, 0.05)",
+                    color: colorScheme === "dark" ? "#fff" : "#000",
+                  },
+                ]}
+                value={pin}
+                onChangeText={setPin}
+                placeholder="4-6 位数字"
+                placeholderTextColor={
+                  colorScheme === "dark"
+                    ? "rgba(255, 255, 255, 0.4)"
+                    : "rgba(0, 0, 0, 0.4)"
+                }
+                keyboardType="number-pad"
+                maxLength={6}
+                secureTextEntry
+                returnKeyType="done"
+                onSubmitEditing={handleCreateUser}
+              />
+
+              <ThemedText style={styles.hint}>
+                请设置一个 4-6 位数字 PIN 码，用于登录
+              </ThemedText>
+
+              <Pressable
+                style={[styles.button, loading && styles.buttonDisabled]}
+                onPress={handleCreateUser}
+                disabled={loading}
+              >
+                <ThemedText style={styles.buttonText}>
+                  {loading
+                    ? "处理中..."
+                    : isFirstUser
+                    ? "创建账号"
+                    : "注册"}
+                </ThemedText>
+              </Pressable>
+            </>
+          ) : selectedUser ? (
+            // 已选择用户，显示 PIN 码输入
+            <>
+              {/* 显示选中的用户信息 */}
+              <View
+                style={[
+                  styles.selectedUserCard,
+                  {
+                    backgroundColor:
+                      colorScheme === "dark"
+                        ? "rgba(255, 255, 255, 0.1)"
+                        : "rgba(0, 0, 0, 0.05)",
+                  },
+                ]}
+              >
+                <View style={styles.selectedUserAvatar}>
+                  <ThemedText style={styles.selectedUserAvatarText}>
+                    {selectedUser.name.charAt(0).toUpperCase()}
+                  </ThemedText>
+                </View>
+                <View style={styles.selectedUserInfo}>
+                  <ThemedText style={styles.selectedUserName}>
+                    {selectedUser.name}
+                  </ThemedText>
+                  {selectedUser.isAdmin && (
+                    <ThemedText style={styles.adminBadge}>管理员</ThemedText>
+                  )}
+                </View>
+                <Pressable
+                  style={styles.changeUserButton}
+                  onPress={handleCancelSelect}
+                >
+                  <ThemedText style={styles.changeUserText}>更换</ThemedText>
+                </Pressable>
+              </View>
+
+              <ThemedText style={styles.label}>PIN 码</ThemedText>
+              <TextInput
+                style={[
+                  styles.input,
+                  styles.pinInput,
+                  {
+                    backgroundColor:
+                      colorScheme === "dark"
+                        ? "rgba(255, 255, 255, 0.1)"
+                        : "rgba(0, 0, 0, 0.05)",
+                    color: colorScheme === "dark" ? "#fff" : "#000",
+                  },
+                ]}
+                value={pin}
+                onChangeText={setPin}
+                placeholder="4-6 位数字"
+                placeholderTextColor={
+                  colorScheme === "dark"
+                    ? "rgba(255, 255, 255, 0.4)"
+                    : "rgba(0, 0, 0, 0.4)"
+                }
+                keyboardType="number-pad"
+                maxLength={6}
+                secureTextEntry
+                autoFocus
+                returnKeyType="done"
+                onSubmitEditing={handleLogin}
+              />
+
+              <ThemedText style={styles.hint}>
+                忘记 PIN 码？请联系管理员
+              </ThemedText>
+
+              <Pressable
+                style={[styles.button, loading && styles.buttonDisabled]}
+                onPress={handleLogin}
+                disabled={loading}
+              >
+                <ThemedText style={styles.buttonText}>
+                  {loading ? "处理中..." : "登录"}
+                </ThemedText>
+              </Pressable>
+            </>
+          ) : (
+            // 未选择用户，显示用户列表
+            <>
+              <ThemedText style={styles.label}>选择账号</ThemedText>
+              <FlatList
+                data={users}
+                renderItem={renderUserItem}
+                keyExtractor={(item) => item.id.toString()}
+                style={styles.userList}
+                showsVerticalScrollIndicator={false}
+                ListEmptyComponent={
+                  <ThemedText style={styles.emptyText}>
+                    暂无用户，请先创建账号
+                  </ThemedText>
+                }
+              />
             </>
           )}
-
-          <ThemedText style={styles.label}>PIN 码</ThemedText>
-          <TextInput
-            style={[
-              styles.input,
-              styles.pinInput,
-              {
-                backgroundColor:
-                  colorScheme === "dark"
-                    ? "rgba(255, 255, 255, 0.1)"
-                    : "rgba(0, 0, 0, 0.05)",
-                color: colorScheme === "dark" ? "#fff" : "#000",
-              },
-            ]}
-            value={pin}
-            onChangeText={setPin}
-            placeholder="4-6 位数字"
-            placeholderTextColor={
-              colorScheme === "dark"
-                ? "rgba(255, 255, 255, 0.4)"
-                : "rgba(0, 0, 0, 0.4)"
-            }
-            keyboardType="number-pad"
-            maxLength={6}
-            secureTextEntry
-            autoFocus={!showCreateMode}
-            returnKeyType="done"
-            onSubmitEditing={showCreateMode ? handleCreateUser : handleLogin}
-          />
-
-          <ThemedText style={styles.hint}>
-            {showCreateMode
-              ? "请设置一个 4-6 位数字 PIN 码，用于登录"
-              : "忘记 PIN 码？请联系管理员"}
-          </ThemedText>
-
-          <Pressable
-            style={[styles.button, loading && styles.buttonDisabled]}
-            onPress={showCreateMode ? handleCreateUser : handleLogin}
-            disabled={loading}
-          >
-            <ThemedText style={styles.buttonText}>
-              {loading
-                ? "处理中..."
-                : showCreateMode
-                ? isFirstUser
-                  ? "创建账号"
-                  : "注册"
-                : "登录"}
-            </ThemedText>
-          </Pressable>
 
           {/* 切换按钮 */}
           <Pressable style={styles.switchButton} onPress={toggleMode}>
@@ -288,12 +448,8 @@ export default function LoginScreen() {
 
         {/* 底部信息：作者和版本号 */}
         <View style={styles.footer}>
-          <ThemedText style={styles.footerText}>
-            作者：{APP_AUTHOR}
-          </ThemedText>
-          <ThemedText style={styles.footerText}>
-            版本：{APP_VERSION}
-          </ThemedText>
+          <ThemedText style={styles.footerText}>作者：{APP_AUTHOR}</ThemedText>
+          <ThemedText style={styles.footerText}>版本：{APP_VERSION}</ThemedText>
         </View>
       </View>
     </ThemedView>
@@ -315,7 +471,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   header: {
-    marginBottom: 48,
+    marginBottom: 32,
     alignItems: "center",
   },
   appTitle: {
@@ -336,6 +492,8 @@ const styles = StyleSheet.create({
   },
   form: {
     width: "100%",
+    flex: 1,
+    maxHeight: 500,
   },
   label: {
     fontSize: 16,
@@ -391,12 +549,95 @@ const styles = StyleSheet.create({
     fontWeight: "500",
   },
   footer: {
-    marginTop: 48,
+    marginTop: 24,
     alignItems: "center",
   },
   footerText: {
     fontSize: 12,
     opacity: 0.5,
     marginBottom: 4,
+  },
+  // 用户列表样式
+  userList: {
+    maxHeight: 240,
+    marginBottom: 16,
+  },
+  userItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 12,
+  },
+  userAvatar: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: "#007AFF",
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: 16,
+  },
+  userAvatarText: {
+    color: "#fff",
+    fontSize: 20,
+    fontWeight: "700",
+  },
+  userInfo: {
+    flex: 1,
+  },
+  userName: {
+    fontSize: 18,
+    fontWeight: "600",
+  },
+  adminBadge: {
+    fontSize: 12,
+    color: "#FF9500",
+    marginTop: 4,
+  },
+  emptyText: {
+    textAlign: "center",
+    opacity: 0.6,
+    marginTop: 24,
+  },
+  // 选中用户卡片样式
+  selectedUserCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 24,
+  },
+  selectedUserAvatar: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: "#007AFF",
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: 16,
+  },
+  selectedUserAvatarText: {
+    color: "#fff",
+    fontSize: 24,
+    fontWeight: "700",
+  },
+  selectedUserInfo: {
+    flex: 1,
+  },
+  selectedUserName: {
+    fontSize: 20,
+    fontWeight: "600",
+  },
+  changeUserButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+    backgroundColor: "rgba(0, 122, 255, 0.1)",
+  },
+  changeUserText: {
+    color: "#007AFF",
+    fontSize: 14,
+    fontWeight: "600",
   },
 });
