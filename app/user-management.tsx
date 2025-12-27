@@ -33,6 +33,38 @@ export default function UserManagementScreen() {
   const [newName, setNewName] = useState("");
   const [newPin, setNewPin] = useState("");
 
+  // 跨平台的 alert 函数
+  const showAlert = (title: string, message: string, onOk?: () => void) => {
+    if (Platform.OS === "web") {
+      window.alert(`${title}\n\n${message}`);
+      if (onOk) onOk();
+    } else {
+      Alert.alert(title, message, [{ text: "确定", onPress: onOk }]);
+    }
+  };
+
+  // 跨平台的 confirm 函数
+  const showConfirm = (
+    title: string,
+    message: string,
+    onConfirm: () => void,
+    onCancel?: () => void
+  ) => {
+    if (Platform.OS === "web") {
+      const result = window.confirm(`${title}\n\n${message}`);
+      if (result) {
+        onConfirm();
+      } else if (onCancel) {
+        onCancel();
+      }
+    } else {
+      Alert.alert(title, message, [
+        { text: "取消", style: "cancel", onPress: onCancel },
+        { text: "删除", style: "destructive", onPress: onConfirm },
+      ]);
+    }
+  };
+
   // 加载用户列表
   const loadUsers = async () => {
     try {
@@ -45,9 +77,7 @@ export default function UserManagementScreen() {
 
       // 检查是否是管理员
       if (!current?.isAdmin) {
-        Alert.alert("权限不足", "只有管理员可以管理用户", [
-          { text: "返回", onPress: () => router.back() },
-        ]);
+        showAlert("权限不足", "只有管理员可以管理用户", () => router.back());
       }
     } catch (error) {
       console.error("Failed to load users:", error);
@@ -63,65 +93,65 @@ export default function UserManagementScreen() {
   // 添加新用户
   const handleAddUser = async () => {
     if (!newName.trim()) {
-      Alert.alert("提示", "请输入姓名");
+      showAlert("提示", "请输入姓名");
       return;
     }
 
     if (!newPin.trim()) {
-      Alert.alert("提示", "请输入 PIN 码");
+      showAlert("提示", "请输入 PIN 码");
       return;
     }
 
     if (newPin.length < 4 || newPin.length > 6) {
-      Alert.alert("提示", "PIN 码必须是 4-6 位数字");
+      showAlert("提示", "PIN 码必须是 4-6 位数字");
       return;
     }
 
     if (!/^\d+$/.test(newPin)) {
-      Alert.alert("提示", "PIN 码只能包含数字");
+      showAlert("提示", "PIN 码只能包含数字");
       return;
     }
 
     try {
       await UserStorage.create(newName, newPin);
-      Alert.alert("成功", `已添加操作员：${newName}`);
+      showAlert("成功", `已添加操作员：${newName}`);
       setNewName("");
       setNewPin("");
       setShowAddForm(false);
       loadUsers();
     } catch (error: any) {
-      Alert.alert("添加失败", error.message || "请重试");
+      showAlert("添加失败", error.message || "请重试");
     }
   };
 
   // 删除用户
   const handleDeleteUser = (user: User) => {
     if (user.isAdmin) {
-      Alert.alert("提示", "无法删除管理员账号");
+      showAlert("提示", "无法删除管理员账号");
       return;
     }
 
     if (user.id === currentUser?.id) {
-      Alert.alert("提示", "无法删除当前登录的账号");
+      showAlert("提示", "无法删除当前登录的账号");
       return;
     }
 
-    Alert.alert("确认删除", `确定要删除操作员 ${user.name} 吗？`, [
-      { text: "取消", style: "cancel" },
-      {
-        text: "删除",
-        style: "destructive",
-        onPress: async () => {
-          try {
-            await UserStorage.delete(user.id);
-            Alert.alert("成功", "已删除操作员");
-            loadUsers();
-          } catch (error) {
-            Alert.alert("删除失败", "请重试");
-          }
-        },
-      },
-    ]);
+    showConfirm(
+      "确认删除",
+      `确定要删除操作员 ${user.name} 吗？`,
+      async () => {
+        try {
+          console.log("[UserManagement] Deleting user:", user.id, user.name);
+          await UserStorage.delete(user.id);
+          console.log("[UserManagement] User deleted successfully");
+          showAlert("成功", "已删除操作员");
+          loadUsers();
+        } catch (error) {
+          console.error("[UserManagement] Delete failed:", error);
+          showAlert("删除失败", "请重试");
+        }
+      }
+    );
   };
 
   const renderUser = ({ item }: { item: User }) => (
