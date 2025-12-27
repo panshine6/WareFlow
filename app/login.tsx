@@ -1,5 +1,5 @@
 import { useRouter } from "expo-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Alert,
   Pressable,
@@ -24,17 +24,19 @@ export default function LoginScreen() {
 
   const [pin, setPin] = useState("");
   const [name, setName] = useState("");
-  const [isFirstUser, setIsFirstUser] = useState(false);
+  const [isFirstUser, setIsFirstUser] = useState<boolean | null>(null); // null = 加载中
+  const [isCreateMode, setIsCreateMode] = useState(false); // 是否是创建账号模式
   const [loading, setLoading] = useState(false);
 
   // 检查是否是首次使用
-  useState(() => {
+  useEffect(() => {
     const checkFirstUser = async () => {
       const hasUsers = await UserStorage.hasUsers();
       setIsFirstUser(!hasUsers);
+      setIsCreateMode(!hasUsers); // 如果没有用户，默认进入创建模式
     };
     checkFirstUser();
-  });
+  }, []);
 
   // 处理登录
   const handleLogin = async () => {
@@ -78,8 +80,8 @@ export default function LoginScreen() {
     }
   };
 
-  // 处理首次创建用户
-  const handleCreateFirstUser = async () => {
+  // 处理创建用户
+  const handleCreateUser = async () => {
     if (!name.trim()) {
       Alert.alert("提示", "请输入姓名");
       return;
@@ -103,18 +105,23 @@ export default function LoginScreen() {
     setLoading(true);
 
     try {
-      // 创建第一个用户（管理员）
+      // 创建用户
       const newUser = await UserStorage.create(name, pin);
 
       // 设置当前用户
       await UserStorage.setCurrentUser(newUser);
 
-      Alert.alert("欢迎", `${name}，您已成功创建管理员账号！`, [
-        {
-          text: "开始使用",
-          onPress: () => router.replace("/"),
-        },
-      ]);
+      const isAdmin = isFirstUser;
+      Alert.alert(
+        "欢迎",
+        `${name}，您已成功${isAdmin ? "创建管理员账号" : "注册"}！`,
+        [
+          {
+            text: "开始使用",
+            onPress: () => router.replace("/"),
+          },
+        ]
+      );
     } catch (error: any) {
       console.error("Create user error:", error);
       Alert.alert("创建失败", error.message || "请重试");
@@ -122,6 +129,27 @@ export default function LoginScreen() {
       setLoading(false);
     }
   };
+
+  // 切换模式
+  const toggleMode = () => {
+    setIsCreateMode(!isCreateMode);
+    setPin("");
+    setName("");
+  };
+
+  // 加载中状态
+  if (isFirstUser === null) {
+    return (
+      <ThemedView style={styles.container}>
+        <View style={styles.loadingContainer}>
+          <ThemedText>加载中...</ThemedText>
+        </View>
+      </ThemedView>
+    );
+  }
+
+  // 显示创建账号界面
+  const showCreateMode = isCreateMode;
 
   return (
     <ThemedView style={styles.container}>
@@ -136,17 +164,23 @@ export default function LoginScreen() {
       >
         <View style={styles.header}>
           <ThemedText type="title" style={styles.title}>
-            {isFirstUser ? "创建管理员账号" : "操作员登录"}
+            {showCreateMode
+              ? isFirstUser
+                ? "创建管理员账号"
+                : "创建新账号"
+              : "操作员登录"}
           </ThemedText>
           <ThemedText style={styles.subtitle}>
-            {isFirstUser
-              ? "首次使用，请创建管理员账号"
+            {showCreateMode
+              ? isFirstUser
+                ? "首次使用，请创建管理员账号"
+                : "请填写您的信息"
               : "请输入您的 PIN 码"}
           </ThemedText>
         </View>
 
         <View style={styles.form}>
-          {isFirstUser && (
+          {showCreateMode && (
             <>
               <ThemedText style={styles.label}>姓名</ThemedText>
               <TextInput
@@ -198,24 +232,39 @@ export default function LoginScreen() {
             keyboardType="number-pad"
             maxLength={6}
             secureTextEntry
-            autoFocus={!isFirstUser}
+            autoFocus={!showCreateMode}
             returnKeyType="done"
-            onSubmitEditing={isFirstUser ? handleCreateFirstUser : handleLogin}
+            onSubmitEditing={showCreateMode ? handleCreateUser : handleLogin}
           />
 
           <ThemedText style={styles.hint}>
-            {isFirstUser
+            {showCreateMode
               ? "请设置一个 4-6 位数字 PIN 码，用于登录"
               : "忘记 PIN 码？请联系管理员"}
           </ThemedText>
 
           <Pressable
             style={[styles.button, loading && styles.buttonDisabled]}
-            onPress={isFirstUser ? handleCreateFirstUser : handleLogin}
+            onPress={showCreateMode ? handleCreateUser : handleLogin}
             disabled={loading}
           >
             <ThemedText style={styles.buttonText}>
-              {loading ? "处理中..." : isFirstUser ? "创建账号" : "登录"}
+              {loading
+                ? "处理中..."
+                : showCreateMode
+                ? isFirstUser
+                  ? "创建账号"
+                  : "注册"
+                : "登录"}
+            </ThemedText>
+          </Pressable>
+
+          {/* 切换按钮 */}
+          <Pressable style={styles.switchButton} onPress={toggleMode}>
+            <ThemedText style={styles.switchButtonText}>
+              {showCreateMode
+                ? "已有账号？点击登录"
+                : "没有账号？点击创建"}
             </ThemedText>
           </Pressable>
         </View>
@@ -227,6 +276,11 @@ export default function LoginScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
   },
   content: {
     flex: 1,
@@ -292,5 +346,15 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: 18,
     fontWeight: "700",
+  },
+  switchButton: {
+    marginTop: 24,
+    paddingVertical: 12,
+    alignItems: "center",
+  },
+  switchButtonText: {
+    fontSize: 16,
+    color: "#007AFF",
+    fontWeight: "500",
   },
 });
