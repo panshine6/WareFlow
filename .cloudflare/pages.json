@@ -1,0 +1,10 @@
+{
+  "build": {
+    "command": "npx expo export --platform web",
+    "output": "dist"
+  },
+  "env": {
+    "NODE_VERSION": "22",
+    "EXPO_PUBLIC_API_BASE_URL": "https://web-production-e22eb.up.railway.app"
+  }
+}
