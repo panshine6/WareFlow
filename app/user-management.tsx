@@ -171,13 +171,30 @@ export default function UserManagementScreen() {
         <ThemedText style={styles.userPin}>PIN: {item.pin}</ThemedText>
       </View>
       {!item.isAdmin && item.id !== currentUser?.id && (
-        <TouchableOpacity
-          style={styles.deleteButton}
-          onPress={() => handleDeleteUser(item)}
-          activeOpacity={0.7}
-        >
-          <ThemedText style={styles.deleteButtonText}>删除</ThemedText>
-        </TouchableOpacity>
+        Platform.OS === "web" ? (
+          <div
+            style={{
+              paddingLeft: 16,
+              paddingRight: 16,
+              paddingTop: 8,
+              paddingBottom: 8,
+              backgroundColor: "#FF3B30",
+              borderRadius: 8,
+              cursor: "pointer",
+            }}
+            onClick={() => handleDeleteUser(item)}
+          >
+            <span style={{ color: "#fff", fontSize: 14, fontWeight: 600 }}>删除</span>
+          </div>
+        ) : (
+          <TouchableOpacity
+            style={styles.deleteButton}
+            onPress={() => handleDeleteUser(item)}
+            activeOpacity={0.7}
+          >
+            <ThemedText style={styles.deleteButtonText}>删除</ThemedText>
+          </TouchableOpacity>
+        )
       )}
     </View>
   );
