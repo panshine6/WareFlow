@@ -1,13 +1,14 @@
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { useRouter } from "expo-router";
 import { useState } from "react";
-import { Platform, Pressable, StyleSheet, View } from "react-native";
+import { ActivityIndicator, Platform, Pressable, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
 import { WebCamera } from "@/components/web-camera";
 import { Alert } from "@/lib/alert";
+import { performDuplicateCheck } from "@/lib/deduplication";
 
 /**
  * 添加产品流程 - 步骤1：拍摄产品细节照片
@@ -17,6 +18,90 @@ export default function AddProductScreen() {
   const insets = useSafeAreaInsets();
   const [permission, requestPermission] = useCameraPermissions();
   const [camera, setCamera] = useState<CameraView | null>(null);
+  const [checking, setChecking] = useState(false);
+
+  // 处理拍照完成后的去重检查
+  const handlePhotoTaken = async (uri: string, base64?: string) => {
+    console.log("[AddProduct] Photo taken, starting duplicate check");
+    console.log("[AddProduct] URI:", uri);
+    console.log("[AddProduct] Has base64:", !!base64);
+    
+    setChecking(true);
+    
+    try {
+      // 执行去重检查
+      const result = await performDuplicateCheck(uri, base64);
+      
+      if (result.error) {
+        // 去重失败，询问用户是否继续
+        console.log("[AddProduct] Duplicate check failed:", result.error);
+        
+        const isWeb = typeof window !== 'undefined' && typeof window.confirm === 'function';
+        const continueAnyway = isWeb
+          ? window.confirm(`查重失败：${result.error}\n\n是否继续入库？`)
+          : await new Promise<boolean>((resolve) => {
+              Alert.alert(
+                "查重失败",
+                `${result.error}\n\n是否继续入库？`,
+                [
+                  { text: "Cancel", onPress: () => resolve(false), style: "cancel" },
+                  { text: "OK", onPress: () => resolve(true) },
+                ]
+              );
+            });
+        
+        if (!continueAnyway) {
+          setChecking(false);
+          return;
+        }
+        
+        // 用户选择继续，跳转到 SKU 页面
+        router.push({
+          pathname: "/add-product-sku" as any,
+          params: {
+            detailImageUri: uri,
+            detailImageBase64: base64 || "",
+            isNewProduct: "true",
+          },
+        });
+        return;
+      }
+      
+      if (result.hasDuplicates && result.duplicates.length > 0) {
+        // 发现重复产品，跳转到查重页面
+        console.log("[AddProduct] Found", result.duplicates.length, "duplicates");
+        router.push({
+          pathname: "/duplicate-check" as any,
+          params: {
+            detailImageUri: uri,
+            detailImageBase64: base64 || "",
+            duplicates: JSON.stringify(result.duplicates.map(d => ({
+              productId: d.product.id,
+              sku: d.product.sku,
+              similarityScore: d.similarityScore,
+              analysisNote: d.analysisNote,
+            }))),
+          },
+        });
+      } else {
+        // 没有重复产品，跳转到 SKU 页面
+        console.log("[AddProduct] No duplicates found, proceeding to SKU page");
+        router.push({
+          pathname: "/add-product-sku" as any,
+          params: {
+            detailImageUri: uri,
+            detailImageBase64: base64 || "",
+            isNewProduct: "true",
+          },
+        });
+      }
+    } catch (error: any) {
+      console.error("[AddProduct] Unexpected error:", error);
+      Alert.alert("错误", `发生意外错误：${error.message}`);
+    } finally {
+      setChecking(false);
+    }
+  };
 
   // Web 平台使用 HTML5 input[type=file]
   if (Platform.OS === "web") {
@@ -31,20 +116,21 @@ export default function AddProductScreen() {
             <ThemedText style={styles.webBackButtonText}>← 返回</ThemedText>
           </Pressable>
 
+          {/* 加载遮罩 */}
+          {checking && (
+            <View style={styles.loadingOverlay}>
+              <View style={styles.loadingCard}>
+                <ActivityIndicator size="large" color="#007AFF" />
+                <ThemedText style={styles.loadingText}>正在查重，请稍候...</ThemedText>
+              </View>
+            </View>
+          )}
+
           <WebCamera
             hint="请拍摄产品细节照片"
             subHint="💡 建议在充足自然光（日光）下拍摄\n避免阴影和反光，保持相机稳定"
             buttonText="拍摄细节照"
-            onPhotoTaken={(uri, base64) => {
-              console.log("[AddProduct] Photo taken, navigating to SKU page");
-              router.push({
-                pathname: "/add-product-sku" as any,
-                params: { 
-                  detailImageUri: uri,
-                  detailImageBase64: base64,
-                },
-              });
-            }}
+            onPhotoTaken={handlePhotoTaken}
           />
         </View>
       </ThemedView>
@@ -92,14 +178,8 @@ export default function AddProductScreen() {
       });
 
       if (photo) {
-        // 导航到 SKU 输入页面，传递照片 URI 和 base64
-        router.push({
-          pathname: "/add-product-sku" as any,
-          params: { 
-            detailImageUri: photo.uri,
-            detailImageBase64: photo.base64 || "",
-          },
-        });
+        // 执行去重检查
+        await handlePhotoTaken(photo.uri, photo.base64 || "");
       }
     } catch (error) {
       console.error("Failed to take photo:", error);
@@ -134,6 +214,16 @@ export default function AddProductScreen() {
           </View>
         </View>
 
+        {/* 加载遮罩 */}
+        {checking && (
+          <View style={styles.loadingOverlay}>
+            <View style={styles.loadingCard}>
+              <ActivityIndicator size="large" color="#007AFF" />
+              <ThemedText style={styles.loadingText}>正在查重，请稍候...</ThemedText>
+            </View>
+          </View>
+        )}
+
         {/* 底部操作栏 */}
         <View
           style={[
@@ -156,6 +246,7 @@ export default function AddProductScreen() {
               { opacity: pressed ? 0.7 : 1 },
             ]}
             onPress={handleTakePhoto}
+            disabled={checking}
           >
             <View style={styles.captureButtonInner} />
           </Pressable>
@@ -187,6 +278,30 @@ const styles = StyleSheet.create({
   },
   webBackButtonText: {
     color: "#fff",
+    fontSize: 16,
+    lineHeight: 22,
+    fontWeight: "500",
+  },
+  loadingOverlay: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: "rgba(0, 0, 0, 0.7)",
+    justifyContent: "center",
+    alignItems: "center",
+    zIndex: 1000,
+  },
+  loadingCard: {
+    backgroundColor: "#fff",
+    borderRadius: 12,
+    padding: 24,
+    alignItems: "center",
+    gap: 16,
+    minWidth: 200,
+  },
+  loadingText: {
     fontSize: 16,
     lineHeight: 22,
     fontWeight: "500",

@@ -1,7 +1,6 @@
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import {
-  ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -15,12 +14,11 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
 import { useColorScheme } from "@/hooks/use-color-scheme";
-import { batchCompareImages } from "@/lib/ai-vision";
-import { ProductAPI } from "@/lib/api-client";
 import { SettingsStorage } from "@/lib/storage";
 
 /**
  * 添加产品流程 - 步骤2：输入 SKU
+ * 注意：去重已经在拍照后完成，这里只需要输入 SKU
  */
 export default function AddProductSkuScreen() {
   const router = useRouter();
@@ -29,11 +27,11 @@ export default function AddProductSkuScreen() {
   const params = useLocalSearchParams<{ 
     detailImageUri: string;
     detailImageBase64?: string;
+    isNewProduct?: string;
   }>();
 
   const [sku, setSku] = useState("");
   const [loading, setLoading] = useState(true);
-  const [checking, setChecking] = useState(false);
 
   // 检测是否在浏览器环境
   const isWeb = typeof window !== 'undefined' && typeof window.alert === 'function';
@@ -56,35 +54,9 @@ export default function AddProductSkuScreen() {
     loadLastSku();
   }, []);
 
-  // 将图片转换为 Base64
-  const imageToBase64 = async (uri: string): Promise<string> => {
-    try {
-      console.log("[SKU] Converting image to base64:", uri.substring(0, 50));
-      const response = await fetch(uri);
-      const blob = await response.blob();
-      return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onloadend = () => {
-          const base64 = reader.result as string;
-          // 移除 "data:image/jpeg;base64," 前缀
-          const base64Data = base64.split(",")[1];
-          console.log("[SKU] Image converted, size:", base64Data.length);
-          resolve(base64Data);
-        };
-        reader.onerror = reject;
-        reader.readAsDataURL(blob);
-      });
-    } catch (error) {
-      console.error("[SKU] Failed to convert image to base64:", error);
-      throw error;
-    }
-  };
-
   // 确认 SKU
   const handleConfirm = async () => {
-    console.log("[SKU] ========== handleConfirm START ==========");
-    console.log("[SKU] Platform.OS:", Platform.OS);
-    console.log("[SKU] isWeb:", isWeb);
+    console.log("[SKU] handleConfirm called");
     console.log("[SKU] SKU input:", sku);
     
     if (!sku.trim()) {
@@ -103,156 +75,27 @@ export default function AddProductSkuScreen() {
       await SettingsStorage.update({ lastSku: sku.trim() });
       console.log("[SKU] SKU saved successfully");
 
-      // 开始查重流程
-      console.log("[SKU] Starting duplicate check...");
-      setChecking(true);
-
-      // 获取所有未删除的产品（已删除的不参与查重）
-      console.log("[SKU] Loading active products from cloud...");
-      const allProducts = await ProductAPI.getActive();
-      console.log("[SKU] Found", allProducts.length, "active products");
-
-      if (allProducts.length === 0) {
-        // 没有现有产品，直接继续
-        console.log("[SKU] No existing products, skipping duplicate check");
-        console.log("[SKU] Navigating to add-product-overview...");
-        setChecking(false);
-        router.push({
-          pathname: "/add-product-overview" as any,
-          params: {
-            detailImageUri: params.detailImageUri,
-            sku: sku.trim(),
-            isNewProduct: "true",
-          },
-        });
-        console.log("[SKU] Navigation completed");
-        return;
-      }
-
-      // 将新图片转换为 Base64（如果还没有）
-      let newImageBase64: string;
-      if (params.detailImageBase64) {
-        console.log("[SKU] Using provided base64 data");
-        newImageBase64 = params.detailImageBase64;
-      } else {
-        console.log("[SKU] Converting new image to base64...");
-        newImageBase64 = await imageToBase64(params.detailImageUri);
-        console.log("[SKU] New image converted successfully");
-      }
-
-      // 将现有产品图片转换为 Base64
-      console.log("[SKU] Converting existing images to base64...");
-      const existingImages = await Promise.all(
-        allProducts.map(async (product) => {
-          console.log("[SKU] Converting product image:", product.id);
-          return {
-            id: product.id,
-            base64: await imageToBase64(product.detailImageUri),
-          };
-        }),
-      );
-      console.log("[SKU] All existing images converted");
-
-      // 调用 AI 批量对比（相似度阈值 90%）
-      console.log("[SKU] Calling AI batch compare...");
-      const similarResults = await batchCompareImages(
-        newImageBase64,
-        existingImages,
-        90,
-      );
-
-      console.log("[SKU] Batch compare completed, found", similarResults.length, "similar products");
-      setChecking(false);
-
-      if (similarResults.length === 0) {
-        // 没有发现疑似重复，直接继续
-        console.log("[SKU] No duplicates found, continuing...");
-        router.push({
-          pathname: "/add-product-overview" as any,
-          params: {
-            detailImageUri: params.detailImageUri,
-            sku: sku.trim(),
-            isNewProduct: "true",
-          },
-        });
-        console.log("[SKU] Navigation completed");
-      } else {
-        // 发现疑似重复，导航到查重结果页面
-        console.log("[SKU] Duplicates found, navigating to duplicate check page");
-        const duplicates = similarResults.map((result) => ({
-          product: allProducts.find((p) => p.id === result.id)!,
-          similarityScore: result.similarityScore,
-          analysisNote: result.analysisNote,
-        }));
-
-        router.push({
-          pathname: "/duplicate-check" as any,
-          params: {
-            detailImageUri: params.detailImageUri,
-            sku: sku.trim(),
-            duplicates: JSON.stringify(duplicates),
-          },
-        });
-        console.log("[SKU] Navigation completed");
-      }
+      // 直接跳转到拍摄概览图页面
+      console.log("[SKU] Navigating to add-product-overview...");
+      router.push({
+        pathname: "/add-product-overview" as any,
+        params: {
+          detailImageUri: params.detailImageUri,
+          sku: sku.trim(),
+          isNewProduct: params.isNewProduct || "true",
+        },
+      });
+      console.log("[SKU] Navigation completed");
     } catch (error) {
-      setChecking(false);
-      console.error("[SKU] ========== ERROR CAUGHT ==========");
-      console.error("[SKU] Error type:", error?.constructor?.name);
-      console.error("[SKU] Error details:", error);
-      
+      console.error("[SKU] Error:", error);
       const errorMessage = error instanceof Error ? error.message : "未知错误";
-      console.error("[SKU] Error message:", errorMessage);
-      console.error("[SKU] Stack trace:", error instanceof Error ? error.stack : "N/A");
       
-      // 使用统一的环境检测
       if (isWeb) {
-        console.log("[SKU] Showing web confirm dialog");
-        const continueAnyway = window.confirm(
-          `查重失败：${errorMessage}\n\n是否继续入库？`
-        );
-        console.log("[SKU] User choice:", continueAnyway);
-        if (continueAnyway) {
-          console.log("[SKU] User chose to continue, navigating...");
-          router.push({
-            pathname: "/add-product-overview" as any,
-            params: {
-              detailImageUri: params.detailImageUri,
-              sku: sku.trim(),
-              isNewProduct: "true",
-            },
-          });
-        }
+        window.alert(`保存失败：${errorMessage}`);
       } else {
-        console.log("[SKU] Showing native alert dialog");
-        Alert.alert(
-          "查重失败",
-          `${errorMessage}\n\n是否继续入库？`,
-          [
-            {
-              text: "取消",
-              style: "cancel",
-              onPress: () => console.log("[SKU] User cancelled"),
-            },
-            {
-              text: "继续",
-              onPress: () => {
-                console.log("[SKU] User chose to continue, navigating...");
-                router.push({
-                  pathname: "/add-product-overview" as any,
-                  params: {
-                    detailImageUri: params.detailImageUri,
-                    sku: sku.trim(),
-                    isNewProduct: "true",
-                  },
-                });
-              },
-            },
-          ],
-        );
+        Alert.alert("错误", `保存失败：${errorMessage}`);
       }
     }
-    console.log("[SKU] ========== handleConfirm END ==========");
   };
 
   return (
@@ -308,22 +151,13 @@ export default function AddProductSkuScreen() {
                 styles.button,
                 {
                   backgroundColor: "#007AFF",
-                  opacity: pressed || loading || checking ? 0.6 : 1,
+                  opacity: pressed || loading ? 0.6 : 1,
                 },
               ]}
               onPress={handleConfirm}
-              disabled={loading || checking}
+              disabled={loading}
             >
-              {checking ? (
-                <View style={styles.loadingContainer}>
-                  <ActivityIndicator color="#FFFFFF" size="small" />
-                  <ThemedText style={styles.buttonText}>
-                    正在查重，请稍候...
-                  </ThemedText>
-                </View>
-              ) : (
-                <ThemedText style={styles.buttonText}>继续</ThemedText>
-              )}
+              <ThemedText style={styles.buttonText}>继续</ThemedText>
             </Pressable>
           </View>
         </View>
@@ -380,10 +214,5 @@ const styles = StyleSheet.create({
     color: "#FFFFFF",
     fontSize: 18,
     fontWeight: "600",
-  },
-  loadingContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
   },
 });
