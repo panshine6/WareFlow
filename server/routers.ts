@@ -26,7 +26,10 @@ export const appRouter = router({
     getDeleted: publicProcedure.query(async () => await db.getDeletedProducts()),
     getById: publicProcedure.input(z.object({ id: z.string() })).query(async ({ input }) => await db.getProductById(input.id)),
     search: publicProcedure.input(z.object({ sku: z.string() })).query(async ({ input }) => await db.searchProductsBySku(input.sku)),
-    create: publicProcedure.input(z.object({ id: z.string(), detailImageUri: z.string(), overviewImageUri: z.string(), sku: z.string(), quantity: z.number(), storageLocation: z.string(), operatorId: z.number(), operatorName: z.string() })).mutation(async ({ input }) => await db.createProduct({ ...input, isDeleted: 0, deletedAt: null, createdAt: new Date(), updatedAt: new Date() })),
+    create: publicProcedure.input(z.object({ id: z.string(), detailImageUri: z.string(), overviewImageUri: z.string(), sku: z.string(), quantity: z.number(), storageLocation: z.string(), operatorId: z.number(), operatorName: z.string() })).mutation(async ({ input }) => {
+      console.log('[products.create] Called with input:', { sku: input.sku, quantity: input.quantity });
+      return await db.createProduct({ ...input, isDeleted: 0, deletedAt: null, createdAt: new Date(), updatedAt: new Date() });
+    }),
     update: publicProcedure.input(z.object({ id: z.string(), sku: z.string().optional(), quantity: z.number().optional(), storageLocation: z.string().optional() })).mutation(async ({ input }) => { const { id, ...data } = input; await db.updateProduct(id, data); return { success: true }; }),
     softDelete: publicProcedure.input(z.object({ id: z.string() })).mutation(async ({ input }) => { await db.softDeleteProduct(input.id); return { success: true }; }),
     restore: publicProcedure.input(z.object({ id: z.string() })).mutation(async ({ input }) => { await db.restoreProduct(input.id); return { success: true }; }),
