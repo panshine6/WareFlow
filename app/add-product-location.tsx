@@ -15,7 +15,8 @@ import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { UserStorage } from "@/lib/user-storage";
-import { ProductStorage, SettingsStorage } from "@/lib/storage";
+import { ProductAPI } from "@/lib/api-client";
+import { SettingsStorage } from "@/lib/storage";
 import { AutoSync } from "@/lib/auto-sync";
 import { trpc } from "@/lib/trpc";
 import type { Product } from "@/types/product";
@@ -87,29 +88,42 @@ export default function AddProductLocationScreen() {
       // 判断是新款还是合并
       if (params.mergeToProductId) {
         // 合并到现有产品
-        await ProductStorage.mergeProduct(params.mergeToProductId, {
+        await ProductAPI.merge(params.mergeToProductId, {
           quantity,
           location: location.trim(),
           detailImageUri: params.detailImageUri,
           overviewImageUri: params.overviewImageUri,
-          operatorId,
+          operatorId: parseInt(operatorId),
           operatorName,
         });
       } else {
         // 新产品，带历史记录
-        const product: Omit<Product, "history"> = {
-          id: Date.now().toString(),
+        const productId = Date.now().toString();
+        const product: Omit<Product, "history" | "createdAt" | "updatedAt"> = {
+          id: productId,
           detailImageUri: params.detailImageUri,
           overviewImageUri: params.overviewImageUri,
           sku: params.sku,
           quantity,
           storageLocation: location.trim(),
-          createdAt: new Date().toISOString(),
           operatorName,
           operatorId,
         };
 
-        await ProductStorage.addWithHistory(product);
+        // 创建产品
+        await ProductAPI.create(product);
+        
+        // 添加历史记录
+        await ProductAPI.addHistory({
+          id: Date.now().toString(),
+          productId,
+          operatorId: parseInt(operatorId),
+          operatorName,
+          quantity,
+          location: location.trim(),
+          detailImageUri: params.detailImageUri,
+          overviewImageUri: params.overviewImageUri,
+        });
       }
 
       // 更新默认位置

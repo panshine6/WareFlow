@@ -15,7 +15,7 @@ import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
 import { Colors } from "@/constants/theme";
 import { useColorScheme } from "@/hooks/use-color-scheme";
-import { ProductStorage } from "@/lib/storage";
+import { ProductAPI } from "@/lib/api-client";
 import type { Product } from "@/types/product";
 
 /**
@@ -39,7 +39,7 @@ export default function RecycleBinScreen() {
   const loadProducts = async () => {
     try {
       setLoading(true);
-      const deleted = await ProductStorage.getDeleted();
+      const deleted = await ProductAPI.getDeleted();
       setProducts(deleted);
     } catch (error) {
       console.error("Failed to load deleted products:", error);
@@ -56,14 +56,9 @@ export default function RecycleBinScreen() {
   };
 
   const cleanupOldProducts = async () => {
-    try {
-      const count = await ProductStorage.cleanupOldDeleted();
-      if (count > 0) {
-        console.log(`Cleaned up ${count} products older than 90 days`);
-      }
-    } catch (error) {
-      console.error("Failed to cleanup old products:", error);
-    }
+    // TODO: Implement cleanup API endpoint
+    // For now, we'll skip automatic cleanup
+    console.log("Automatic cleanup not yet implemented on cloud API");
   };
 
   // 恢复产品
@@ -74,7 +69,7 @@ export default function RecycleBinScreen() {
         text: "恢复",
         onPress: async () => {
           try {
-            await ProductStorage.restore(product.id);
+            await ProductAPI.restore(product.id);
             Alert.alert("成功", "产品已恢复");
             await loadProducts();
           } catch (error) {
@@ -98,7 +93,7 @@ export default function RecycleBinScreen() {
           style: "destructive",
           onPress: async () => {
             try {
-              await ProductStorage.permanentDelete(product.id);
+              await ProductAPI.permanentDelete(product.id);
               Alert.alert("成功", "产品已永久删除");
               await loadProducts();
             } catch (error) {

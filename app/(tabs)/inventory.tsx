@@ -17,7 +17,7 @@ import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { exportToDianxiaomiFormat } from "@/lib/excel-export";
-import { ProductStorage } from "@/lib/storage";
+import { ProductAPI } from "@/lib/api-client";
 import { trpc } from "@/lib/trpc";
 import { AutoSync } from "@/lib/auto-sync";
 import type { Product } from "@/types/product";
@@ -48,7 +48,7 @@ export default function InventoryScreen() {
   // 加载产品列表（只显示未删除的）
   const loadProducts = async () => {
     try {
-      const data = await ProductStorage.getActive();
+      const data = await ProductAPI.getActive();
       setProducts(data);
       setFilteredProducts(data);
     } catch (error) {

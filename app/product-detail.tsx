@@ -16,7 +16,7 @@ import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
 import { Colors } from "@/constants/theme";
 import { useColorScheme } from "@/hooks/use-color-scheme";
-import { ProductStorage } from "@/lib/storage";
+import { ProductAPI } from "@/lib/api-client";
 import { AutoSync } from "@/lib/auto-sync";
 import { trpc } from "@/lib/trpc";
 import type { Product } from "@/types/product";
@@ -47,8 +47,7 @@ export default function ProductDetailScreen() {
   const loadProduct = async () => {
     try {
       setLoading(true);
-      const products = await ProductStorage.getAll();
-      const found = products.find((p) => p.id === params.id);
+      const found = await ProductAPI.getById(params.id);
       if (found) {
         setProduct(found);
         setEditedProduct(found);
@@ -86,7 +85,7 @@ export default function ProductDetailScreen() {
 
     try {
       setSaving(true);
-      await ProductStorage.update(editedProduct.id, editedProduct);
+      await ProductAPI.update(editedProduct.id, editedProduct);
       setProduct(editedProduct);
       setIsEditing(false);
 
@@ -126,7 +125,7 @@ export default function ProductDetailScreen() {
         onPress: async () => {
           try {
             if (product) {
-              await ProductStorage.softDelete(product.id);
+              await ProductAPI.softDelete(product.id);
 
               // 自动上传到云端（静默）
               try {

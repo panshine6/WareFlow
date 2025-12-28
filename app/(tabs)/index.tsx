@@ -17,7 +17,7 @@ import { WelcomeScreen } from "@/components/welcome-screen";
 import { Colors } from "@/constants/theme";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { UserStorage } from "@/lib/user-storage";
-import { ProductStorage } from "@/lib/storage";
+import { ProductAPI } from "@/lib/api-client";
 import { AutoSync } from "@/lib/auto-sync";
 import { trpc } from "@/lib/trpc";
 import { APP_VERSION } from "@/lib/version";
@@ -40,7 +40,7 @@ export default function HomeScreen() {
   // 加载产品列表（仅显示活跃产品）
   const loadProducts = async () => {
     try {
-      const data = await ProductStorage.getActive();
+      const data = await ProductAPI.getActive();
       setProducts(data);
     } catch (error) {
       console.error("Failed to load products:", error);
