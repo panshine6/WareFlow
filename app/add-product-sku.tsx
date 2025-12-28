@@ -26,7 +26,10 @@ export default function AddProductSkuScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const colorScheme = useColorScheme();
-  const params = useLocalSearchParams<{ detailImageUri: string }>();
+  const params = useLocalSearchParams<{ 
+    detailImageUri: string;
+    detailImageBase64?: string;
+  }>();
 
   const [sku, setSku] = useState("");
   const [loading, setLoading] = useState(true);
@@ -116,9 +119,15 @@ export default function AddProductSkuScreen() {
         return;
       }
 
-      // 将新图片转换为 Base64
-      console.log("[SKU] Converting new image to base64...");
-      const newImageBase64 = await imageToBase64(params.detailImageUri);
+      // 将新图片转换为 Base64（如果还没有）
+      let newImageBase64: string;
+      if (params.detailImageBase64) {
+        console.log("[SKU] Using provided base64 data");
+        newImageBase64 = params.detailImageBase64;
+      } else {
+        console.log("[SKU] Converting new image to base64...");
+        newImageBase64 = await imageToBase64(params.detailImageUri);
+      }
 
       // 将现有产品图片转换为 Base64
       console.log("[SKU] Converting existing images to base64...");

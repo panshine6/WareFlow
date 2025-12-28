@@ -19,6 +19,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
+import { WebCamera } from "@/components/web-camera";
 import { countProductsInImage } from "@/lib/ai-vision";
 
 /**
@@ -41,7 +42,39 @@ export default function AddProductOverviewScreen() {
   const [showQuantityModal, setShowQuantityModal] = useState(false);
   const [quantity, setQuantity] = useState<number>(0);
 
-  // 拍照并识别
+  // Web 平台：处理拍照和 AI 识别
+  const handleWebPhotoTaken = async (uri: string, base64: string) => {
+    console.log("[Overview Web] Photo taken, starting AI recognition...");
+    setOverviewImageUri(uri);
+    setRecognizing(true);
+
+    try {
+      console.log("[Overview Web] Calling AI recognition...");
+      const count = await countProductsInImage(base64);
+      console.log("[Overview Web] AI recognized count:", count);
+
+      setQuantity(count);
+      setShowQuantityModal(true);
+    } catch (error) {
+      console.error("[Overview Web] AI recognition error:", error);
+      const errorMessage = error instanceof Error ? error.message : "未知错误";
+      console.error("[Overview Web] Error details:", errorMessage);
+
+      const manualInput = window.confirm(
+        `识别失败：${errorMessage}\n\n点击"确定"手动输入数量，点击"取消"重拍`
+      );
+      if (manualInput) {
+        setQuantity(1);
+        setShowQuantityModal(true);
+      } else {
+        setOverviewImageUri("");
+      }
+    } finally {
+      setRecognizing(false);
+    }
+  };
+
+  // 原生平台：拍照并识别
   const handleTakePhoto = async () => {
     if (!camera) {
       console.log("[Overview] Camera not ready");
@@ -91,36 +124,24 @@ export default function AddProductOverviewScreen() {
           console.error("[Overview] AI recognition error:", error);
           const errorMessage = error instanceof Error ? error.message : "未知错误";
           console.error("[Overview] Error details:", errorMessage);
-          
-          if (Platform.OS === "web") {
-            const manualInput = window.confirm(
-              `识别失败：${errorMessage}\n\n点击“确定”手动输入数量，点击“取消”重拍`
-            );
-            if (manualInput) {
-              setQuantity(1);
-              setShowQuantityModal(true);
-            } else {
-              setOverviewImageUri("");
-            }
-          } else {
-            Alert.alert(
-              "识别失败",
-              `${errorMessage}\n\n请选择手动输入或重拍`,
-              [
-                {
-                  text: "手动输入",
-                  onPress: () => {
-                    setQuantity(1);
-                    setShowQuantityModal(true);
-                  },
+
+          Alert.alert(
+            "识别失败",
+            `${errorMessage}\n\n请选择手动输入或重拍`,
+            [
+              {
+                text: "手动输入",
+                onPress: () => {
+                  setQuantity(1);
+                  setShowQuantityModal(true);
                 },
-                {
-                  text: "重拍",
-                  onPress: () => setOverviewImageUri(""),
-                },
-              ]
-            );
-          }
+              },
+              {
+                text: "重拍",
+                onPress: () => setOverviewImageUri(""),
+              },
+            ]
+          );
         } finally {
           setRecognizing(false);
         }
@@ -128,12 +149,8 @@ export default function AddProductOverviewScreen() {
     } catch (error) {
       console.error("[Overview] Failed to take photo:", error);
       const errorMessage = error instanceof Error ? error.message : "未知错误";
-      
-      if (Platform.OS === "web") {
-        window.alert(`拍照失败：${errorMessage}\n\n请重试`);
-      } else {
-        Alert.alert("拍照失败", `${errorMessage}\n\n请重试`);
-      }
+
+      Alert.alert("拍照失败", `${errorMessage}\n\n请重试`);
       setRecognizing(false);
     }
   };
@@ -165,6 +182,92 @@ export default function AddProductOverviewScreen() {
     });
   };
 
+  // Web 平台渲染
+  if (Platform.OS === "web") {
+    return (
+      <ThemedView style={styles.container}>
+        <View style={[styles.webContainer, { paddingTop: Math.max(insets.top, 20) }]}>
+          {/* 返回按钮 */}
+          <Pressable
+            style={styles.webBackButton}
+            onPress={() => router.back()}
+          >
+            <ThemedText style={styles.webBackButtonText}>← 返回</ThemedText>
+          </Pressable>
+
+          {/* 加载指示器 */}
+          {recognizing && (
+            <View style={styles.webLoadingOverlay}>
+              <ActivityIndicator color="#fff" size="large" />
+              <ThemedText style={styles.webLoadingText}>
+                AI 正在识别中，请稍候...
+              </ThemedText>
+            </View>
+          )}
+
+          {/* 相机组件 */}
+          {!recognizing && !showQuantityModal && (
+            <WebCamera
+              hint="请将产品摊开放在深色背景上"
+              subHint="确保白色标签清晰可见"
+              buttonText="拍摄全景照"
+              onPhotoTaken={handleWebPhotoTaken}
+              disabled={recognizing}
+            />
+          )}
+
+          {/* 数量确认弹窗 */}
+          {showQuantityModal && (
+            <View style={styles.webModalOverlay}>
+              <View style={styles.webModalContent}>
+                <ThemedText type="title" style={styles.modalTitle}>
+                  确认数量
+                </ThemedText>
+
+                <ThemedText style={styles.modalHint}>
+                  AI 识别到的数量，可手动修改
+                </ThemedText>
+
+                <TextInput
+                  style={styles.webQuantityInput}
+                  value={quantity.toString()}
+                  onChange={(e) => {
+                    const num = parseInt((e.target as HTMLInputElement).value) || 0;
+                    setQuantity(num);
+                  }}
+                  type="number"
+                  inputMode="numeric"
+                />
+
+                <View style={styles.modalButtons}>
+                  <Pressable
+                    style={[styles.modalButton, styles.retakeButton]}
+                    onPress={() => {
+                      setShowQuantityModal(false);
+                      setOverviewImageUri("");
+                    }}
+                  >
+                    <ThemedText style={styles.retakeButtonText}>重拍</ThemedText>
+                  </Pressable>
+
+                  <Pressable
+                    style={[styles.modalButton, styles.confirmModalButton]}
+                    onPress={handleConfirmQuantity}
+                  >
+                    <ThemedText style={styles.confirmModalButtonText}>
+                      确认
+                    </ThemedText>
+                  </Pressable>
+                </View>
+              </View>
+            </View>
+          )}
+        </View>
+      </ThemedView>
+    );
+  }
+
+  // 原生平台渲染
   if (!permission?.granted) {
     return (
       <ThemedView style={styles.container}>
@@ -312,6 +415,73 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#000",
   },
+  webContainer: {
+    flex: 1,
+    position: "relative",
+  },
+  webBackButton: {
+    position: "absolute",
+    top: 20,
+    left: 20,
+    zIndex: 10,
+    padding: 12,
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    borderRadius: 8,
+  },
+  webBackButtonText: {
+    color: "#fff",
+    fontSize: 16,
+    lineHeight: 22,
+    fontWeight: "500",
+  },
+  webLoadingOverlay: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: "rgba(0, 0, 0, 0.8)",
+    justifyContent: "center",
+    alignItems: "center",
+    zIndex: 20,
+  },
+  webLoadingText: {
+    color: "#fff",
+    fontSize: 16,
+    lineHeight: 24,
+    marginTop: 16,
+  },
+  webModalOverlay: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: "rgba(0, 0, 0, 0.8)",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 20,
+    zIndex: 30,
+  },
+  webModalContent: {
+    backgroundColor: "#fff",
+    borderRadius: 16,
+    padding: 24,
+    width: "100%",
+    maxWidth: 400,
+  },
+  webQuantityInput: {
+    height: 60,
+    borderWidth: 2,
+    borderColor: "#007AFF",
+    borderRadius: 12,
+    paddingHorizontal: 20,
+    fontSize: 32,
+    fontWeight: "600",
+    textAlign: "center",
+    marginBottom: 24,
+    color: "#000",
+  },
   camera: {
     flex: 1,
   },
@@ -379,36 +549,41 @@ const styles = StyleSheet.create({
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    backgroundColor: "rgba(0, 0, 0, 0.8)",
     justifyContent: "flex-end",
   },
   modalContent: {
     backgroundColor: "#fff",
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
-    paddingTop: 24,
     paddingHorizontal: 24,
+    paddingTop: 24,
   },
   modalTitle: {
+    fontSize: 24,
+    fontWeight: "bold",
+    marginBottom: 12,
     textAlign: "center",
-    marginBottom: 8,
+    color: "#000",
   },
   modalHint: {
-    fontSize: 14,
-    lineHeight: 20,
-    opacity: 0.7,
-    textAlign: "center",
+    fontSize: 15,
     marginBottom: 24,
+    textAlign: "center",
+    opacity: 0.7,
+    color: "#000",
   },
   quantityInput: {
-    height: 80,
-    backgroundColor: "rgba(0, 0, 0, 0.05)",
-    borderRadius: 16,
-    fontSize: 48,
-    lineHeight: 56,
-    fontWeight: "bold",
+    height: 60,
+    borderWidth: 2,
+    borderColor: "#007AFF",
+    borderRadius: 12,
+    paddingHorizontal: 20,
+    fontSize: 32,
+    fontWeight: "600",
     textAlign: "center",
     marginBottom: 24,
+    color: "#000",
   },
   modalButtons: {
     flexDirection: "row",
@@ -416,17 +591,17 @@ const styles = StyleSheet.create({
   },
   modalButton: {
     flex: 1,
-    height: 48,
+    height: 52,
     borderRadius: 12,
     justifyContent: "center",
     alignItems: "center",
   },
   retakeButton: {
-    backgroundColor: "rgba(0, 0, 0, 0.1)",
+    backgroundColor: "#F2F2F7",
   },
   retakeButtonText: {
-    fontSize: 16,
-    lineHeight: 22,
+    color: "#000",
+    fontSize: 17,
     fontWeight: "600",
   },
   confirmModalButton: {
@@ -434,8 +609,7 @@ const styles = StyleSheet.create({
   },
   confirmModalButtonText: {
     color: "#fff",
-    fontSize: 16,
-    lineHeight: 22,
+    fontSize: 17,
     fontWeight: "600",
   },
 });

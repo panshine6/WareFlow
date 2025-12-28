@@ -20,6 +20,7 @@ import { UserStorage } from "@/lib/user-storage";
 import { ProductStorage } from "@/lib/storage";
 import { AutoSync } from "@/lib/auto-sync";
 import { trpc } from "@/lib/trpc";
+import { APP_VERSION } from "@/lib/version";
 import type { Product } from "@/types/product";
 
 export default function HomeScreen() {
@@ -274,6 +275,7 @@ export default function HomeScreen() {
       {/* 版权标识 */}
       <View style={styles.copyrightContainer}>
         <ThemedText style={styles.copyrightText}>作者：潘章杰（By Manus）</ThemedText>
+        <ThemedText style={styles.versionText}>版本：{APP_VERSION}</ThemedText>
       </View>
     </ThemedView>
   );
@@ -479,5 +481,11 @@ const styles = StyleSheet.create({
     fontSize: 12,
     lineHeight: 18,
     opacity: 0.5,
+  },
+  versionText: {
+    fontSize: 11,
+    lineHeight: 16,
+    opacity: 0.4,
+    marginTop: 2,
   },
 });

@@ -1,11 +1,12 @@
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { useRouter } from "expo-router";
 import { useState } from "react";
-import { Alert, Pressable, StyleSheet, View } from "react-native";
+import { Alert, Platform, Pressable, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
+import { WebCamera } from "@/components/web-camera";
 
 /**
  * 添加产品流程 - 步骤1：拍摄产品细节照片
@@ -16,6 +17,40 @@ export default function AddProductScreen() {
   const [permission, requestPermission] = useCameraPermissions();
   const [camera, setCamera] = useState<CameraView | null>(null);
 
+  // Web 平台使用 HTML5 input[type=file]
+  if (Platform.OS === "web") {
+    return (
+      <ThemedView style={styles.container}>
+        <View style={[styles.webContainer, { paddingTop: Math.max(insets.top, 20) }]}>
+          {/* 返回按钮 */}
+          <Pressable
+            style={styles.webBackButton}
+            onPress={() => router.back()}
+          >
+            <ThemedText style={styles.webBackButtonText}>← 返回</ThemedText>
+          </Pressable>
+
+          <WebCamera
+            hint="请拍摄产品细节照片"
+            subHint="💡 建议在充足自然光（日光）下拍摄\n避免阴影和反光，保持相机稳定"
+            buttonText="拍摄细节照"
+            onPhotoTaken={(uri, base64) => {
+              console.log("[AddProduct] Photo taken, navigating to SKU page");
+              router.push({
+                pathname: "/add-product-sku" as any,
+                params: { 
+                  detailImageUri: uri,
+                  detailImageBase64: base64,
+                },
+              });
+            }}
+          />
+        </View>
+      </ThemedView>
+    );
+  }
+
+  // 原生平台使用 expo-camera
   // 请求相机权限
   if (!permission) {
     return (
@@ -52,14 +87,17 @@ export default function AddProductScreen() {
       // 使用 90% 质量，确保细节清晰
       const photo = await camera.takePictureAsync({
         quality: 0.9,
-        base64: false,
+        base64: true,
       });
 
       if (photo) {
-        // 导航到 SKU 输入页面，传递照片 URI
+        // 导航到 SKU 输入页面，传递照片 URI 和 base64
         router.push({
           pathname: "/add-product-sku" as any,
-          params: { detailImageUri: photo.uri },
+          params: { 
+            detailImageUri: photo.uri,
+            detailImageBase64: photo.base64 || "",
+          },
         });
       }
     } catch (error) {
@@ -74,8 +112,6 @@ export default function AddProductScreen() {
         ref={setCamera}
         style={styles.camera}
         facing="back"
-        // 注意：React Native Camera 不直接支持微距模式设置
-        // 微距模式需要通过原生模块或使用设备的自动对焦功能
       >
         {/* 顶部提示 */}
         <View
@@ -134,6 +170,25 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#000",
+  },
+  webContainer: {
+    flex: 1,
+    position: "relative",
+  },
+  webBackButton: {
+    position: "absolute",
+    top: 20,
+    left: 20,
+    zIndex: 10,
+    padding: 12,
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    borderRadius: 8,
+  },
+  webBackButtonText: {
+    color: "#fff",
+    fontSize: 16,
+    lineHeight: 22,
+    fontWeight: "500",
   },
   permissionContainer: {
     flex: 1,
