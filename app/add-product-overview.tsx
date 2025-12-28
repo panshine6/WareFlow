@@ -89,30 +89,51 @@ export default function AddProductOverviewScreen() {
           setShowQuantityModal(true);
         } catch (error) {
           console.error("[Overview] AI recognition error:", error);
-          Alert.alert(
-            "识别失败",
-            "无法识别产品数量，请手动输入",
-            [
-              {
-                text: "手动输入",
-                onPress: () => {
-                  setQuantity(1);
-                  setShowQuantityModal(true);
+          const errorMessage = error instanceof Error ? error.message : "未知错误";
+          console.error("[Overview] Error details:", errorMessage);
+          
+          if (Platform.OS === "web") {
+            const manualInput = window.confirm(
+              `识别失败：${errorMessage}\n\n点击“确定”手动输入数量，点击“取消”重拍`
+            );
+            if (manualInput) {
+              setQuantity(1);
+              setShowQuantityModal(true);
+            } else {
+              setOverviewImageUri("");
+            }
+          } else {
+            Alert.alert(
+              "识别失败",
+              `${errorMessage}\n\n请选择手动输入或重拍`,
+              [
+                {
+                  text: "手动输入",
+                  onPress: () => {
+                    setQuantity(1);
+                    setShowQuantityModal(true);
+                  },
                 },
-              },
-              {
-                text: "重拍",
-                onPress: () => setOverviewImageUri(""),
-              },
-            ]
-          );
+                {
+                  text: "重拍",
+                  onPress: () => setOverviewImageUri(""),
+                },
+              ]
+            );
+          }
         } finally {
           setRecognizing(false);
         }
       }
     } catch (error) {
       console.error("[Overview] Failed to take photo:", error);
-      Alert.alert("拍照失败", "请重试");
+      const errorMessage = error instanceof Error ? error.message : "未知错误";
+      
+      if (Platform.OS === "web") {
+        window.alert(`拍照失败：${errorMessage}\n\n请重试`);
+      } else {
+        Alert.alert("拍照失败", `${errorMessage}\n\n请重试`);
+      }
       setRecognizing(false);
     }
   };
@@ -120,7 +141,11 @@ export default function AddProductOverviewScreen() {
   // 确认数量
   const handleConfirmQuantity = () => {
     if (quantity <= 0) {
-      Alert.alert("提示", "请输入有效的数量");
+      if (Platform.OS === "web") {
+        window.alert("请输入有效的数量");
+      } else {
+        Alert.alert("提示", "请输入有效的数量");
+      }
       return;
     }
 
@@ -143,7 +168,14 @@ export default function AddProductOverviewScreen() {
   if (!permission?.granted) {
     return (
       <ThemedView style={styles.container}>
-        <ThemedText>需要相机权限</ThemedText>
+        <View style={{ flex: 1, justifyContent: "center", alignItems: "center", padding: 20 }}>
+          <ThemedText style={{ fontSize: 18, marginBottom: 12, textAlign: "center" }}>
+            需要相机权限
+          </ThemedText>
+          <ThemedText style={{ fontSize: 14, opacity: 0.7, textAlign: "center" }}>
+            请在浏览器设置中允许访问相机
+          </ThemedText>
+        </View>
       </ThemedView>
     );
   }
