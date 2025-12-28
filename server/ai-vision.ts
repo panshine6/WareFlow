@@ -159,31 +159,53 @@ export async function compareImageSimilarity(
 }
 
 /**
- * 批量对比图片相似度
+ * 批量对比图片相似度（优化版：并行处理 + 超时限制）
  */
 export async function batchCompareImages(
   newImageBase64: string,
   existingImages: Array<{ id: string; base64: string }>,
   threshold: number = 90
 ): Promise<Array<{ id: string; similarityScore: number; analysisNote: string }>> {
-  const results: Array<{ id: string; similarityScore: number; analysisNote: string }> = [];
+  console.log(`[AI Vision] Starting batch compare with ${existingImages.length} images, threshold: ${threshold}`);
+  
+  // 限制最多对比前 10 个产品（避免超时）
+  const imagesToCompare = existingImages.slice(0, 10);
+  
+  if (imagesToCompare.length < existingImages.length) {
+    console.log(`[AI Vision] Limited comparison to ${imagesToCompare.length} images (out of ${existingImages.length})`);
+  }
 
-  for (const existingImage of existingImages) {
+  // 并行对比所有图片（带超时）
+  const comparePromises = imagesToCompare.map(async (existingImage) => {
     try {
-      const comparison = await compareImageSimilarity(newImageBase64, existingImage.base64);
+      // 设置 30 秒超时
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        setTimeout(() => reject(new Error("Comparison timeout")), 30000);
+      });
+      
+      const comparisonPromise = compareImageSimilarity(newImageBase64, existingImage.base64);
+      const comparison = await Promise.race([comparisonPromise, timeoutPromise]);
       
       if (comparison.similarityScore >= threshold) {
-        results.push({
+        console.log(`[AI Vision] Found similar image ${existingImage.id}: ${comparison.similarityScore}%`);
+        return {
           id: existingImage.id,
           similarityScore: comparison.similarityScore,
           analysisNote: comparison.analysisNote,
-        });
+        };
       }
+      return null;
     } catch (error) {
-      console.error(`Failed to compare with image ${existingImage.id}:`, error);
+      console.error(`[AI Vision] Failed to compare with image ${existingImage.id}:`, error);
+      return null;
     }
-  }
+  });
+
+  const allResults = await Promise.all(comparePromises);
+  const results = allResults.filter((r): r is { id: string; similarityScore: number; analysisNote: string } => r !== null);
 
   results.sort((a, b) => b.similarityScore - a.similarityScore);
+  
+  console.log(`[AI Vision] Batch compare completed: ${results.length} similar images found`);
   return results;
 }
