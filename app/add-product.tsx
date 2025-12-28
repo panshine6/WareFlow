@@ -1,12 +1,13 @@
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { useRouter } from "expo-router";
 import { useState } from "react";
-import { Alert, Platform, Pressable, StyleSheet, View } from "react-native";
+import { Platform, Pressable, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
 import { WebCamera } from "@/components/web-camera";
+import { Alert } from "@/lib/alert";
 
 /**
  * 添加产品流程 - 步骤1：拍摄产品细节照片

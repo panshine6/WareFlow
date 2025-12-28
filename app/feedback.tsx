@@ -1,7 +1,6 @@
 import { useRouter } from "expo-router";
 import { useState, useEffect } from "react";
 import {
-  Alert,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -9,6 +8,7 @@ import {
   View,
   ActivityIndicator,
 } from "react-native";
+import { Alert } from "@/lib/alert";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as Clipboard from "expo-clipboard";
 

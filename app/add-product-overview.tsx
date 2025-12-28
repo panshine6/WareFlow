@@ -4,7 +4,6 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   Keyboard,
   KeyboardAvoidingView,
   Modal,
@@ -15,6 +14,7 @@ import {
   TouchableWithoutFeedback,
   View,
 } from "react-native";
+import { Alert } from "@/lib/alert";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { ThemedText } from "@/components/themed-text";
