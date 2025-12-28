@@ -15,6 +15,13 @@ import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
 import type { Product } from "@/types/product";
 
+interface DuplicateInfo {
+  productId: string;
+  sku: string;
+  similarityScore: number;
+  analysisNote: string;
+}
+
 /**
  * 查重结果展示页面
  * 显示疑似重复的产品列表，用户可选择"新款"或"合并到现有款式"
@@ -24,37 +31,36 @@ export default function DuplicateCheckScreen() {
   const insets = useSafeAreaInsets();
   const params = useLocalSearchParams<{
     detailImageUri: string;
-    sku: string;
+    detailImageBase64?: string;
     duplicates: string; // JSON 字符串
   }>();
 
   const [loading, setLoading] = useState(false);
 
   // 解析疑似重复产品列表
-  const duplicates: Array<{
-    product: Product;
-    similarityScore: number;
-    analysisNote: string;
-  }> = params.duplicates ? JSON.parse(params.duplicates) : [];
+  const duplicates: DuplicateInfo[] = params.duplicates ? JSON.parse(params.duplicates) : [];
 
   // 用户选择"新款"
   const handleNewProduct = () => {
-    // 继续正常入库流程
+    console.log("[DuplicateCheck] User chose to create new product");
+    // 跳转到输入 SKU 页面
     router.replace({
-      pathname: "/add-product-overview" as any,
+      pathname: "/add-product-sku" as any,
       params: {
         detailImageUri: params.detailImageUri,
-        sku: params.sku,
+        detailImageBase64: params.detailImageBase64 || "",
         isNewProduct: "true",
       },
     });
   };
 
   // 用户选择"合并到现有款式"
-  const handleMergeProduct = (existingProduct: Product) => {
+  const handleMergeProduct = (duplicate: DuplicateInfo) => {
+    console.log("[DuplicateCheck] User chose to merge to product:", duplicate.productId);
+    
     Alert.alert(
       "确认合并",
-      `确定要将新入库的产品合并到 SKU: ${existingProduct.sku} 吗？`,
+      `确定要将新入库的产品合并到 SKU: ${duplicate.sku} 吗？`,
       [
         {
           text: "取消",
@@ -68,8 +74,9 @@ export default function DuplicateCheckScreen() {
               pathname: "/add-product-overview" as any,
               params: {
                 detailImageUri: params.detailImageUri,
-                sku: params.sku,
-                mergeToProductId: existingProduct.id,
+                mergeToProductId: duplicate.productId,
+                sku: duplicate.sku,
+                similarityScore: duplicate.similarityScore.toString(),
               },
             });
           },
@@ -110,7 +117,6 @@ export default function DuplicateCheckScreen() {
             style={styles.newImage}
             contentFit="cover"
           />
-          <ThemedText style={styles.skuText}>SKU: {params.sku}</ThemedText>
         </View>
 
         {/* 疑似重复产品列表 */}
@@ -119,46 +125,35 @@ export default function DuplicateCheckScreen() {
             疑似重复产品
           </ThemedText>
 
-          {duplicates.map((item, index) => (
-            <View key={item.product.id} style={styles.duplicateCard}>
+          {duplicates.map((duplicate, index) => (
+            <View key={duplicate.productId} style={styles.duplicateCard}>
               {/* 相似度标签 */}
               <View
                 style={[
                   styles.similarityBadge,
                   {
                     backgroundColor:
-                      item.similarityScore >= 95
+                      duplicate.similarityScore >= 95
                         ? "#FF3B30"
-                        : item.similarityScore >= 90
+                        : duplicate.similarityScore >= 90
                           ? "#FF9500"
                           : "#34C759",
                   },
                 ]}
               >
                 <ThemedText style={styles.similarityText}>
-                  相似度 {item.similarityScore}%
+                  相似度 {duplicate.similarityScore}%
                 </ThemedText>
               </View>
 
               {/* 产品信息 */}
               <View style={styles.productInfo}>
-                <Image
-                  source={{ uri: item.product.detailImageUri }}
-                  style={styles.productImage}
-                  contentFit="cover"
-                />
                 <View style={styles.productDetails}>
                   <ThemedText style={styles.productSku}>
-                    SKU: {item.product.sku}
-                  </ThemedText>
-                  <ThemedText style={styles.productQuantity}>
-                    库存: {item.product.quantity} 件
-                  </ThemedText>
-                  <ThemedText style={styles.productLocation}>
-                    位置: {item.product.storageLocation}
+                    SKU: {duplicate.sku}
                   </ThemedText>
                   <ThemedText style={styles.analysisNote}>
-                    {item.analysisNote}
+                    {duplicate.analysisNote}
                   </ThemedText>
                 </View>
               </View>
@@ -166,7 +161,7 @@ export default function DuplicateCheckScreen() {
               {/* 合并按钮 */}
               <Pressable
                 style={styles.mergeButton}
-                onPress={() => handleMergeProduct(item.product)}
+                onPress={() => handleMergeProduct(duplicate)}
               >
                 <ThemedText style={styles.mergeButtonText}>
                   合并到此款式
@@ -240,11 +235,6 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     marginBottom: 8,
   },
-  skuText: {
-    fontSize: 16,
-    lineHeight: 22,
-    fontWeight: "600",
-  },
   duplicatesContainer: {
     marginBottom: 24,
   },
@@ -268,35 +258,15 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   productInfo: {
-    flexDirection: "row",
     marginBottom: 12,
-  },
-  productImage: {
-    width: 80,
-    height: 80,
-    borderRadius: 8,
-    marginRight: 12,
   },
   productDetails: {
     flex: 1,
-    justifyContent: "center",
   },
   productSku: {
     fontSize: 16,
     lineHeight: 22,
     fontWeight: "600",
-    marginBottom: 4,
-  },
-  productQuantity: {
-    fontSize: 14,
-    lineHeight: 20,
-    opacity: 0.7,
-    marginBottom: 2,
-  },
-  productLocation: {
-    fontSize: 14,
-    lineHeight: 20,
-    opacity: 0.7,
     marginBottom: 4,
   },
   analysisNote: {
