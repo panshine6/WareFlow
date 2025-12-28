@@ -49,6 +49,7 @@ const config: ExpoConfig = {
     usesIcloudStorage: true,
     infoPlist: {
       UIBackgroundModes: ["audio"],
+      ITSAppUsesNonExemptEncryption: false,
     },
   },
   android: {
