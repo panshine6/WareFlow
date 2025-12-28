@@ -83,7 +83,7 @@ export default function AddProductLocationScreen() {
     try {
       const quantity = parseInt(params.quantity) || 0;
       const operatorName = currentUser?.name || "未知用户";
-      const operatorId = currentUser?.id?.toString() || "1";
+      const operatorId = parseInt(currentUser?.id?.toString() || "1");
 
       // 判断是新款还是合并
       if (params.mergeToProductId) {
@@ -93,7 +93,7 @@ export default function AddProductLocationScreen() {
           location: location.trim(),
           detailImageUri: params.detailImageUri,
           overviewImageUri: params.overviewImageUri,
-          operatorId: parseInt(operatorId),
+          operatorId,
           operatorName,
         });
       } else {
@@ -117,7 +117,7 @@ export default function AddProductLocationScreen() {
         await ProductAPI.addHistory({
           id: Date.now().toString(),
           productId,
-          operatorId: parseInt(operatorId),
+          operatorId,
           operatorName,
           quantity,
           location: location.trim(),

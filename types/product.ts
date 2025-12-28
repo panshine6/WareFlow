@@ -7,7 +7,7 @@ export interface InventoryHistoryEntry {
   /** 入库时间 */
   timestamp: string;
   /** 操作员 ID */
-  operatorId: string;
+  operatorId: number;
   /** 操作员姓名 */
   operatorName: string;
   /** 本次入库数量 */
@@ -45,7 +45,7 @@ export interface Product {
   /** 操作员名称 */
   operatorName?: string;
   /** 操作员 ID */
-  operatorId?: string;
+  operatorId?: number;
   /** 入库历史记录列表 */
   history?: InventoryHistoryEntry[];
   /** 是否已删除（软删除标记） */
