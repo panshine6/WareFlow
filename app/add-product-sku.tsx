@@ -16,7 +16,8 @@ import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { batchCompareImages } from "@/lib/ai-vision";
-import { ProductStorage, SettingsStorage } from "@/lib/storage";
+import { ProductAPI } from "@/lib/api-client";
+import { SettingsStorage } from "@/lib/storage";
 
 /**
  * 添加产品流程 - 步骤2：输入 SKU
@@ -96,8 +97,8 @@ export default function AddProductSkuScreen() {
       setChecking(true);
 
       // 获取所有未删除的产品（已删除的不参与查重）
-      console.log("[SKU] Loading active products...");
-      const allProducts = await ProductStorage.getActive();
+      console.log("[SKU] Loading active products from cloud...");
+      const allProducts = await ProductAPI.getActive();
       console.log("[SKU] Found", allProducts.length, "active products");
 
       if (allProducts.length === 0) {
