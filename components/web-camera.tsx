@@ -36,9 +36,9 @@ export function WebCamera({
         const result = e.target?.result as string;
         // 移除 data:image/...;base64, 前缀
         const base64Data = result.split(",")[1];
-        // 创建临时 URL 用于预览
-        const uri = URL.createObjectURL(file);
-        onPhotoTaken(uri, base64Data);
+        // 使用 Data URL 代替 Blob URL，确保跨设备访问
+        const dataUrl = `data:${file.type};base64,${base64Data}`;
+        onPhotoTaken(dataUrl, base64Data);
       };
       reader.readAsDataURL(file);
     } catch (error) {

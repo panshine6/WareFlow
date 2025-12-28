@@ -1,5 +1,4 @@
 import { CameraView, useCameraPermissions } from "expo-camera";
-import * as FileSystem from "expo-file-system";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useState } from "react";
 import {
@@ -92,27 +91,18 @@ export default function AddProductOverviewScreen() {
 
       console.log("[Overview] Photo taken:", photo ? "success" : "failed");
 
-      if (photo) {
-        setOverviewImageUri(photo.uri);
+      if (photo && photo.base64) {
+        // 使用 Data URL 代替文件路径，确保跨设备访问
+        console.log("[Overview] Using base64 from camera");
+        const base64Data = photo.base64;
+        console.log("[Overview] Base64 length:", base64Data.length);
+
+        // 创建 Data URL
+        const dataUrl = `data:image/jpeg;base64,${base64Data}`;
+        setOverviewImageUri(dataUrl);
         setRecognizing(true);
 
         try {
-          let base64Data: string;
-
-          // 优先使用直接返回的 base64
-          if (photo.base64) {
-            console.log("[Overview] Using direct base64 from camera");
-            base64Data = photo.base64;
-          } else {
-            // 备用方案：从文件读取
-            console.log("[Overview] Reading base64 from file...");
-            base64Data = await FileSystem.readAsStringAsync(photo.uri, {
-              encoding: FileSystem.EncodingType.Base64,
-            });
-          }
-
-          console.log("[Overview] Base64 length:", base64Data.length);
-
           // 调用真实的 AI 识别
           console.log("[Overview] Calling AI recognition...");
           const count = await countProductsInImage(base64Data);

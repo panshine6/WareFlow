@@ -177,9 +177,10 @@ export default function AddProductScreen() {
         base64: true,
       });
 
-      if (photo) {
-        // 执行去重检查
-        await handlePhotoTaken(photo.uri, photo.base64 || "");
+      if (photo && photo.base64) {
+        // 使用 Data URL 代替文件路径，确保跨设备访问
+        const dataUrl = `data:image/jpeg;base64,${photo.base64}`;
+        await handlePhotoTaken(dataUrl, photo.base64);
       }
     } catch (error) {
       console.error("Failed to take photo:", error);
