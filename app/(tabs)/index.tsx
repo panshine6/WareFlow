@@ -1,5 +1,5 @@
-import { useRouter } from "expo-router";
-import { useEffect, useState } from "react";
+import { useRouter, useFocusEffect } from "expo-router";
+import { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
@@ -70,11 +70,16 @@ export default function HomeScreen() {
   };
 
   useEffect(() => {
-    loadProducts();
     loadCurrentUser();
-    // 进入页面时自动同步
-    autoSyncOnEnter();
   }, []);
+
+  // 页面获得焦点时重新加载数据
+  useFocusEffect(
+    useCallback(() => {
+      loadProducts();
+      autoSyncOnEnter();
+    }, [])
+  );
 
   // 进入页面时自动同步
   const autoSyncOnEnter = async () => {

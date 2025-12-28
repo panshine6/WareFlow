@@ -1,5 +1,5 @@
-import { useRouter } from "expo-router";
-import { useEffect, useState } from "react";
+import { useRouter, useFocusEffect } from "expo-router";
+import { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
@@ -59,16 +59,21 @@ export default function InventoryScreen() {
   };
 
   useEffect(() => {
-    loadProducts();
-    loadLastSyncTime();
-    // 进入页面时自动同步
-    autoSyncOnEnter();
     // 启动定时同步（30 秒）
     const interval = setInterval(() => {
       autoSyncInBackground();
     }, 30000);
     return () => clearInterval(interval);
   }, []);
+
+  // 页面获得焦点时重新加载数据
+  useFocusEffect(
+    useCallback(() => {
+      loadProducts();
+      loadLastSyncTime();
+      autoSyncOnEnter();
+    }, [])
+  );
 
   // 加载最后同步时间
   const loadLastSyncTime = async () => {
