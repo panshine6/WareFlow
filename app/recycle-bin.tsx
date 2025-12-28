@@ -63,46 +63,37 @@ export default function RecycleBinScreen() {
 
   // 恢复产品
   const handleRestore = (product: Product) => {
-    Alert.alert("确认恢复", `确定要恢复产品 ${product.sku} 吗？`, [
-      { text: "取消", style: "cancel" },
-      {
-        text: "恢复",
-        onPress: async () => {
-          try {
-            await ProductAPI.restore(product.id);
-            Alert.alert("成功", "产品已恢复");
-            await loadProducts();
-          } catch (error) {
-            console.error("Failed to restore product:", error);
-            Alert.alert("错误", "恢复产品失败");
-          }
-        },
-      },
-    ]);
+    Alert.confirm(
+      "确认恢复",
+      `确定要恢复产品 ${product.sku} 吗？`,
+      async () => {
+        try {
+          await ProductAPI.restore(product.id);
+          Alert.alert("成功", "产品已恢复");
+          await loadProducts();
+        } catch (error) {
+          console.error("Failed to restore product:", error);
+          Alert.alert("错误", "恢复产品失败");
+        }
+      }
+    );
   };
 
   // 永久删除产品
   const handlePermanentDelete = (product: Product) => {
-    Alert.alert(
+    Alert.confirm(
       "确认永久删除",
       `确定要永久删除产品 ${product.sku} 吗？此操作无法撤销！`,
-      [
-        { text: "取消", style: "cancel" },
-        {
-          text: "永久删除",
-          style: "destructive",
-          onPress: async () => {
-            try {
-              await ProductAPI.permanentDelete(product.id);
-              Alert.alert("成功", "产品已永久删除");
-              await loadProducts();
-            } catch (error) {
-              console.error("Failed to permanently delete product:", error);
-              Alert.alert("错误", "永久删除失败");
-            }
-          },
-        },
-      ],
+      async () => {
+        try {
+          await ProductAPI.permanentDelete(product.id);
+          Alert.alert("成功", "产品已永久删除");
+          await loadProducts();
+        } catch (error) {
+          console.error("Failed to permanently delete product:", error);
+          Alert.alert("错误", "永久删除失败");
+        }
+      }
     );
   };
 

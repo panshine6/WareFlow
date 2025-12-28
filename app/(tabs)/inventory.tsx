@@ -176,36 +176,30 @@ export default function InventoryScreen() {
 
   // 手动从云端下载
   const handleDownload = async () => {
-    Alert.alert(
+    Alert.confirm(
       "确认下载",
       "下载云端数据将覆盖本地数据，确定继续吗？",
-      [
-        { text: "取消", style: "cancel" },
-        {
-          text: "确定",
-          onPress: async () => {
-            setSyncing(true);
-            try {
-              await AutoSync.downloadFromCloud(
-                downloadQuery,
-                async () => {
-                  await loadProducts();
-                  await loadLastSyncTime();
-                  Alert.alert("成功", "已从云端下载数据");
-                },
-                (error) => {
-                  Alert.alert("下载失败", "请检查网络连接");
-                }
-              );
-            } catch (error: any) {
-              console.error("[Sync] Download failed:", error);
+      async () => {
+        setSyncing(true);
+        try {
+          await AutoSync.downloadFromCloud(
+            downloadQuery,
+            async () => {
+              await loadProducts();
+              await loadLastSyncTime();
+              Alert.alert("成功", "已从云端下载数据");
+            },
+            (error) => {
               Alert.alert("下载失败", "请检查网络连接");
-            } finally {
-              setSyncing(false);
             }
-          },
-        },
-      ]
+          );
+        } catch (error: any) {
+          console.error("[Sync] Download failed:", error);
+          Alert.alert("下载失败", "请检查网络连接");
+        } finally {
+          setSyncing(false);
+        }
+      }
     );
   };
 

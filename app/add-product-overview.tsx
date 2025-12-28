@@ -125,7 +125,7 @@ export default function AddProductOverviewScreen() {
           const errorMessage = error instanceof Error ? error.message : "未知错误";
           console.error("[Overview] Error details:", errorMessage);
 
-          Alert.alert(
+          Alert.show(
             "识别失败",
             `${errorMessage}\n\n请选择手动输入或重拍`,
             [

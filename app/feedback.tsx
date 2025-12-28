@@ -57,12 +57,17 @@ export default function FeedbackScreen() {
       // 发送反馈邮件
       await sendFeedbackEmail(feedback);
 
-      Alert.alert("感谢反馈！", "您的反馈已成功提交", [
-        {
-          text: "确定",
-          onPress: () => router.back(),
-        },
-      ]);
+      if (Platform.OS === "web") {
+        window.alert("感谢反馈！\n\n您的反馈已成功提交");
+        router.back();
+      } else {
+        Alert.alert("感谢反馈！", "您的反馈已成功提交", [
+          {
+            text: "确定",
+            onPress: () => router.back(),
+          },
+        ]);
+      }
     } catch (error) {
       console.error("Submit feedback error:", error);
       
@@ -70,16 +75,12 @@ export default function FeedbackScreen() {
       const errorMessage = error instanceof Error ? error.message : "未知错误";
       
       if (errorMessage.includes("不支持邮件功能")) {
-        Alert.alert(
+        Alert.confirm(
           "提交失败",
           "您的设备不支持邮件功能。是否复制反馈内容到剪贴板？",
-          [
-            { text: "取消", style: "cancel" },
-            {
-              text: "复制",
-              onPress: async () => {
-                const deviceInfo = await getDeviceInfo();
-                const feedbackText = `
+          async () => {
+            const deviceInfo = await getDeviceInfo();
+            const feedbackText = `
 反馈类型: ${feedbackTypes.find((t) => t.value === type)?.label}
 问题描述: ${description}
 
@@ -88,14 +89,12 @@ export default function FeedbackScreen() {
 - 系统版本: ${deviceInfo.osVersion}
 - 应用版本: ${deviceInfo.appVersion}
 - 设备型号: ${deviceInfo.deviceModel}
-                `.trim();
+            `.trim();
 
-                await Clipboard.setStringAsync(feedbackText);
-                Alert.alert("已复制", "反馈内容已复制到剪贴板，请通过其他方式发送给开发者");
-                router.back();
-              },
-            },
-          ]
+            await Clipboard.setStringAsync(feedbackText);
+            Alert.alert("已复制", "反馈内容已复制到剪贴板，请通过其他方式发送给开发者");
+            router.back();
+          }
         );
       } else {
         Alert.alert("提交失败", "请稍后重试或联系开发者");

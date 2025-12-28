@@ -117,37 +117,34 @@ export default function ProductDetailScreen() {
 
   // 删除产品（移至回收站）
   const handleDelete = () => {
-    Alert.alert("确认删除", "确定要删除这个产品吗？删除后可以在回收站中恢复。", [
-      { text: "取消", style: "cancel" },
-      {
-        text: "删除",
-        style: "destructive",
-        onPress: async () => {
-          try {
-            if (product) {
-              await ProductAPI.softDelete(product.id);
+    Alert.confirm(
+      "确认删除",
+      "确定要删除这个产品吗？删除后可以在回收站中恢复。",
+      async () => {
+        try {
+          if (product) {
+            await ProductAPI.softDelete(product.id);
 
-              // 自动上传到云端（静默）
-              try {
-                await AutoSync.uploadToCloud(
-                  uploadMutation,
-                  () => console.log("删除后自动上传成功"),
-                  (error) => console.log("自动上传失败（静默）", error)
-                );
-              } catch (error) {
-                console.log("自动上传失败", error);
-              }
-
-              Alert.alert("成功", "产品已移至回收站");
-              router.replace("/(tabs)");
+            // 自动上传到云端（静默）
+            try {
+              await AutoSync.uploadToCloud(
+                uploadMutation,
+                () => console.log("删除后自动上传成功"),
+                (error) => console.log("自动上传失败（静默）", error)
+              );
+            } catch (error) {
+              console.log("自动上传失败", error);
             }
-          } catch (error) {
-            console.error("Failed to delete product:", error);
-            Alert.alert("错误", "删除产品失败");
+
+            Alert.alert("成功", "产品已移至回收站");
+            router.replace("/(tabs)");
           }
-        },
-      },
-    ]);
+        } catch (error) {
+          console.error("Failed to delete product:", error);
+          Alert.alert("错误", "删除产品失败");
+        }
+      }
+    );
   };
 
   if (loading) {
