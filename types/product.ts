@@ -20,7 +20,14 @@ export interface InventoryHistoryEntry {
   overviewImageUri: string;
   /** 备注 */
   notes?: string;
+  /** 产品 ID（用于 SQLite） */
+  productId?: string;
 }
+
+/**
+ * InventoryHistory 类型别名（与 InventoryHistoryEntry 相同）
+ */
+export type InventoryHistory = InventoryHistoryEntry;
 
 /**
  * 产品记录数据类型

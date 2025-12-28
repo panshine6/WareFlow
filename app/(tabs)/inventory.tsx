@@ -20,6 +20,7 @@ import { exportToDianxiaomiFormat } from "@/lib/excel-export";
 import { ProductAPI } from "@/lib/api-client";
 import { trpc } from "@/lib/trpc";
 import { AutoSync } from "@/lib/auto-sync";
+import { ProductRepository } from "@/lib/product-repository";
 import type { Product } from "@/types/product";
 
 /**
@@ -45,24 +46,27 @@ export default function InventoryScreen() {
     enabled: false, // 手动触发
   });
 
-  // 加载产品列表（只显示未删除的）
+  // 加载产品列表（从 SQLite 读取）
   const loadProducts = async () => {
     try {
-      const data = await ProductAPI.getActive();
+      console.log('[InventoryScreen] Loading products from SQLite...');
+      const productRepo = new ProductRepository();
+      const data = await productRepo.getActive();
+      console.log('[InventoryScreen] Loaded', data.length, 'products');
       setProducts(data);
       setFilteredProducts(data);
     } catch (error) {
-      console.error("Failed to load products:", error);
+      console.error('[InventoryScreen] Failed to load products:', error);
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    // 启动定时同步（30 秒）
+    // 启动定时同步（5 分钟）
     const interval = setInterval(() => {
       autoSyncInBackground();
-    }, 30000);
+    }, 300000); // 5 分钟
     return () => clearInterval(interval);
   }, []);
 

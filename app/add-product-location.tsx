@@ -16,7 +16,10 @@ import { ThemedView } from "@/components/themed-view";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { UserStorage } from "@/lib/user-storage";
 import { ProductAPI } from "@/lib/api-client";
-import { SettingsStorage, ProductStorage } from "@/lib/storage";
+import { SettingsStorage } from "@/lib/storage";
+import { ProductStorage } from "@/lib/storage";
+import { ProductRepository } from "@/lib/product-repository";
+import { HistoryRepository } from "@/lib/history-repository";
 import { AutoSync } from "@/lib/auto-sync";
 import { trpc } from "@/lib/trpc";
 import type { Product } from "@/types/product";
@@ -85,30 +88,47 @@ export default function AddProductLocationScreen() {
       const operatorName = currentUser?.name || "未知用户";
       const operatorId = parseInt(currentUser?.id?.toString() || "1");
 
+      // 初始化 Repository
+      const productRepo = new ProductRepository();
+      const historyRepo = new HistoryRepository();
+
       // 判断是新款还是合并
       if (params.mergeToProductId) {
         // 合并到现有产品
         console.log('[AddProductLocation] Merging to existing product:', params.mergeToProductId);
-        await ProductAPI.merge(params.mergeToProductId, {
+        
+        // 1. 合并到 SQLite
+        await productRepo.merge(params.mergeToProductId, quantity);
+        
+        // 2. 添加历史记录到 SQLite
+        const historyId = Date.now().toString();
+        await historyRepo.create({
+          id: historyId,
+          productId: params.mergeToProductId,
+          timestamp: new Date().toISOString(),
+          operatorId,
+          operatorName,
           quantity,
           location: location.trim(),
           detailImageUri: params.detailImageUri,
           overviewImageUri: params.overviewImageUri,
+        });
+        
+        // 3. 删除全景图（释放空间）
+        console.log('[AddProductLocation] Deleting overview images to save space...');
+        await historyRepo.deleteOverviewImage(historyId);
+        
+        // 4. 同步到云端（后台）
+        await ProductAPI.merge(params.mergeToProductId, {
+          quantity,
+          location: location.trim(),
+          detailImageUri: params.detailImageUri,
+          overviewImageUri: params.overviewImageUri, // 临时上传，用于 AI 计数
           operatorId,
           operatorName,
         });
-        console.log('[AddProductLocation] Merge completed');
         
-        // 更新本地存储
-        console.log('[AddProductLocation] Updating local storage...');
-        const existingProduct = await ProductStorage.getById(params.mergeToProductId);
-        if (existingProduct) {
-          await ProductStorage.update(params.mergeToProductId, {
-            quantity: existingProduct.quantity + quantity,
-            updatedAt: new Date().toISOString(),
-          });
-          console.log('[AddProductLocation] Local storage updated');
-        }
+        console.log('[AddProductLocation] Merge completed');
       } else {
         // 新产品，带历史记录
         const productId = Date.now().toString();
@@ -123,26 +143,16 @@ export default function AddProductLocationScreen() {
           operatorId,
         };
 
-        // 创建产品
-        console.log('[AddProductLocation] Creating product:', JSON.stringify(product, null, 2));
-        await ProductAPI.create(product);
-        console.log('[AddProductLocation] Product created successfully');
+        // 1. 保存到 SQLite（包含全景图）
+        console.log('[AddProductLocation] Saving to SQLite...');
+        await productRepo.create(product);
         
-        // 保存到本地存储（确保同步时不会被覆盖）
-        console.log('[AddProductLocation] Saving to local storage...');
-        await ProductStorage.add({
-          ...product,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-          isDeleted: false,
-        });
-        console.log('[AddProductLocation] Saved to local storage');
-        
-        // 添加历史记录
-        console.log('[AddProductLocation] Adding history...');
-        await ProductAPI.addHistory({
-          id: Date.now().toString(),
+        // 2. 添加历史记录到 SQLite
+        const historyId = Date.now().toString() + '_history';
+        await historyRepo.create({
+          id: historyId,
           productId,
+          timestamp: new Date().toISOString(),
           operatorId,
           operatorName,
           quantity,
@@ -150,6 +160,27 @@ export default function AddProductLocationScreen() {
           detailImageUri: params.detailImageUri,
           overviewImageUri: params.overviewImageUri,
         });
+        
+        // 3. 删除全景图（释放空间）
+        console.log('[AddProductLocation] Deleting overview images to save space...');
+        await productRepo.deleteOverviewImage(productId);
+        await historyRepo.deleteOverviewImage(historyId);
+        console.log('[AddProductLocation] Overview images deleted');
+        
+        // 4. 同步到云端（后台，只同步细节图）
+        console.log('[AddProductLocation] Syncing to cloud (detail image only)...');
+        await ProductAPI.create(product);
+        await ProductAPI.addHistory({
+          id: historyId,
+          productId,
+          operatorId,
+          operatorName,
+          quantity,
+          location: location.trim(),
+          detailImageUri: params.detailImageUri,
+          overviewImageUri: params.overviewImageUri, // 临时上传，用于 AI 计数
+        });
+        console.log('[AddProductLocation] Product created successfully');
       }
 
       // 更新默认位置

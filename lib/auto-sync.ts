@@ -1,8 +1,10 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { ProductStorage } from "./storage";
+import { ProductRepository } from "./product-repository";
+import { HistoryRepository } from "./history-repository";
 
 const LAST_SYNC_TIME_KEY = "lastSyncTime";
-const SYNC_INTERVAL = 30000; // 30 秒
+const SYNC_INTERVAL = 300000; // 5 分钟（优化后）
 
 /**
  * 自动同步工具
@@ -88,7 +90,7 @@ export const AutoSync = {
   },
 
   /**
-   * 上传本地数据到云端
+   * 上传本地数据到云端（只同步细节图）
    */
   async uploadToCloud(
     uploadMutation: any,
@@ -96,25 +98,31 @@ export const AutoSync = {
     onError?: (error: any) => void
   ): Promise<void> {
     try {
-      // 获取所有产品（包括已删除的）
-      const products = await ProductStorage.getAll();
+      console.log('[AutoSync] Starting upload to cloud...');
+      
+      // 从 SQLite 获取产品（不包含全景图）
+      const productRepo = new ProductRepository();
+      const products = await productRepo.getForSync();
+      
+      console.log('[AutoSync] Uploading', products.length, 'products (detail images only)');
 
       // 调用上传 API
       await uploadMutation.mutateAsync({ products });
 
       // 更新同步时间
       await this.setLastSyncTime();
-
+      
+      console.log('[AutoSync] Upload completed successfully');
       onSuccess?.();
     } catch (error) {
-      console.error("Upload failed:", error);
+      console.error('[AutoSync] Upload failed:', error);
       onError?.(error);
       throw error;
     }
   },
 
   /**
-   * 从云端下载数据
+   * 从云端下载数据（不包含全景图）
    */
   async downloadFromCloud(
     downloadQuery: any,
@@ -122,20 +130,26 @@ export const AutoSync = {
     onError?: (error: any) => void
   ): Promise<void> {
     try {
+      console.log('[AutoSync] Starting download from cloud...');
+      
       // 触发下载
       const result = await downloadQuery.refetch();
 
       if (result.data?.products) {
-        // 保存到本地
-        await ProductStorage.replaceAll(result.data.products);
+        console.log('[AutoSync] Downloaded', result.data.products.length, 'products');
+        
+        // 保存到 SQLite（批量 upsert）
+        const productRepo = new ProductRepository();
+        await productRepo.batchUpsert(result.data.products);
 
         // 更新同步时间
         await this.setLastSyncTime();
-
+        
+        console.log('[AutoSync] Download completed successfully');
         onSuccess?.();
       }
     } catch (error) {
-      console.error("Download failed:", error);
+      console.error('[AutoSync] Download failed:', error);
       onError?.(error);
       throw error;
     }
