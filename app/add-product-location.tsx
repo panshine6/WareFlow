@@ -118,15 +118,21 @@ export default function AddProductLocationScreen() {
         console.log('[AddProductLocation] Deleting overview images to save space...');
         await historyRepo.deleteOverviewImage(historyId);
         
-        // 4. 同步到云端（后台）
-        await ProductAPI.merge(params.mergeToProductId, {
-          quantity,
-          location: location.trim(),
-          detailImageUri: params.detailImageUri,
-          overviewImageUri: params.overviewImageUri, // 临时上传，用于 AI 计数
-          operatorId,
-          operatorName,
-        });
+        // 4. 同步到云端（后台，静默失败）
+        try {
+          await ProductAPI.merge(params.mergeToProductId, {
+            quantity,
+            location: location.trim(),
+            detailImageUri: params.detailImageUri,
+            overviewImageUri: params.overviewImageUri, // 临时上传，用于 AI 计数
+            operatorId,
+            operatorName,
+          });
+          console.log('[AddProductLocation] Cloud sync completed');
+        } catch (error) {
+          console.log('[AddProductLocation] Cloud sync failed (silent):', error);
+          // 静默失败，不影响用户体验，数据已保存到本地
+        }
         
         console.log('[AddProductLocation] Merge completed');
       } else {
@@ -167,19 +173,25 @@ export default function AddProductLocationScreen() {
         await historyRepo.deleteOverviewImage(historyId);
         console.log('[AddProductLocation] Overview images deleted');
         
-        // 4. 同步到云端（后台，只同步细节图）
-        console.log('[AddProductLocation] Syncing to cloud (detail image only)...');
-        await ProductAPI.create(product);
-        await ProductAPI.addHistory({
-          id: historyId,
-          productId,
-          operatorId,
-          operatorName,
-          quantity,
-          location: location.trim(),
-          detailImageUri: params.detailImageUri,
-          overviewImageUri: params.overviewImageUri, // 临时上传，用于 AI 计数
-        });
+        // 4. 同步到云端（后台，静默失败）
+        try {
+          console.log('[AddProductLocation] Syncing to cloud (detail image only)...');
+          await ProductAPI.create(product);
+          await ProductAPI.addHistory({
+            id: historyId,
+            productId,
+            operatorId,
+            operatorName,
+            quantity,
+            location: location.trim(),
+            detailImageUri: params.detailImageUri,
+            overviewImageUri: params.overviewImageUri, // 临时上传，用于 AI 计数
+          });
+          console.log('[AddProductLocation] Cloud sync completed');
+        } catch (error) {
+          console.log('[AddProductLocation] Cloud sync failed (silent):', error);
+          // 静默失败，不影响用户体验，数据已保存到本地
+        }
         console.log('[AddProductLocation] Product created successfully');
       }
 
