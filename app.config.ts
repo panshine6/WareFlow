@@ -25,7 +25,7 @@ const env = {
 const config: ExpoConfig = {
   name: env.appName,
   slug: env.appSlug,
-  version: "1.0.3",
+  version: "1.0.4",
   owner: "panshine6",
   extra: {
     eas: {
@@ -46,6 +46,7 @@ const config: ExpoConfig = {
   ios: {
     supportsTablet: true,
     bundleIdentifier: env.iosBundleId,
+    usesIcloudStorage: true,
     infoPlist: {
       UIBackgroundModes: ["audio"],
     },
