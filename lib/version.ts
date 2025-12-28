@@ -2,5 +2,5 @@
  * 应用版本信息
  * 每次修改后更新版本号
  */
-export const APP_VERSION = "1.0.0.8";
+export const APP_VERSION = "1.0.0.9";
 export const APP_AUTHOR = "潘章杰（By Manus）";

@@ -1,4 +1,5 @@
 import { CameraView, useCameraPermissions } from "expo-camera";
+import * as FileSystem from "expo-file-system";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useState } from "react";
 import {
@@ -19,7 +20,6 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
 import { countProductsInImage } from "@/lib/ai-vision";
-import { File } from "expo-file-system";
 
 /**
  * 添加产品流程 - 步骤3：拍摄全景照片并识别数量
@@ -43,38 +43,52 @@ export default function AddProductOverviewScreen() {
 
   // 拍照并识别
   const handleTakePhoto = async () => {
-    if (!camera) return;
+    if (!camera) {
+      console.log("[Overview] Camera not ready");
+      Alert.alert("提示", "相机未就绪，请稍后重试");
+      return;
+    }
+
+    console.log("[Overview] Taking photo...");
 
     try {
       const photo = await camera.takePictureAsync({
         quality: 0.8,
-        base64: false,
+        base64: true, // 直接获取 base64，避免文件读取问题
       });
+
+      console.log("[Overview] Photo taken:", photo ? "success" : "failed");
 
       if (photo) {
         setOverviewImageUri(photo.uri);
         setRecognizing(true);
 
         try {
-          // 读取图片并转换为 Base64
-          const file = new File(photo.uri);
-          const arrayBuffer = await file.arrayBuffer();
-          const uint8Array = new Uint8Array(arrayBuffer);
-          
-          // 转换为 Base64
-          let binary = '';
-          for (let i = 0; i < uint8Array.length; i++) {
-            binary += String.fromCharCode(uint8Array[i]);
+          let base64Data: string;
+
+          // 优先使用直接返回的 base64
+          if (photo.base64) {
+            console.log("[Overview] Using direct base64 from camera");
+            base64Data = photo.base64;
+          } else {
+            // 备用方案：从文件读取
+            console.log("[Overview] Reading base64 from file...");
+            base64Data = await FileSystem.readAsStringAsync(photo.uri, {
+              encoding: FileSystem.EncodingType.Base64,
+            });
           }
-          const base64 = btoa(binary);
+
+          console.log("[Overview] Base64 length:", base64Data.length);
 
           // 调用真实的 AI 识别
-          const count = await countProductsInImage(base64);
+          console.log("[Overview] Calling AI recognition...");
+          const count = await countProductsInImage(base64Data);
+          console.log("[Overview] AI recognized count:", count);
 
           setQuantity(count);
           setShowQuantityModal(true);
         } catch (error) {
-          console.error("AI recognition error:", error);
+          console.error("[Overview] AI recognition error:", error);
           Alert.alert(
             "识别失败",
             "无法识别产品数量，请手动输入",
@@ -97,8 +111,9 @@ export default function AddProductOverviewScreen() {
         }
       }
     } catch (error) {
-      console.error("Failed to take photo:", error);
+      console.error("[Overview] Failed to take photo:", error);
       Alert.alert("拍照失败", "请重试");
+      setRecognizing(false);
     }
   };
 
