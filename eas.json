@@ -10,6 +10,12 @@
     "preview": {
       "distribution": "internal"
     },
+    "adhoc": {
+      "distribution": "internal",
+      "ios": {
+        "simulator": false
+      }
+    },
     "production": {}
   },
   "submit": {
