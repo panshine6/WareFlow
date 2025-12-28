@@ -45,8 +45,8 @@ export const Alert = {
   confirm(
     title: string,
     message: string,
-    onConfirm: () => void,
-    onCancel?: () => void
+    onConfirm: () => void | Promise<void>,
+    onCancel?: () => void | Promise<void>
   ): void {
     if (Platform.OS === "web") {
       // Web 平台：使用 window.confirm
