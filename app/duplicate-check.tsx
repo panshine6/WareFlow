@@ -58,30 +58,26 @@ export default function DuplicateCheckScreen() {
   const handleMergeProduct = (duplicate: DuplicateInfo) => {
     console.log("[DuplicateCheck] User chose to merge to product:", duplicate.productId);
     
-    Alert.alert(
+    Alert.confirm(
       "确认合并",
       `确定要将新入库的产品合并到 SKU: ${duplicate.sku} 吗？`,
-      [
-        {
-          text: "取消",
-          style: "cancel",
-        },
-        {
-          text: "确定",
-          onPress: () => {
-            // 跳转到全景拍照页面，传递现有产品 ID
-            router.replace({
-              pathname: "/add-product-overview" as any,
-              params: {
-                detailImageUri: params.detailImageUri,
-                mergeToProductId: duplicate.productId,
-                sku: duplicate.sku,
-                similarityScore: duplicate.similarityScore.toString(),
-              },
-            });
+      () => {
+        // 用户点击"确定"，跳转到全景拍照页面
+        console.log("[DuplicateCheck] User confirmed merge");
+        router.replace({
+          pathname: "/add-product-overview" as any,
+          params: {
+            detailImageUri: params.detailImageUri,
+            mergeToProductId: duplicate.productId,
+            sku: duplicate.sku,
+            similarityScore: duplicate.similarityScore.toString(),
           },
-        },
-      ],
+        });
+      },
+      () => {
+        // 用户点击"取消"
+        console.log("[DuplicateCheck] User cancelled merge");
+      }
     );
   };
 
