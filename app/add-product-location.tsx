@@ -69,7 +69,11 @@ export default function AddProductLocationScreen() {
   // 完成并保存
   const handleComplete = async () => {
     if (!location.trim()) {
-      Alert.alert("提示", "请输入存储位置");
+      if (Platform.OS === "web") {
+        window.alert("请输入存储位置");
+      } else {
+        Alert.alert("提示", "请输入存储位置");
+      }
       return;
     }
 
@@ -128,18 +132,27 @@ export default function AddProductLocationScreen() {
       }
 
       // 返回主页
-      Alert.alert("成功", "产品入库成功", [
-        {
-          text: "确定",
-          onPress: () => {
-            // 返回到主屏幕
-            router.replace("/(tabs)");
+      if (Platform.OS === "web") {
+        window.alert("产品入库成功！");
+        router.replace("/(tabs)");
+      } else {
+        Alert.alert("成功", "产品入库成功", [
+          {
+            text: "确定",
+            onPress: () => {
+              // 返回到主屏幕
+              router.replace("/(tabs)");
+            },
           },
-        },
-      ]);
+        ]);
+      }
     } catch (error) {
       console.error("Failed to save product:", error);
-      Alert.alert("错误", "保存失败，请重试");
+      if (Platform.OS === "web") {
+        window.alert("保存失败，请重试");
+      } else {
+        Alert.alert("错误", "保存失败，请重试");
+      }
     } finally {
       setSaving(false);
     }
