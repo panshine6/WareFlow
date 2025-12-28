@@ -35,6 +35,9 @@ export default function AddProductSkuScreen() {
   const [loading, setLoading] = useState(true);
   const [checking, setChecking] = useState(false);
 
+  // 检测是否在浏览器环境
+  const isWeb = typeof window !== 'undefined' && typeof window.alert === 'function';
+
   // 加载上次输入的 SKU
   useEffect(() => {
     const loadLastSku = async () => {
@@ -79,10 +82,14 @@ export default function AddProductSkuScreen() {
 
   // 确认 SKU
   const handleConfirm = async () => {
-    console.log("[SKU] handleConfirm called, SKU:", sku);
+    console.log("[SKU] ========== handleConfirm START ==========");
+    console.log("[SKU] Platform.OS:", Platform.OS);
+    console.log("[SKU] isWeb:", isWeb);
+    console.log("[SKU] SKU input:", sku);
     
     if (!sku.trim()) {
-      if (Platform.OS === "web") {
+      console.log("[SKU] SKU is empty, showing alert");
+      if (isWeb) {
         window.alert("请输入 SKU");
       } else {
         Alert.alert("提示", "请输入 SKU");
@@ -94,6 +101,7 @@ export default function AddProductSkuScreen() {
       // 保存 SKU 到设置
       console.log("[SKU] Saving SKU to settings...");
       await SettingsStorage.update({ lastSku: sku.trim() });
+      console.log("[SKU] SKU saved successfully");
 
       // 开始查重流程
       console.log("[SKU] Starting duplicate check...");
@@ -107,6 +115,7 @@ export default function AddProductSkuScreen() {
       if (allProducts.length === 0) {
         // 没有现有产品，直接继续
         console.log("[SKU] No existing products, skipping duplicate check");
+        console.log("[SKU] Navigating to add-product-overview...");
         setChecking(false);
         router.push({
           pathname: "/add-product-overview" as any,
@@ -116,6 +125,7 @@ export default function AddProductSkuScreen() {
             isNewProduct: "true",
           },
         });
+        console.log("[SKU] Navigation completed");
         return;
       }
 
@@ -127,6 +137,7 @@ export default function AddProductSkuScreen() {
       } else {
         console.log("[SKU] Converting new image to base64...");
         newImageBase64 = await imageToBase64(params.detailImageUri);
+        console.log("[SKU] New image converted successfully");
       }
 
       // 将现有产品图片转换为 Base64
@@ -140,6 +151,7 @@ export default function AddProductSkuScreen() {
           };
         }),
       );
+      console.log("[SKU] All existing images converted");
 
       // 调用 AI 批量对比（相似度阈值 90%）
       console.log("[SKU] Calling AI batch compare...");
@@ -163,6 +175,7 @@ export default function AddProductSkuScreen() {
             isNewProduct: "true",
           },
         });
+        console.log("[SKU] Navigation completed");
       } else {
         // 发现疑似重复，导航到查重结果页面
         console.log("[SKU] Duplicates found, navigating to duplicate check page");
@@ -180,19 +193,27 @@ export default function AddProductSkuScreen() {
             duplicates: JSON.stringify(duplicates),
           },
         });
+        console.log("[SKU] Navigation completed");
       }
     } catch (error) {
       setChecking(false);
-      console.error("[SKU] Failed to check duplicates:", error);
+      console.error("[SKU] ========== ERROR CAUGHT ==========");
+      console.error("[SKU] Error type:", error?.constructor?.name);
+      console.error("[SKU] Error details:", error);
       
       const errorMessage = error instanceof Error ? error.message : "未知错误";
-      console.error("[SKU] Error details:", errorMessage);
+      console.error("[SKU] Error message:", errorMessage);
+      console.error("[SKU] Stack trace:", error instanceof Error ? error.stack : "N/A");
       
-      if (Platform.OS === "web") {
+      // 使用统一的环境检测
+      if (isWeb) {
+        console.log("[SKU] Showing web confirm dialog");
         const continueAnyway = window.confirm(
           `查重失败：${errorMessage}\n\n是否继续入库？`
         );
+        console.log("[SKU] User choice:", continueAnyway);
         if (continueAnyway) {
+          console.log("[SKU] User chose to continue, navigating...");
           router.push({
             pathname: "/add-product-overview" as any,
             params: {
@@ -203,6 +224,7 @@ export default function AddProductSkuScreen() {
           });
         }
       } else {
+        console.log("[SKU] Showing native alert dialog");
         Alert.alert(
           "查重失败",
           `${errorMessage}\n\n是否继续入库？`,
@@ -210,10 +232,12 @@ export default function AddProductSkuScreen() {
             {
               text: "取消",
               style: "cancel",
+              onPress: () => console.log("[SKU] User cancelled"),
             },
             {
               text: "继续",
               onPress: () => {
+                console.log("[SKU] User chose to continue, navigating...");
                 router.push({
                   pathname: "/add-product-overview" as any,
                   params: {
@@ -228,6 +252,7 @@ export default function AddProductSkuScreen() {
         );
       }
     }
+    console.log("[SKU] ========== handleConfirm END ==========");
   };
 
   return (
