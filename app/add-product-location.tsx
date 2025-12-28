@@ -16,7 +16,7 @@ import { ThemedView } from "@/components/themed-view";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { UserStorage } from "@/lib/user-storage";
 import { ProductAPI } from "@/lib/api-client";
-import { SettingsStorage } from "@/lib/storage";
+import { SettingsStorage, ProductStorage } from "@/lib/storage";
 import { AutoSync } from "@/lib/auto-sync";
 import { trpc } from "@/lib/trpc";
 import type { Product } from "@/types/product";
@@ -88,6 +88,7 @@ export default function AddProductLocationScreen() {
       // 判断是新款还是合并
       if (params.mergeToProductId) {
         // 合并到现有产品
+        console.log('[AddProductLocation] Merging to existing product:', params.mergeToProductId);
         await ProductAPI.merge(params.mergeToProductId, {
           quantity,
           location: location.trim(),
@@ -96,6 +97,18 @@ export default function AddProductLocationScreen() {
           operatorId,
           operatorName,
         });
+        console.log('[AddProductLocation] Merge completed');
+        
+        // 更新本地存储
+        console.log('[AddProductLocation] Updating local storage...');
+        const existingProduct = await ProductStorage.getById(params.mergeToProductId);
+        if (existingProduct) {
+          await ProductStorage.update(params.mergeToProductId, {
+            quantity: existingProduct.quantity + quantity,
+            updatedAt: new Date().toISOString(),
+          });
+          console.log('[AddProductLocation] Local storage updated');
+        }
       } else {
         // 新产品，带历史记录
         const productId = Date.now().toString();
@@ -111,9 +124,22 @@ export default function AddProductLocationScreen() {
         };
 
         // 创建产品
+        console.log('[AddProductLocation] Creating product:', JSON.stringify(product, null, 2));
         await ProductAPI.create(product);
+        console.log('[AddProductLocation] Product created successfully');
+        
+        // 保存到本地存储（确保同步时不会被覆盖）
+        console.log('[AddProductLocation] Saving to local storage...');
+        await ProductStorage.add({
+          ...product,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          isDeleted: false,
+        });
+        console.log('[AddProductLocation] Saved to local storage');
         
         // 添加历史记录
+        console.log('[AddProductLocation] Adding history...');
         await ProductAPI.addHistory({
           id: Date.now().toString(),
           productId,
@@ -161,11 +187,14 @@ export default function AddProductLocationScreen() {
         ]);
       }
     } catch (error) {
-      console.error("Failed to save product:", error);
+      console.error("[AddProductLocation] Failed to save product:", error);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      console.error("[AddProductLocation] Error details:", errorMessage);
+      
       if (Platform.OS === "web") {
-        window.alert("保存失败，请重试");
+        window.alert(`保存失败：${errorMessage}`);
       } else {
-        Alert.alert("错误", "保存失败，请重试");
+        Alert.alert("错误", `保存失败：${errorMessage}`);
       }
     } finally {
       setSaving(false);
