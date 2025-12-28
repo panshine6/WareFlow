@@ -54,9 +54,22 @@ export const Alert = {
       const result = window.confirm(fullMessage);
       
       if (result) {
-        onConfirm();
+        // 处理异步回调
+        const confirmResult = onConfirm();
+        if (confirmResult instanceof Promise) {
+          confirmResult.catch((error) => {
+            console.error("[Alert] Confirm callback error:", error);
+            window.alert(`操作失败：${error.message || '未知错误'}`);
+          });
+        }
       } else if (onCancel) {
-        onCancel();
+        // 处理异步回调
+        const cancelResult = onCancel();
+        if (cancelResult instanceof Promise) {
+          cancelResult.catch((error) => {
+            console.error("[Alert] Cancel callback error:", error);
+          });
+        }
       }
     } else {
       // 原生平台：使用 React Native Alert
