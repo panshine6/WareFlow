@@ -4,6 +4,7 @@ import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, protectedProcedure, router } from "./_core/trpc";
 import * as db from "./db";
+import * as aiVision from "./ai-vision";
 
 export const appRouter = router({
   // if you need to use socket.io, read and register route in server/_core/index.ts, all api should start with '/api/' so that the gateway can route correctly
@@ -78,6 +79,52 @@ export const appRouter = router({
           cloudCount,
           lastSyncTime,
         };
+      }),
+  }),
+
+  // AI 视觉识别 API
+  ai: router({
+    // 识别图片中的饰品数量
+    countProducts: publicProcedure
+      .input(z.object({
+        imageBase64: z.string(),
+      }))
+      .mutation(async ({ input }) => {
+        const count = await aiVision.countProductsInImage(input.imageBase64);
+        return { count };
+      }),
+
+    // 对比两张图片的相似度
+    compareSimilarity: publicProcedure
+      .input(z.object({
+        imageBase64_1: z.string(),
+        imageBase64_2: z.string(),
+      }))
+      .mutation(async ({ input }) => {
+        const result = await aiVision.compareImageSimilarity(
+          input.imageBase64_1,
+          input.imageBase64_2
+        );
+        return result;
+      }),
+
+    // 批量对比图片相似度（查重）
+    batchCompare: publicProcedure
+      .input(z.object({
+        newImageBase64: z.string(),
+        existingImages: z.array(z.object({
+          id: z.string(),
+          base64: z.string(),
+        })),
+        threshold: z.number().optional().default(90),
+      }))
+      .mutation(async ({ input }) => {
+        const results = await aiVision.batchCompareImages(
+          input.newImageBase64,
+          input.existingImages,
+          input.threshold
+        );
+        return { results };
       }),
   }),
 });

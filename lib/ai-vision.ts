@@ -1,7 +1,17 @@
 /**
- * AI 图像识别工具
- * 使用 OpenAI Vision API 识别图片中的饰品数量
+ * AI 图像识别工具（前端）
+ * 通过后端 API 调用 OpenAI Vision API
  */
+
+// 获取 API 基础 URL
+const getApiBaseUrl = () => {
+  // 优先使用环境变量配置的 URL
+  if (process.env.EXPO_PUBLIC_API_BASE_URL) {
+    return process.env.EXPO_PUBLIC_API_BASE_URL;
+  }
+  // 默认使用 Railway 部署的后端
+  return "https://web-production-e22eb.up.railway.app";
+};
 
 /**
  * 识别图片中的饰品数量
@@ -11,83 +21,50 @@
 export async function countProductsInImage(
   imageBase64: string,
 ): Promise<number> {
-  // 从环境变量获取 API 密钥
-  const apiKey = process.env.EXPO_PUBLIC_OPENAI_API_KEY;
+  const apiBaseUrl = getApiBaseUrl();
   
-  if (!apiKey) {
-    throw new Error("未配置 OpenAI API 密钥，请联系管理员");
-  }
   try {
-    const response = await fetch("https://api.openai.com/v1/chat/completions", {
+    console.log("[AI Vision] Calling countProducts API...");
+    
+    const response = await fetch(`${apiBaseUrl}/api/trpc/ai.countProducts`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        model: "gpt-4o-mini",
-        messages: [
-          {
-            role: "user",
-            content: [
-              {
-                type: "text",
-                text: `请仔细观察这张图片，计算图片中时尚饰品的数量。
-
-识别要点：
-1. 每个饰品都附有一个白色标签（约3cm×5cm）
-2. 饰品放置在深色背景上，便于识别
-3. 请数清楚所有可见的白色标签数量
-4. 如果有重叠或遮挡，请尽量估算
-
-请只返回一个数字，表示饰品的总数量。`,
-              },
-              {
-                type: "image_url",
-                image_url: {
-                  url: `data:image/jpeg;base64,${imageBase64}`,
-                  detail: "low", // 使用低分辨率以节省成本
-                },
-              },
-            ],
-          },
-        ],
-        max_tokens: 10,
+        json: {
+          imageBase64,
+        },
       }),
     });
 
     if (!response.ok) {
+      const errorText = await response.text();
+      console.error("[AI Vision] API error:", errorText);
       throw new Error(`API request failed: ${response.statusText}`);
     }
 
     const data = await response.json();
-    const content = data.choices[0]?.message?.content || "0";
-
-    // 提取数字
-    const match = content.match(/\d+/);
-    const count = match ? parseInt(match[0], 10) : 0;
-
+    console.log("[AI Vision] API response:", data);
+    
+    // tRPC 响应格式
+    const count = data.result?.data?.json?.count ?? 0;
     return count;
   } catch (error) {
-    console.error("AI vision error:", error);
+    console.error("[AI Vision] countProducts error:", error);
     throw new Error("图像识别失败，请重试或手动输入数量");
   }
 }
 
 /**
- * 验证 API 密钥是否有效
+ * 验证 API 是否可用
  */
 export async function validateApiKey(): Promise<boolean> {
-  const apiKey = process.env.EXPO_PUBLIC_OPENAI_API_KEY;
+  const apiBaseUrl = getApiBaseUrl();
   
-  if (!apiKey) {
-    return false;
-  }
   try {
-    const response = await fetch("https://api.openai.com/v1/models", {
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-      },
+    const response = await fetch(`${apiBaseUrl}/api/trpc/system.health`, {
+      method: "GET",
     });
     return response.ok;
   } catch {
@@ -105,88 +82,42 @@ export async function compareImageSimilarity(
   imageBase64_1: string,
   imageBase64_2: string,
 ): Promise<{ similarityScore: number; analysisNote: string }> {
-  const apiKey = process.env.EXPO_PUBLIC_OPENAI_API_KEY;
-
-  if (!apiKey) {
-    throw new Error("未配置 OpenAI API 密钥，请联系管理员");
-  }
+  const apiBaseUrl = getApiBaseUrl();
 
   try {
-    const response = await fetch("https://api.openai.com/v1/chat/completions", {
+    console.log("[AI Vision] Calling compareSimilarity API...");
+    
+    const response = await fetch(`${apiBaseUrl}/api/trpc/ai.compareSimilarity`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        model: "gpt-4o-mini",
-        messages: [
-          {
-            role: "user",
-            content: [
-              {
-                type: "text",
-                text: `你是一位专业的时尚饰品鉴定专家。请对比这两张饰品细节图，判断它们是否为同一款产品。
-
-对比要点：
-1. 材质和质感（金属、塑料、布料等）
-2. 颜色和色调
-3. 形状和尺寸
-4. 图案和纹理
-5. 装饰元素（珠子、吊坠、扣子等）
-6. 整体设计风格
-
-请返回 JSON 格式的结果：
-{
-  "similarityScore": 0-100 的整数（100 表示完全相同，0 表示完全不同），
-  "analysisNote": "简短的对比分析说明（不超过50字）"
-}
-
-注意：
-- 即使拍摄角度、光线不同，只要款式相同就应该给出高分（≥90）
-- 如果只是颜色不同但款式相同，也应该给出较高分（≥85）
-- 只有在材质、形状、设计明显不同时才给出低分（<80）`,
-              },
-              {
-                type: "image_url",
-                image_url: {
-                  url: `data:image/jpeg;base64,${imageBase64_1}`,
-                  detail: "high", // 使用高分辨率以识别细节
-                },
-              },
-              {
-                type: "image_url",
-                image_url: {
-                  url: `data:image/jpeg;base64,${imageBase64_2}`,
-                  detail: "high",
-                },
-              },
-            ],
-          },
-        ],
-        max_tokens: 200,
-        response_format: { type: "json_object" },
+        json: {
+          imageBase64_1,
+          imageBase64_2,
+        },
       }),
     });
 
     if (!response.ok) {
-      const errorData = await response.json();
-      console.error("API error:", errorData);
+      const errorText = await response.text();
+      console.error("[AI Vision] API error:", errorText);
       throw new Error(`API request failed: ${response.statusText}`);
     }
 
     const data = await response.json();
-    const content = data.choices[0]?.message?.content || "{}";
-
-    // 解析 JSON 结果
-    const result = JSON.parse(content);
+    console.log("[AI Vision] API response:", data);
+    
+    // tRPC 响应格式
+    const result = data.result?.data?.json ?? {};
     
     return {
       similarityScore: result.similarityScore || 0,
       analysisNote: result.analysisNote || "无法分析",
     };
   } catch (error) {
-    console.error("Image similarity comparison error:", error);
+    console.error("[AI Vision] compareSimilarity error:", error);
     throw new Error("图片相似度对比失败，请重试");
   }
 }
@@ -203,29 +134,39 @@ export async function batchCompareImages(
   existingImages: Array<{ id: string; base64: string }>,
   threshold: number = 90,
 ): Promise<Array<{ id: string; similarityScore: number; analysisNote: string }>> {
-  const results: Array<{ id: string; similarityScore: number; analysisNote: string }> = [];
+  const apiBaseUrl = getApiBaseUrl();
 
-  // 逐个对比（注意：这会产生多次 API 调用）
-  for (const existingImage of existingImages) {
-    try {
-      const comparison = await compareImageSimilarity(newImageBase64, existingImage.base64);
-      
-      // 只保留高于阈值的结果
-      if (comparison.similarityScore >= threshold) {
-        results.push({
-          id: existingImage.id,
-          similarityScore: comparison.similarityScore,
-          analysisNote: comparison.analysisNote,
-        });
-      }
-    } catch (error) {
-      console.error(`Failed to compare with image ${existingImage.id}:`, error);
-      // 继续处理下一张图片
+  try {
+    console.log("[AI Vision] Calling batchCompare API with", existingImages.length, "images...");
+    
+    const response = await fetch(`${apiBaseUrl}/api/trpc/ai.batchCompare`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        json: {
+          newImageBase64,
+          existingImages,
+          threshold,
+        },
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error("[AI Vision] API error:", errorText);
+      throw new Error(`API request failed: ${response.statusText}`);
     }
+
+    const data = await response.json();
+    console.log("[AI Vision] API response:", data);
+    
+    // tRPC 响应格式
+    const results = data.result?.data?.json?.results ?? [];
+    return results;
+  } catch (error) {
+    console.error("[AI Vision] batchCompare error:", error);
+    throw new Error("批量图片对比失败，请重试");
   }
-
-  // 按相似度降序排列
-  results.sort((a, b) => b.similarityScore - a.similarityScore);
-
-  return results;
 }
