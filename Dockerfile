@@ -10,6 +10,10 @@ WORKDIR /app
 # Copy package files
 COPY package.json pnpm-lock.yaml ./
 
+# Cache buster - force rebuild
+ARG CACHEBUST=1
+RUN echo "Cache bust: $CACHEBUST"
+
 # Install dependencies
 RUN pnpm install --frozen-lockfile
 
