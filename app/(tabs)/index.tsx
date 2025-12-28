@@ -18,9 +18,10 @@ import { Colors } from "@/constants/theme";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { UserStorage } from "@/lib/user-storage";
 import { ProductAPI } from "@/lib/api-client";
+import { ProductStorage } from "@/lib/storage";
 import { AutoSync } from "@/lib/auto-sync";
 import { trpc } from "@/lib/trpc";
-import { APP_VERSION } from "@/lib/version";
+import { APP_VERSION, APP_BUILD } from "@/lib/version";
 import type { Product } from "@/types/product";
 
 export default function HomeScreen() {
@@ -37,10 +38,13 @@ export default function HomeScreen() {
     enabled: false, // 手动触发
   });
 
-  // 加载产品列表（仅显示活跃产品）
+  // 加载产品列表（Web 使用 AsyncStorage，原生使用 SQLite）
   const loadProducts = async () => {
     try {
-      const data = await ProductAPI.getActive();
+      const isWeb = Platform.OS === 'web';
+      const data = isWeb 
+        ? await ProductStorage.getActive()
+        : await ProductAPI.getActive();
       setProducts(data);
     } catch (error) {
       console.error("Failed to load products:", error);
@@ -280,7 +284,8 @@ export default function HomeScreen() {
       {/* 版权标识 */}
       <View style={styles.copyrightContainer}>
         <ThemedText style={styles.copyrightText}>作者：潘章杰（By Manus）</ThemedText>
-        <ThemedText style={styles.versionText}>版本：{APP_VERSION}</ThemedText>
+        <ThemedText style={styles.versionText}>版本：v{APP_VERSION}</ThemedText>
+        <ThemedText style={styles.versionText}>Build: {APP_BUILD}</ThemedText>
       </View>
     </ThemedView>
   );

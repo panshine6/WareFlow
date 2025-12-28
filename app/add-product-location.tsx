@@ -88,35 +88,49 @@ export default function AddProductLocationScreen() {
       const operatorName = currentUser?.name || "未知用户";
       const operatorId = parseInt(currentUser?.id?.toString() || "1");
 
-      // 初始化 Repository
-      const productRepo = new ProductRepository();
-      const historyRepo = new HistoryRepository();
-
+      // 判断平台：Web 使用 AsyncStorage，原生使用 SQLite
+      const isWeb = Platform.OS === 'web';
+      
       // 判断是新款还是合并
       if (params.mergeToProductId) {
         // 合并到现有产品
         console.log('[AddProductLocation] Merging to existing product:', params.mergeToProductId);
         
-        // 1. 合并到 SQLite
-        await productRepo.merge(params.mergeToProductId, quantity);
-        
-        // 2. 添加历史记录到 SQLite
-        const historyId = Date.now().toString();
-        await historyRepo.create({
-          id: historyId,
-          productId: params.mergeToProductId,
-          timestamp: new Date().toISOString(),
-          operatorId,
-          operatorName,
-          quantity,
-          location: location.trim(),
-          detailImageUri: params.detailImageUri,
-          overviewImageUri: params.overviewImageUri,
-        });
-        
-        // 3. 删除全景图（释放空间）
-        console.log('[AddProductLocation] Deleting overview images to save space...');
-        await historyRepo.deleteOverviewImage(historyId);
+        if (isWeb) {
+          // Web 平台：使用 AsyncStorage
+          const existingProduct = await ProductStorage.getById(params.mergeToProductId);
+          if (existingProduct) {
+            await ProductStorage.update(params.mergeToProductId, {
+              quantity: existingProduct.quantity + quantity,
+              updatedAt: new Date().toISOString(),
+            });
+          }
+        } else {
+          // 原生平台：使用 SQLite
+          const productRepo = new ProductRepository();
+          const historyRepo = new HistoryRepository();
+          
+          // 1. 合并到 SQLite
+          await productRepo.merge(params.mergeToProductId, quantity);
+          
+          // 2. 添加历史记录到 SQLite
+          const historyId = Date.now().toString();
+          await historyRepo.create({
+            id: historyId,
+            productId: params.mergeToProductId,
+            timestamp: new Date().toISOString(),
+            operatorId,
+            operatorName,
+            quantity,
+            location: location.trim(),
+            detailImageUri: params.detailImageUri,
+            overviewImageUri: params.overviewImageUri,
+          });
+          
+          // 3. 删除全景图（释放空间）
+          console.log('[AddProductLocation] Deleting overview images to save space...');
+          await historyRepo.deleteOverviewImage(historyId);
+        }
         
         // 4. 同步到云端（后台，静默失败）
         try {
@@ -149,29 +163,44 @@ export default function AddProductLocationScreen() {
           operatorId,
         };
 
-        // 1. 保存到 SQLite（包含全景图）
-        console.log('[AddProductLocation] Saving to SQLite...');
-        await productRepo.create(product);
-        
-        // 2. 添加历史记录到 SQLite
-        const historyId = Date.now().toString() + '_history';
-        await historyRepo.create({
-          id: historyId,
-          productId,
-          timestamp: new Date().toISOString(),
-          operatorId,
-          operatorName,
-          quantity,
-          location: location.trim(),
-          detailImageUri: params.detailImageUri,
-          overviewImageUri: params.overviewImageUri,
-        });
-        
-        // 3. 删除全景图（释放空间）
-        console.log('[AddProductLocation] Deleting overview images to save space...');
-        await productRepo.deleteOverviewImage(productId);
-        await historyRepo.deleteOverviewImage(historyId);
-        console.log('[AddProductLocation] Overview images deleted');
+        if (isWeb) {
+          // Web 平台：使用 AsyncStorage
+          console.log('[AddProductLocation] Saving to AsyncStorage (Web platform)...');
+          await ProductStorage.add({
+            ...product,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            isDeleted: false,
+          });
+        } else {
+          // 原生平台：使用 SQLite
+          const productRepo = new ProductRepository();
+          const historyRepo = new HistoryRepository();
+          
+          // 1. 保存到 SQLite（包含全景图）
+          console.log('[AddProductLocation] Saving to SQLite...');
+          await productRepo.create(product);
+          
+          // 2. 添加历史记录到 SQLite
+          const historyId = Date.now().toString() + '_history';
+          await historyRepo.create({
+            id: historyId,
+            productId,
+            timestamp: new Date().toISOString(),
+            operatorId,
+            operatorName,
+            quantity,
+            location: location.trim(),
+            detailImageUri: params.detailImageUri,
+            overviewImageUri: params.overviewImageUri,
+          });
+          
+          // 3. 删除全景图（释放空间）
+          console.log('[AddProductLocation] Deleting overview images to save space...');
+          await productRepo.deleteOverviewImage(productId);
+          await historyRepo.deleteOverviewImage(historyId);
+          console.log('[AddProductLocation] Overview images deleted');
+        }
         
         // 4. 同步到云端（后台，静默失败）
         try {
