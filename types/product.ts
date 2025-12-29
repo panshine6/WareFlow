@@ -59,6 +59,8 @@ export interface Product {
   isDeleted?: boolean;
   /** 删除时间 */
   deletedAt?: string;
+  /** 图片感知哈希值（用于快速相似度预筛选） */
+  imageHash?: string;
 }
 
 /**

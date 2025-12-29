@@ -16,6 +16,7 @@ import { ThemedView } from "@/components/themed-view";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { UserStorage } from "@/lib/user-storage";
 import { SettingsStorage, ProductStorage } from "@/lib/storage";
+import { calculateAndSaveProductHash, imageToBase64 } from "@/lib/deduplication";
 import type { Product, InventoryHistoryEntry } from "@/types/product";
 
 /**
@@ -159,7 +160,7 @@ export default function AddProductLocationScreen() {
           operatorName
         );
         
-        const product: Product = {
+        let product: Product = {
           id: productId,
           detailImageUri: params.detailImageUri,
           overviewImageUri: params.overviewImageUri,
@@ -173,6 +174,18 @@ export default function AddProductLocationScreen() {
           isDeleted: false,
           history: [historyEntry], // 添加第一条历史记录
         };
+        
+        // 计算并保存 pHash（用于快速查重预筛选）
+        if (Platform.OS === 'web') {
+          try {
+            const imageBase64 = await imageToBase64(params.detailImageUri);
+            product = await calculateAndSaveProductHash(product, imageBase64);
+            console.log('[AddProductLocation] Product pHash calculated:', product.imageHash);
+          } catch (error) {
+            console.warn('[AddProductLocation] Failed to calculate pHash:', error);
+            // pHash 计算失败不影响产品保存
+          }
+        }
         
         await ProductStorage.add(product);
         console.log('[AddProductLocation] Product created with initial history record');
