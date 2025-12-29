@@ -605,9 +605,10 @@ const styles = StyleSheet.create({
   },
   historyImage: {
     width: "100%",
-    height: 150,
+    aspectRatio: 1,
     borderRadius: 8,
     backgroundColor: "#f0f0f0",
+    resizeMode: "contain",
   },
   historyDetails: {
     gap: 6,
