@@ -2,7 +2,9 @@
  * 去重处理工具函数
  */
 
+import { Platform } from "react-native";
 import { ProductAPI } from "./api-client";
+import { ProductStorage } from "./storage";
 import { batchCompareImages } from "./ai-vision";
 import type { Product } from "@/types/product";
 
@@ -88,8 +90,12 @@ export async function performDuplicateCheck(
     }
     
     // 2. 获取所有活跃产品
-    console.log("[Dedup] Loading active products from cloud...");
-    const allProducts = await ProductAPI.getActive();
+    // Web 平台使用本地存储，原生平台使用云端 API
+    const isWeb = Platform.OS === 'web';
+    console.log("[Dedup] Loading active products from", isWeb ? "local storage" : "cloud", "...");
+    const allProducts = isWeb 
+      ? await ProductStorage.getActive()
+      : await ProductAPI.getActive();
     console.log("[Dedup] Loaded", allProducts.length, "active products");
     
     if (allProducts.length === 0) {
