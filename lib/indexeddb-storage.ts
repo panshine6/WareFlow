@@ -108,15 +108,17 @@ class IndexedDBStorage {
   // 获取所有活跃产品
   async getActiveProducts(): Promise<Product[]> {
     await this.ensureInit();
-    const index = this.db!.transaction('products').store.index('by-isDeleted');
-    return await index.getAll(false);
+    // 使用过滤方式而非索引查询，因为布尔索引在某些浏览器中可能不稳定
+    const allProducts = await this.db!.getAll('products');
+    return allProducts.filter(p => !p.isDeleted);
   }
 
   // 获取所有已删除产品
   async getDeletedProducts(): Promise<Product[]> {
     await this.ensureInit();
-    const index = this.db!.transaction('products').store.index('by-isDeleted');
-    return await index.getAll(true);
+    // 使用过滤方式而非索引查询
+    const allProducts = await this.db!.getAll('products');
+    return allProducts.filter(p => p.isDeleted === true);
   }
 
   // 根据 SKU 查询产品
