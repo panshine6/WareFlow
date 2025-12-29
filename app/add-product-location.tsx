@@ -16,13 +16,14 @@ import { ThemedView } from "@/components/themed-view";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { UserStorage } from "@/lib/user-storage";
 import { SettingsStorage, ProductStorage } from "@/lib/storage";
-import type { Product } from "@/types/product";
+import type { Product, InventoryHistoryEntry } from "@/types/product";
 
 /**
  * 添加产品流程 - 步骤4：输入存储位置并完成
  * 
- * 简化版：统一使用 ProductStorage（IndexedDB/AsyncStorage）
- * 不再区分平台，所有平台都使用相同的存储方式
+ * 支持入库历史记录：
+ * - 新产品：创建产品并添加第一条入库记录
+ * - 合并产品：累加数量并添加新的入库记录
  */
 export default function AddProductLocationScreen() {
   const router = useRouter();
@@ -64,7 +65,32 @@ export default function AddProductLocationScreen() {
     loadData();
   }, []);
 
-  // 完成并保存 - 使用统一的 ProductStorage
+  /**
+   * 创建入库历史记录条目
+   */
+  const createHistoryEntry = (
+    productId: string,
+    quantity: number,
+    locationValue: string,
+    detailImageUri: string,
+    operatorId: number,
+    operatorName: string
+  ): InventoryHistoryEntry => {
+    const now = new Date().toISOString();
+    return {
+      id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      productId,
+      timestamp: now,
+      operatorId,
+      operatorName,
+      quantity,
+      location: locationValue,
+      detailImageUri,
+      overviewImageUri: "", // 不再保存全景照
+    };
+  };
+
+  // 完成并保存
   const handleComplete = async () => {
     if (!location.trim()) {
       if (Platform.OS === "web") {
@@ -82,29 +108,56 @@ export default function AddProductLocationScreen() {
       const operatorName = currentUser?.name || "未知用户";
       const operatorId = parseInt(currentUser?.id?.toString() || "1");
       const now = new Date().toISOString();
+      const locationValue = location.trim();
       
       // 判断是新款还是合并
       if (params.mergeToProductId) {
-        // 合并到现有产品
+        // ========== 合并到现有产品 ==========
         console.log('[AddProductLocation] Merging to existing product:', params.mergeToProductId);
         
         const existingProduct = await ProductStorage.getById(params.mergeToProductId);
-        if (existingProduct) {
-          await ProductStorage.update(params.mergeToProductId, {
-            quantity: existingProduct.quantity + quantity,
-            updatedAt: now,
-          });
-          console.log('[AddProductLocation] Product merged successfully');
-        } else {
+        if (!existingProduct) {
           throw new Error('产品不存在');
         }
+
+        // 创建新的入库历史记录
+        const historyEntry = createHistoryEntry(
+          params.mergeToProductId,
+          quantity,
+          locationValue,
+          params.detailImageUri,
+          operatorId,
+          operatorName
+        );
+
+        // 获取现有历史记录，如果没有则创建空数组
+        const existingHistory = existingProduct.history || [];
+
+        // 更新产品：累加数量 + 添加历史记录
+        await ProductStorage.update(params.mergeToProductId, {
+          quantity: existingProduct.quantity + quantity,
+          storageLocation: locationValue, // 更新为最新位置
+          updatedAt: now,
+          history: [...existingHistory, historyEntry],
+        });
+
+        console.log('[AddProductLocation] Product merged with history record');
         
-        console.log('[AddProductLocation] Merge completed');
       } else {
-        // 新产品
+        // ========== 新产品 ==========
         const productId = Date.now().toString();
         
         console.log('[AddProductLocation] Creating new product...');
+
+        // 创建第一条入库历史记录
+        const historyEntry = createHistoryEntry(
+          productId,
+          quantity,
+          locationValue,
+          params.detailImageUri,
+          operatorId,
+          operatorName
+        );
         
         const product: Product = {
           id: productId,
@@ -112,20 +165,21 @@ export default function AddProductLocationScreen() {
           overviewImageUri: params.overviewImageUri,
           sku: params.sku,
           quantity,
-          storageLocation: location.trim(),
+          storageLocation: locationValue,
           operatorName,
           operatorId,
           createdAt: now,
           updatedAt: now,
           isDeleted: false,
+          history: [historyEntry], // 添加第一条历史记录
         };
         
         await ProductStorage.add(product);
-        console.log('[AddProductLocation] Product created successfully');
+        console.log('[AddProductLocation] Product created with initial history record');
       }
 
       // 更新默认位置
-      await SettingsStorage.update({ defaultLocation: location.trim() });
+      await SettingsStorage.update({ defaultLocation: locationValue });
 
       // 返回主页
       if (Platform.OS === "web") {
@@ -194,6 +248,13 @@ export default function AddProductLocationScreen() {
                   {params.quantity}
                 </ThemedText>
               </View>
+              {params.mergeToProductId && (
+                <View style={styles.mergeNote}>
+                  <ThemedText style={styles.mergeNoteText}>
+                    📦 合并到现有款式
+                  </ThemedText>
+                </View>
+              )}
             </View>
 
             <TextInput
@@ -292,6 +353,17 @@ const styles = StyleSheet.create({
   },
   summaryValue: {
     fontSize: 16,
+  },
+  mergeNote: {
+    marginTop: 8,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: "rgba(0,122,255,0.2)",
+  },
+  mergeNoteText: {
+    fontSize: 14,
+    color: "#007AFF",
+    textAlign: "center",
   },
   input: {
     height: 56,

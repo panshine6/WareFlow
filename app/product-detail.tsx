@@ -328,67 +328,62 @@ export default function ProductDetailScreen() {
           </View>
         </View>
 
-        {/* 历史记录 */}
+        {/* 入库历史记录 */}
         {product.history && product.history.length > 0 && (
           <View style={styles.historyContainer}>
             <ThemedText type="subtitle" style={styles.historyTitle}>
-              入库历史记录
+              📦 入库历史记录
             </ThemedText>
-            <ThemedText style={styles.historySubtitle}>
-              共 {product.history.length} 次入库，总计 {product.quantity} 件
-            </ThemedText>
+            <View style={styles.historySummary}>
+              <ThemedText style={styles.historySummaryText}>
+                共 <ThemedText style={styles.historySummaryHighlight}>{product.history.length}</ThemedText> 次入库，
+                总计 <ThemedText style={styles.historySummaryHighlight}>{product.quantity}</ThemedText> 件
+              </ThemedText>
+            </View>
             {product.history.map((entry, index) => (
-              <View key={entry.id} style={styles.historyEntry}>
+              <View key={entry.id || index} style={styles.historyEntry}>
                 <View style={styles.historyHeader}>
-                  <ThemedText style={styles.historyIndex}>
-                    第 {index + 1} 次入库
-                  </ThemedText>
+                  <View style={styles.historyIndexBadge}>
+                    <ThemedText style={styles.historyIndexText}>
+                      第 {index + 1} 次
+                    </ThemedText>
+                  </View>
                   <ThemedText style={styles.historyDate}>
                     {new Date(entry.timestamp).toLocaleString("zh-CN")}
                   </ThemedText>
                 </View>
                 
-                {/* 历史记录图片 */}
-                <View style={styles.historyImages}>
-                  <View style={styles.historyImageWrapper}>
-                    <ThemedText style={styles.historyImageLabel}>细节图</ThemedText>
-                    <Image
-                      source={{ uri: entry.detailImageUri }}
-                      style={styles.historyImage}
-                    />
-                  </View>
-                  <View style={styles.historyImageWrapper}>
-                    <ThemedText style={styles.historyImageLabel}>全景图</ThemedText>
-                    <Image
-                      source={{ uri: entry.overviewImageUri }}
-                      style={styles.historyImage}
-                    />
-                  </View>
-                </View>
+                {/* 细节图片 */}
+                {entry.detailImageUri && (
+                  <Image
+                    source={{ uri: entry.detailImageUri }}
+                    style={styles.historyImage}
+                  />
+                )}
 
                 {/* 历史记录详情 */}
                 <View style={styles.historyDetails}>
                   <View style={styles.historyDetailRow}>
-                    <ThemedText style={styles.historyDetailLabel}>数量：</ThemedText>
+                    <ThemedText style={styles.historyDetailLabel}>数量</ThemedText>
                     <ThemedText style={styles.historyDetailValue}>
                       {entry.quantity} 件
                     </ThemedText>
                   </View>
                   <View style={styles.historyDetailRow}>
-                    <ThemedText style={styles.historyDetailLabel}>位置：</ThemedText>
+                    <ThemedText style={styles.historyDetailLabel}>位置</ThemedText>
                     <ThemedText style={styles.historyDetailValue}>
                       {entry.location}
                     </ThemedText>
                   </View>
                   <View style={styles.historyDetailRow}>
-                    <ThemedText style={styles.historyDetailLabel}>操作员：</ThemedText>
+                    <ThemedText style={styles.historyDetailLabel}>操作员</ThemedText>
                     <ThemedText style={styles.historyDetailValue}>
                       {entry.operatorName}
                     </ThemedText>
                   </View>
                   {entry.notes && (
                     <View style={styles.historyDetailRow}>
-                      <ThemedText style={styles.historyDetailLabel}>备注：</ThemedText>
+                      <ThemedText style={styles.historyDetailLabel}>备注</ThemedText>
                       <ThemedText style={styles.historyDetailValue}>
                         {entry.notes}
                       </ThemedText>
@@ -553,17 +548,29 @@ const styles = StyleSheet.create({
     color: "#8E8E93",
   },
   historyContainer: {
-    gap: 16,
-    marginTop: 8,
+    gap: 12,
+    marginTop: 16,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: "rgba(0, 0, 0, 0.1)",
   },
   historyTitle: {
     marginBottom: 4,
   },
-  historySubtitle: {
+  historySummary: {
+    backgroundColor: "rgba(0, 122, 255, 0.1)",
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 8,
+  },
+  historySummaryText: {
     fontSize: 14,
     lineHeight: 20,
-    opacity: 0.7,
-    marginBottom: 12,
+    textAlign: "center",
+  },
+  historySummaryHighlight: {
+    fontWeight: "700",
+    color: "#007AFF",
   },
   historyEntry: {
     padding: 16,
@@ -571,60 +578,56 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(0, 0, 0, 0.03)",
     gap: 12,
     marginBottom: 12,
+    borderLeftWidth: 3,
+    borderLeftColor: "#34C759",
   },
   historyHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 8,
   },
-  historyIndex: {
-    fontSize: 16,
-    lineHeight: 24,
+  historyIndexBadge: {
+    backgroundColor: "#34C759",
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  historyIndexText: {
+    fontSize: 12,
+    lineHeight: 16,
     fontWeight: "600",
+    color: "#fff",
   },
   historyDate: {
-    fontSize: 14,
-    lineHeight: 20,
-    opacity: 0.6,
-  },
-  historyImages: {
-    flexDirection: "row",
-    gap: 12,
-  },
-  historyImageWrapper: {
-    flex: 1,
-    gap: 4,
-  },
-  historyImageLabel: {
-    fontSize: 12,
+    fontSize: 13,
     lineHeight: 18,
-    fontWeight: "600",
-    opacity: 0.7,
+    opacity: 0.6,
   },
   historyImage: {
     width: "100%",
-    aspectRatio: 1,
+    height: 150,
     borderRadius: 8,
     backgroundColor: "#f0f0f0",
   },
   historyDetails: {
-    gap: 8,
+    gap: 6,
+    backgroundColor: "rgba(0, 0, 0, 0.02)",
+    padding: 12,
+    borderRadius: 8,
   },
   historyDetailRow: {
     flexDirection: "row",
     alignItems: "center",
+    justifyContent: "space-between",
   },
   historyDetailLabel: {
-    fontSize: 14,
-    lineHeight: 20,
-    fontWeight: "600",
-    opacity: 0.7,
-    minWidth: 70,
+    fontSize: 13,
+    lineHeight: 18,
+    opacity: 0.6,
   },
   historyDetailValue: {
-    fontSize: 14,
-    lineHeight: 20,
-    flex: 1,
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: "500",
   },
 });
