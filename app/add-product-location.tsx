@@ -205,6 +205,7 @@ export default function AddProductLocationScreen() {
         // 4. 同步到云端（后台，静默失败）
         try {
           console.log('[AddProductLocation] Syncing to cloud (detail image only)...');
+          const historyId = Date.now().toString() + '_history';
           await ProductAPI.create(product);
           await ProductAPI.addHistory({
             id: historyId,

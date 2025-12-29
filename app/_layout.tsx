@@ -18,6 +18,7 @@ import { useColorScheme } from "@/hooks/use-color-scheme";
 import { trpc, createTRPCClient } from "@/lib/trpc";
 import { initManusRuntime, subscribeSafeAreaInsets } from "@/lib/manus-runtime";
 import { SQLiteDatabase } from "@/lib/sqlite-database";
+import { indexedDBStorage } from "@/lib/indexeddb-storage";
 
 const DEFAULT_WEB_INSETS: EdgeInsets = { top: 0, right: 0, bottom: 0, left: 0 };
 const DEFAULT_WEB_FRAME: Rect = { x: 0, y: 0, width: 0, height: 0 };
@@ -40,14 +41,19 @@ export default function RootLayout() {
     initManusRuntime();
   }, []);
 
-  // Initialize SQLite database
+  // Initialize database (SQLite for native, IndexedDB for web)
   useEffect(() => {
     const initDatabase = async () => {
       try {
-        await SQLiteDatabase.getInstance().initialize();
-        console.log('[RootLayout] SQLite database initialized');
+        if (Platform.OS === 'web') {
+          await indexedDBStorage.init();
+          console.log('[RootLayout] IndexedDB initialized');
+        } else {
+          await SQLiteDatabase.getInstance().initialize();
+          console.log('[RootLayout] SQLite database initialized');
+        }
       } catch (error) {
-        console.error('[RootLayout] Failed to initialize SQLite database:', error);
+        console.error('[RootLayout] Failed to initialize database:', error);
       }
     };
     initDatabase();

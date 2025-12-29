@@ -4,6 +4,7 @@ import {
   ActivityIndicator,
   FlatList,
   Image,
+  Platform,
   Pressable,
   RefreshControl,
   StyleSheet,
@@ -272,6 +273,12 @@ export default function HomeScreen() {
           onPress={() => router.push("/recycle-bin" as any)}
         >
           <ThemedText style={styles.actionButtonText}>🗑️ 回收站</ThemedText>
+        </Pressable>
+        <Pressable 
+          style={styles.actionButton}
+          onPress={() => router.push("/backup" as any)}
+        >
+          <ThemedText style={styles.actionButtonText}>📦 数据备份</ThemedText>
         </Pressable>
         <Pressable 
           style={styles.actionButton}
