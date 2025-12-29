@@ -17,6 +17,8 @@ import { ThemedView } from "@/components/themed-view";
 import { Colors } from "@/constants/theme";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { ProductAPI } from "@/lib/api-client";
+import { ProductStorage } from "@/lib/storage";
+import { Platform } from "react-native";
 import { AutoSync } from "@/lib/auto-sync";
 import { trpc } from "@/lib/trpc";
 import type { Product } from "@/types/product";
@@ -47,7 +49,11 @@ export default function ProductDetailScreen() {
   const loadProduct = async () => {
     try {
       setLoading(true);
-      const found = await ProductAPI.getById(params.id);
+      // Web 平台使用本地存储，原生平台使用 API
+      const isWeb = Platform.OS === 'web';
+      const found = isWeb 
+        ? await ProductStorage.getById(params.id)
+        : await ProductAPI.getById(params.id);
       if (found) {
         setProduct(found);
         setEditedProduct(found);
@@ -85,7 +91,13 @@ export default function ProductDetailScreen() {
 
     try {
       setSaving(true);
-      await ProductAPI.update(editedProduct.id, editedProduct);
+      // Web 平台使用本地存储，原生平台使用 API
+      const isWeb = Platform.OS === 'web';
+      if (isWeb) {
+        await ProductStorage.update(editedProduct.id, editedProduct);
+      } else {
+        await ProductAPI.update(editedProduct.id, editedProduct);
+      }
       setProduct(editedProduct);
       setIsEditing(false);
 
@@ -123,7 +135,13 @@ export default function ProductDetailScreen() {
       async () => {
         try {
           if (product) {
-            await ProductAPI.softDelete(product.id);
+            // Web 平台使用本地存储，原生平台使用 API
+            const isWeb = Platform.OS === 'web';
+            if (isWeb) {
+              await ProductStorage.softDelete(product.id);
+            } else {
+              await ProductAPI.softDelete(product.id);
+            }
 
             // 自动上传到云端（静默）
             try {

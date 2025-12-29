@@ -239,7 +239,7 @@ export default function HomeScreen() {
                   styles.productCard,
                   { opacity: pressed ? 0.7 : 1 },
                 ]}
-                onPress={() => router.push(`/product/${item.id}` as any)}
+                onPress={() => router.push({ pathname: "/product-detail" as any, params: { id: item.id } })}
               >
                 <Image
                   source={{ uri: item.detailImageUri }}
