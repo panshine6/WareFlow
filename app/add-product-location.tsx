@@ -163,7 +163,7 @@ export default function AddProductLocationScreen() {
         let product: Product = {
           id: productId,
           detailImageUri: params.detailImageUri,
-          overviewImageUri: params.overviewImageUri,
+          overviewImageUri: "", // 不保存全景图，节省存储空间
           sku: params.sku,
           quantity,
           storageLocation: locationValue,

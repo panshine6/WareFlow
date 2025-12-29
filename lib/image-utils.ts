@@ -106,6 +106,38 @@ export function base64ToDataUrl(base64: string, mimeType: string = "image/jpeg")
 }
 
 /**
+ * 生成缩略图用于云端存储
+ * @param base64 原始图片的 Base64 数据（不含前缀）
+ * @param maxSize 最大边长（默认 512，适合云端存储）
+ * @param quality JPEG 质量（0-1，默认 0.6，更激进的压缩）
+ * @returns 缩略图的 Base64 数据（不含前缀）
+ */
+export async function generateThumbnail(
+  base64: string,
+  maxSize: number = 512,
+  quality: number = 0.6
+): Promise<string> {
+  return compressImage(base64, maxSize, quality);
+}
+
+/**
+ * 从 Data URL 生成缩略图
+ * @param dataUrl 原始图片的 Data URL
+ * @param maxSize 最大边长（默认 512）
+ * @param quality JPEG 质量（0-1，默认 0.6）
+ * @returns 缩略图的 Data URL
+ */
+export async function generateThumbnailDataUrl(
+  dataUrl: string,
+  maxSize: number = 512,
+  quality: number = 0.6
+): Promise<string> {
+  const base64 = dataUrlToBase64(dataUrl);
+  const thumbnailBase64 = await generateThumbnail(base64, maxSize, quality);
+  return base64ToDataUrl(thumbnailBase64);
+}
+
+/**
  * 压缩图片并返回 Data URL
  * @param dataUrl 原始图片的 Data URL
  * @param maxSize 最大边长（默认 2048）

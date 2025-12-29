@@ -1,5 +1,6 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { ProductStorage } from "./storage";
+import { generateThumbnailDataUrl, dataUrlToBase64 } from "./image-utils";
 import type { Product } from "@/types/product";
 
 const LAST_SYNC_TIME_KEY = "lastSyncTime";
@@ -21,12 +22,46 @@ export interface SyncResult {
 /**
  * 数据同步服务
  * 
- * 注意：这个服务需要配合 tRPC API 使用
- * 如果没有配置数据库，相关方法会抛出错误
+ * 优化策略：
+ * - 不上传全景图（overviewImageUri 设为空）
+ * - 细节图压缩为 512×512 缩略图再上传
+ * - 大幅减少云端存储空间占用
  */
 export const SyncService = {
   /**
+   * 将图片压缩为缩略图
+   * @param imageUri 原始图片 URI（Data URL 或 Base64）
+   * @returns 压缩后的 Data URL
+   */
+  async compressForCloud(imageUri: string): Promise<string> {
+    try {
+      // 如果是空字符串，直接返回
+      if (!imageUri || imageUri.trim() === "") {
+        return "";
+      }
+
+      // 确保是 Data URL 格式
+      let dataUrl = imageUri;
+      if (!imageUri.startsWith("data:")) {
+        dataUrl = `data:image/jpeg;base64,${imageUri}`;
+      }
+
+      // 生成 512×512 缩略图
+      const thumbnailDataUrl = await generateThumbnailDataUrl(dataUrl, 512, 0.6);
+      return thumbnailDataUrl;
+    } catch (error) {
+      console.error("[Sync] Failed to compress image:", error);
+      // 压缩失败时返回原图
+      return imageUri;
+    }
+  },
+
+  /**
    * 上传本地数据到云端（覆盖云端数据）
+   * 
+   * 优化：
+   * - 不上传全景图
+   * - 细节图压缩为缩略图
    */
   async uploadToCloud(trpcClient: any): Promise<SyncResult> {
     try {
@@ -44,21 +79,31 @@ export const SyncService = {
         };
       }
       
-      // 2. 转换数据格式（确保日期字段正确）
-      const productsToUpload = localProducts.map((p) => ({
-        id: p.id,
-        detailImageUri: p.detailImageUri,
-        overviewImageUri: p.overviewImageUri,
-        sku: p.sku,
-        quantity: p.quantity,
-        storageLocation: p.storageLocation,
-        operatorId: p.operatorId || 0,
-        operatorName: p.operatorName || "",
-        isDeleted: p.isDeleted ? 1 : 0,
-        deletedAt: p.deletedAt ? new Date(p.deletedAt) : null,
-        createdAt: new Date(p.createdAt),
-        updatedAt: new Date(p.updatedAt || p.createdAt),
-      }));
+      // 2. 转换数据格式并压缩图片
+      console.log("[Sync] Compressing images for cloud storage...");
+      const productsToUpload = await Promise.all(
+        localProducts.map(async (p) => {
+          // 压缩细节图为缩略图
+          const compressedDetailImage = await this.compressForCloud(p.detailImageUri);
+          
+          return {
+            id: p.id,
+            detailImageUri: compressedDetailImage, // 压缩后的缩略图
+            overviewImageUri: "", // 不上传全景图
+            sku: p.sku,
+            quantity: p.quantity,
+            storageLocation: p.storageLocation,
+            operatorId: p.operatorId || 0,
+            operatorName: p.operatorName || "",
+            isDeleted: p.isDeleted ? 1 : 0,
+            deletedAt: p.deletedAt ? new Date(p.deletedAt) : null,
+            createdAt: new Date(p.createdAt),
+            updatedAt: new Date(p.updatedAt || p.createdAt),
+          };
+        })
+      );
+      
+      console.log("[Sync] Image compression completed");
       
       // 3. 上传到云端
       console.log("[Sync] Uploading to cloud...");
@@ -90,6 +135,8 @@ export const SyncService = {
 
   /**
    * 从云端下载数据到本地（覆盖本地数据）
+   * 
+   * 注意：云端存储的是缩略图，下载后本地也是缩略图
    */
   async downloadFromCloud(trpcClient: any): Promise<SyncResult> {
     try {
@@ -102,8 +149,8 @@ export const SyncService = {
       // 2. 转换数据格式
       const localProducts: Product[] = products.map((p: any) => ({
         id: p.id,
-        detailImageUri: p.detailImageUri,
-        overviewImageUri: p.overviewImageUri,
+        detailImageUri: p.detailImageUri, // 云端存储的是缩略图
+        overviewImageUri: p.overviewImageUri || "", // 云端不存全景图
         sku: p.sku,
         quantity: p.quantity,
         storageLocation: p.storageLocation,
