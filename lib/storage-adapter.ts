@@ -181,13 +181,8 @@ export const ProductStorageAdapter = {
    */
   async permanentDelete(id: string): Promise<void> {
     if (Platform.OS === 'web') {
-      // IndexedDB 中直接删除记录
-      const product = await indexedDBStorage.getProduct(id);
-      if (product) {
-        // 先软删除，再从数据库中移除
-        await indexedDBStorage.deleteProduct(id);
-        // TODO: 实现真正的永久删除方法
-      }
+      // IndexedDB 中永久删除记录
+      await indexedDBStorage.permanentDeleteProduct(id);
     } else {
       try {
         const products = await this.getAll();

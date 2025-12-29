@@ -82,10 +82,18 @@ class IndexedDBStorage {
     await this.ensureInit();
     const product = await this.db!.get('products', id);
     if (product) {
+      const now = new Date().toISOString();
       product.isDeleted = true;
-      product.updatedAt = new Date().toISOString();
+      product.deletedAt = now;
+      product.updatedAt = now;
       await this.db!.put('products', product);
     }
+  }
+
+  // 永久删除产品（从数据库中完全移除）
+  async permanentDeleteProduct(id: string): Promise<void> {
+    await this.ensureInit();
+    await this.db!.delete('products', id);
   }
 
   // 恢复产品
@@ -94,6 +102,7 @@ class IndexedDBStorage {
     const product = await this.db!.get('products', id);
     if (product) {
       product.isDeleted = false;
+      product.deletedAt = undefined;
       product.updatedAt = new Date().toISOString();
       await this.db!.put('products', product);
     }
