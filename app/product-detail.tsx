@@ -129,19 +129,37 @@ export default function ProductDetailScreen() {
 
   // 删除产品（移至回收站）
   const handleDelete = () => {
+    console.log('[ProductDetail] handleDelete called');
+    
+    // Web 平台直接使用 window.confirm
+    if (Platform.OS === 'web') {
+      const confirmed = window.confirm('确认删除\n\n确定要删除这个产品吗？删除后可以在回收站中恢复。');
+      console.log('[ProductDetail] Web confirm result:', confirmed);
+      
+      if (confirmed && product) {
+        console.log('[ProductDetail] Deleting product:', product.id);
+        ProductStorage.softDelete(product.id)
+          .then(() => {
+            console.log('[ProductDetail] Product deleted successfully');
+            window.alert('产品已移至回收站');
+            router.replace('/(tabs)');
+          })
+          .catch((error) => {
+            console.error('[ProductDetail] Delete failed:', error);
+            window.alert('删除产品失败: ' + (error.message || '未知错误'));
+          });
+      }
+      return;
+    }
+    
+    // 原生平台使用 Alert.confirm
     Alert.confirm(
       "确认删除",
       "确定要删除这个产品吗？删除后可以在回收站中恢复。",
       async () => {
         try {
           if (product) {
-            // Web 平台使用本地存储，原生平台使用 API
-            const isWeb = Platform.OS === 'web';
-            if (isWeb) {
-              await ProductStorage.softDelete(product.id);
-            } else {
-              await ProductAPI.softDelete(product.id);
-            }
+            await ProductAPI.softDelete(product.id);
 
             // 自动上传到云端（静默）
             try {
