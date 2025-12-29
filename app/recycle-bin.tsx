@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
+  Platform,
   Pressable,
   StyleSheet,
   View,
@@ -16,6 +17,7 @@ import { ThemedView } from "@/components/themed-view";
 import { Colors } from "@/constants/theme";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { ProductAPI } from "@/lib/api-client";
+import { ProductStorage } from "@/lib/storage";
 import type { Product } from "@/types/product";
 
 /**
@@ -30,6 +32,8 @@ export default function RecycleBinScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
+  const isWeb = Platform.OS === 'web';
+
   useEffect(() => {
     loadProducts();
     // 自动清理超过 90 天的产品
@@ -39,7 +43,10 @@ export default function RecycleBinScreen() {
   const loadProducts = async () => {
     try {
       setLoading(true);
-      const deleted = await ProductAPI.getDeleted();
+      // Web 平台使用本地存储，原生平台使用云端 API
+      const deleted = isWeb 
+        ? await ProductStorage.getDeleted()
+        : await ProductAPI.getDeleted();
       setProducts(deleted);
     } catch (error) {
       console.error("Failed to load deleted products:", error);
@@ -58,11 +65,29 @@ export default function RecycleBinScreen() {
   const cleanupOldProducts = async () => {
     // TODO: Implement cleanup API endpoint
     // For now, we'll skip automatic cleanup
-    console.log("Automatic cleanup not yet implemented on cloud API");
+    console.log("Automatic cleanup not yet implemented");
   };
 
   // 恢复产品
   const handleRestore = (product: Product) => {
+    // Web 平台直接使用 window.confirm
+    if (isWeb) {
+      const confirmed = window.confirm(`确认恢复\n\n确定要恢复产品 ${product.sku} 吗？`);
+      if (confirmed) {
+        ProductStorage.restore(product.id)
+          .then(() => {
+            window.alert("产品已恢复");
+            loadProducts();
+          })
+          .catch((error) => {
+            console.error("Failed to restore product:", error);
+            window.alert("恢复产品失败: " + (error.message || "未知错误"));
+          });
+      }
+      return;
+    }
+
+    // 原生平台使用 Alert.confirm
     Alert.confirm(
       "确认恢复",
       `确定要恢复产品 ${product.sku} 吗？`,
@@ -81,6 +106,24 @@ export default function RecycleBinScreen() {
 
   // 永久删除产品
   const handlePermanentDelete = (product: Product) => {
+    // Web 平台直接使用 window.confirm
+    if (isWeb) {
+      const confirmed = window.confirm(`确认永久删除\n\n确定要永久删除产品 ${product.sku} 吗？此操作无法撤销！`);
+      if (confirmed) {
+        ProductStorage.permanentDelete(product.id)
+          .then(() => {
+            window.alert("产品已永久删除");
+            loadProducts();
+          })
+          .catch((error) => {
+            console.error("Failed to permanently delete product:", error);
+            window.alert("永久删除失败: " + (error.message || "未知错误"));
+          });
+      }
+      return;
+    }
+
+    // 原生平台使用 Alert.confirm
     Alert.confirm(
       "确认永久删除",
       `确定要永久删除产品 ${product.sku} 吗？此操作无法撤销！`,
