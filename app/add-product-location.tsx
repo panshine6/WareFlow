@@ -16,14 +16,13 @@ import { ThemedView } from "@/components/themed-view";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { UserStorage } from "@/lib/user-storage";
 import { SettingsStorage, ProductStorage } from "@/lib/storage";
-import { ProductRepository } from "@/lib/product-repository";
-import { HistoryRepository } from "@/lib/history-repository";
 import type { Product } from "@/types/product";
 
 /**
  * 添加产品流程 - 步骤4：输入存储位置并完成
  * 
- * 修复：优先使用本地存储，云端同步完全静默
+ * 简化版：统一使用 ProductStorage（IndexedDB/AsyncStorage）
+ * 不再区分平台，所有平台都使用相同的存储方式
  */
 export default function AddProductLocationScreen() {
   const router = useRouter();
@@ -65,7 +64,7 @@ export default function AddProductLocationScreen() {
     loadData();
   }, []);
 
-  // 完成并保存 - 仅使用本地存储
+  // 完成并保存 - 使用统一的 ProductStorage
   const handleComplete = async () => {
     if (!location.trim()) {
       if (Platform.OS === "web") {
@@ -82,122 +81,46 @@ export default function AddProductLocationScreen() {
       const quantity = parseInt(params.quantity) || 0;
       const operatorName = currentUser?.name || "未知用户";
       const operatorId = parseInt(currentUser?.id?.toString() || "1");
-
-      // 判断平台：Web 使用 IndexedDB/AsyncStorage，原生使用 SQLite
-      const isWeb = Platform.OS === 'web';
+      const now = new Date().toISOString();
       
       // 判断是新款还是合并
       if (params.mergeToProductId) {
         // 合并到现有产品
         console.log('[AddProductLocation] Merging to existing product:', params.mergeToProductId);
         
-        if (isWeb) {
-          // Web 平台：使用 IndexedDB/AsyncStorage
-          const existingProduct = await ProductStorage.getById(params.mergeToProductId);
-          if (existingProduct) {
-            await ProductStorage.update(params.mergeToProductId, {
-              quantity: existingProduct.quantity + quantity,
-              updatedAt: new Date().toISOString(),
-            });
-            console.log('[AddProductLocation] Product merged successfully (Web)');
-          } else {
-            throw new Error('产品不存在');
-          }
-        } else {
-          // 原生平台：使用 SQLite
-          const productRepo = new ProductRepository();
-          const historyRepo = new HistoryRepository();
-          
-          // 1. 合并到 SQLite
-          await productRepo.merge(params.mergeToProductId, quantity);
-          
-          // 2. 添加历史记录到 SQLite
-          const historyId = Date.now().toString();
-          await historyRepo.create({
-            id: historyId,
-            productId: params.mergeToProductId,
-            timestamp: new Date().toISOString(),
-            operatorId,
-            operatorName,
-            quantity,
-            location: location.trim(),
-            detailImageUri: params.detailImageUri,
-            overviewImageUri: params.overviewImageUri,
+        const existingProduct = await ProductStorage.getById(params.mergeToProductId);
+        if (existingProduct) {
+          await ProductStorage.update(params.mergeToProductId, {
+            quantity: existingProduct.quantity + quantity,
+            updatedAt: now,
           });
-          
-          // 3. 删除全景图（释放空间）
-          console.log('[AddProductLocation] Deleting overview images to save space...');
-          await historyRepo.deleteOverviewImage(historyId);
-          console.log('[AddProductLocation] Product merged successfully (Native)');
+          console.log('[AddProductLocation] Product merged successfully');
+        } else {
+          throw new Error('产品不存在');
         }
         
         console.log('[AddProductLocation] Merge completed');
       } else {
         // 新产品
         const productId = Date.now().toString();
-        const now = new Date().toISOString();
         
-        if (isWeb) {
-          // Web 平台：使用 IndexedDB/AsyncStorage
-          console.log('[AddProductLocation] Saving to IndexedDB/AsyncStorage (Web platform)...');
-          
-          const product: Product = {
-            id: productId,
-            detailImageUri: params.detailImageUri,
-            overviewImageUri: params.overviewImageUri,
-            sku: params.sku,
-            quantity,
-            storageLocation: location.trim(),
-            operatorName,
-            operatorId,
-            createdAt: now,
-            updatedAt: now,
-            isDeleted: false,
-          };
-          
-          await ProductStorage.add(product);
-          console.log('[AddProductLocation] Product saved successfully (Web)');
-        } else {
-          // 原生平台：使用 SQLite
-          const productRepo = new ProductRepository();
-          const historyRepo = new HistoryRepository();
-          
-          const product = {
-            id: productId,
-            detailImageUri: params.detailImageUri,
-            overviewImageUri: params.overviewImageUri,
-            sku: params.sku,
-            quantity,
-            storageLocation: location.trim(),
-            operatorName,
-            operatorId,
-          };
-          
-          // 1. 保存到 SQLite
-          console.log('[AddProductLocation] Saving to SQLite...');
-          await productRepo.create(product);
-          
-          // 2. 添加历史记录到 SQLite
-          const historyId = Date.now().toString() + '_history';
-          await historyRepo.create({
-            id: historyId,
-            productId,
-            timestamp: now,
-            operatorId,
-            operatorName,
-            quantity,
-            location: location.trim(),
-            detailImageUri: params.detailImageUri,
-            overviewImageUri: params.overviewImageUri,
-          });
-          
-          // 3. 删除全景图（释放空间）
-          console.log('[AddProductLocation] Deleting overview images to save space...');
-          await productRepo.deleteOverviewImage(productId);
-          await historyRepo.deleteOverviewImage(historyId);
-          console.log('[AddProductLocation] Product saved successfully (Native)');
-        }
+        console.log('[AddProductLocation] Creating new product...');
         
+        const product: Product = {
+          id: productId,
+          detailImageUri: params.detailImageUri,
+          overviewImageUri: params.overviewImageUri,
+          sku: params.sku,
+          quantity,
+          storageLocation: location.trim(),
+          operatorName,
+          operatorId,
+          createdAt: now,
+          updatedAt: now,
+          isDeleted: false,
+        };
+        
+        await ProductStorage.add(product);
         console.log('[AddProductLocation] Product created successfully');
       }
 

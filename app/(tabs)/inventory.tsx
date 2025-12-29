@@ -21,7 +21,6 @@ import { exportToDianxiaomiFormat } from "@/lib/excel-export";
 import { ProductAPI } from "@/lib/api-client";
 import { trpc } from "@/lib/trpc";
 import { AutoSync } from "@/lib/auto-sync";
-import { ProductRepository } from "@/lib/product-repository";
 import { ProductStorage } from "@/lib/storage";
 import type { Product } from "@/types/product";
 
@@ -53,20 +52,12 @@ export default function InventoryScreen() {
     try {
       const isWeb = Platform.OS === 'web';
       
-      if (isWeb) {
-        console.log('[InventoryScreen] Loading products from AsyncStorage (Web platform)...');
-        const data = await ProductStorage.getActive();
-        console.log('[InventoryScreen] Loaded', data.length, 'products');
-        setProducts(data);
-        setFilteredProducts(data);
-      } else {
-        console.log('[InventoryScreen] Loading products from SQLite...');
-        const productRepo = new ProductRepository();
-        const data = await productRepo.getActive();
-        console.log('[InventoryScreen] Loaded', data.length, 'products');
-        setProducts(data);
-        setFilteredProducts(data);
-      }
+      // 统一使用 ProductStorage（Web 使用 IndexedDB/AsyncStorage）
+      console.log('[InventoryScreen] Loading products from ProductStorage...');
+      const data = await ProductStorage.getActive();
+      console.log('[InventoryScreen] Loaded', data.length, 'products');
+      setProducts(data);
+      setFilteredProducts(data);
     } catch (error) {
       console.error('[InventoryScreen] Failed to load products:', error);
     } finally {
