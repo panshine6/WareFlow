@@ -10,6 +10,9 @@ import { batchCompareImages } from "./ai-vision";
 import { calculatePHashFromBase64, filterSimilarByPHash, PHASH_THRESHOLDS } from "./phash";
 import type { Product } from "@/types/product";
 
+// 放宽 pHash 阈值，避免漏掉相似产品
+const PHASH_THRESHOLD_FOR_DEDUP = 25; // 汉明距离阈值，越大越宽松
+
 /**
  * 将图片 URI 转换为 Base64（带重试机制）
  */
@@ -82,7 +85,7 @@ export interface DuplicateCheckResult {
 export async function performDuplicateCheck(
   detailImageUri: string,
   detailImageBase64?: string,
-  threshold: number = 90
+  threshold: number = 85 // 降低默认阈值，更容易找到相似产品
 ): Promise<DuplicateCheckResult> {
   const startTime = Date.now();
   
@@ -122,20 +125,24 @@ export async function performDuplicateCheck(
       };
     }
     
-    // 3. 计算新图片的 pHash
-    let newImageHash: string | null = null;
-    let pHashFilteredProducts: Product[] = allProducts;
+    // 3. 决定哪些产品需要进行 AI 对比
+    let productsToCompare: Product[] = [];
+    let pHashFilteredCount = 0;
     
     if (isWeb) {
       try {
         console.log("[Dedup] Calculating pHash for new image...");
-        newImageHash = await calculatePHashFromBase64(newImageBase64);
+        const newImageHash = await calculatePHashFromBase64(newImageBase64);
         console.log("[Dedup] New image pHash:", newImageHash);
         
-        // 4. 使用 pHash 预筛选
+        // 分离有 pHash 和没有 pHash 的产品
         const productsWithHash = allProducts.filter(p => p.imageHash);
-        console.log("[Dedup] Products with pHash:", productsWithHash.length, "/", allProducts.length);
+        const productsWithoutHash = allProducts.filter(p => !p.imageHash);
         
+        console.log("[Dedup] Products with pHash:", productsWithHash.length);
+        console.log("[Dedup] Products without pHash:", productsWithoutHash.length);
+        
+        // 对有 pHash 的产品进行预筛选
         if (productsWithHash.length > 0) {
           const existingHashes = productsWithHash.map(p => ({
             id: p.id,
@@ -145,56 +152,62 @@ export async function performDuplicateCheck(
           const similarByPHash = filterSimilarByPHash(
             newImageHash,
             existingHashes,
-            PHASH_THRESHOLDS.POSSIBLY_SIMILAR
+            PHASH_THRESHOLD_FOR_DEDUP // 使用更宽松的阈值
           );
           
-          console.log("[Dedup] pHash pre-filter results:", similarByPHash.length, "potentially similar");
+          console.log("[Dedup] pHash pre-filter results:", similarByPHash.length, "potentially similar (threshold:", PHASH_THRESHOLD_FOR_DEDUP, ")");
           similarByPHash.forEach(({ id, distance }) => {
             const product = allProducts.find(p => p.id === id);
             console.log(`  - ${product?.sku || id}: distance=${distance}`);
           });
           
-          // 只对 pHash 筛选出的产品进行 AI 对比
+          // 收集 pHash 筛选出的产品
           const filteredIds = new Set(similarByPHash.map(r => r.id));
-          // 同时包含没有 pHash 的产品（需要 AI 对比）
-          const productsWithoutHash = allProducts.filter(p => !p.imageHash);
+          const pHashFilteredProducts = allProducts.filter(p => filteredIds.has(p.id));
           
-          pHashFilteredProducts = [
-            ...allProducts.filter(p => filteredIds.has(p.id)),
-            ...productsWithoutHash,
-          ];
+          pHashFilteredCount = productsWithHash.length - pHashFilteredProducts.length;
           
-          console.log("[Dedup] Products to compare with AI:", pHashFilteredProducts.length);
+          // 合并：pHash 筛选出的 + 没有 pHash 的
+          productsToCompare = [...pHashFilteredProducts, ...productsWithoutHash];
+        } else {
+          // 没有任何产品有 pHash，全部进行 AI 对比
+          productsToCompare = allProducts;
         }
+        
+        console.log("[Dedup] Products to compare with AI:", productsToCompare.length);
       } catch (error) {
         console.warn("[Dedup] pHash calculation failed, falling back to full AI comparison:", error);
         // pHash 失败时回退到全量 AI 对比
+        productsToCompare = allProducts;
       }
+    } else {
+      // 非 Web 平台，全量 AI 对比
+      productsToCompare = allProducts;
     }
     
-    // 5. 如果 pHash 筛选后没有候选产品，直接返回
-    if (pHashFilteredProducts.length === 0) {
-      console.log("[Dedup] No candidates after pHash filter, no duplicates");
+    // 4. 如果没有候选产品，直接返回
+    if (productsToCompare.length === 0) {
+      console.log("[Dedup] No candidates to compare, no duplicates");
       return {
         hasDuplicates: false,
         duplicates: [],
         stats: {
           totalProducts: allProducts.length,
-          pHashFiltered: allProducts.length,
+          pHashFiltered: pHashFilteredCount,
           aiCompared: 0,
           durationMs: Date.now() - startTime,
         },
       };
     }
     
-    // 6. 转换候选产品图片为 Base64
+    // 5. 转换候选产品图片为 Base64
     console.log("[Dedup] Converting candidate product images to base64...");
     const existingImages: Array<{ id: string; base64: string }> = [];
     
-    for (let i = 0; i < pHashFilteredProducts.length; i++) {
-      const product = pHashFilteredProducts[i];
+    for (let i = 0; i < productsToCompare.length; i++) {
+      const product = productsToCompare[i];
       try {
-        console.log(`[Dedup] Converting image ${i + 1}/${pHashFilteredProducts.length} (${product.sku})...`);
+        console.log(`[Dedup] Converting image ${i + 1}/${productsToCompare.length} (${product.sku})...`);
         const base64 = await imageToBase64(product.detailImageUri);
         existingImages.push({
           id: product.id,
@@ -215,14 +228,14 @@ export async function performDuplicateCheck(
         duplicates: [],
         stats: {
           totalProducts: allProducts.length,
-          pHashFiltered: allProducts.length - pHashFilteredProducts.length,
+          pHashFiltered: pHashFilteredCount,
           aiCompared: 0,
           durationMs: Date.now() - startTime,
         },
       };
     }
     
-    // 7. 调用 AI 批量对比
+    // 6. 调用 AI 批量对比
     console.log("[Dedup] Calling AI batch compare API...");
     const similarResults = await batchCompareImages(
       newImageBase64,
@@ -238,14 +251,14 @@ export async function performDuplicateCheck(
         duplicates: [],
         stats: {
           totalProducts: allProducts.length,
-          pHashFiltered: allProducts.length - pHashFilteredProducts.length,
+          pHashFiltered: pHashFilteredCount,
           aiCompared: existingImages.length,
           durationMs: Date.now() - startTime,
         },
       };
     }
     
-    // 8. 构建结果
+    // 7. 构建结果
     const duplicates = similarResults.map((result) => {
       const product = allProducts.find((p) => p.id === result.id);
       if (!product) {
@@ -271,7 +284,7 @@ export async function performDuplicateCheck(
       duplicates,
       stats: {
         totalProducts: allProducts.length,
-        pHashFiltered: allProducts.length - pHashFilteredProducts.length,
+        pHashFiltered: pHashFilteredCount,
         aiCompared: existingImages.length,
         durationMs,
       },
