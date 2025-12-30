@@ -7,6 +7,7 @@ import {
   Platform,
   Pressable,
   RefreshControl,
+  ScrollView,
   StyleSheet,
   TextInput,
   View,
@@ -24,6 +25,12 @@ import { AutoSync } from "@/lib/auto-sync";
 import { ProductStorage } from "@/lib/storage";
 import type { Product } from "@/types/product";
 
+// 库存筛选类型
+type StockFilter = "all" | "in_stock" | "out_of_stock";
+
+// 排序类型
+type SortType = "time_desc" | "time_asc" | "quantity_desc" | "quantity_asc";
+
 /**
  * 库存列表页面
  */
@@ -36,13 +43,14 @@ export default function InventoryScreen() {
   const [filteredProducts, setFilteredProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
-  const [exporting, setExporting] = useState(false);
-  const [syncing, setSyncing] = useState(false);
-  const [lastSyncTime, setLastSyncTime] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
 
+  // 筛选和排序状态
+  const [stockFilter, setStockFilter] = useState<StockFilter>("all");
+  const [sortType, setSortType] = useState<SortType>("time_desc");
+  const [showSortOptions, setShowSortOptions] = useState(false);
+
   // 使用 tRPC mutations 和 queries
-  const uploadMutation = trpc.sync.upload.useMutation();
   const downloadQuery = trpc.sync.download.useQuery(undefined, {
     enabled: false, // 手动触发
   });
@@ -57,7 +65,6 @@ export default function InventoryScreen() {
       const data = await ProductStorage.getActive();
       console.log('[InventoryScreen] Loaded', data.length, 'products');
       setProducts(data);
-      setFilteredProducts(data);
     } catch (error) {
       console.error('[InventoryScreen] Failed to load products:', error);
     } finally {
@@ -77,16 +84,9 @@ export default function InventoryScreen() {
   useFocusEffect(
     useCallback(() => {
       loadProducts();
-      loadLastSyncTime();
       autoSyncOnEnter();
     }, [])
   );
-
-  // 加载最后同步时间
-  const loadLastSyncTime = async () => {
-    const time = await AutoSync.getLastSyncTime();
-    setLastSyncTime(time);
-  };
 
   // 进入页面时自动同步
   const autoSyncOnEnter = async () => {
@@ -95,7 +95,6 @@ export default function InventoryScreen() {
         downloadQuery,
         async () => {
           await loadProducts();
-          await loadLastSyncTime();
         },
         (error) => {
           console.log("自动同步失败（静默）", error);
@@ -117,7 +116,6 @@ export default function InventoryScreen() {
         downloadQuery,
         async () => {
           await loadProducts();
-          await loadLastSyncTime();
         },
         (error) => {
           console.log("后台同步失败（静默）", error);
@@ -137,7 +135,6 @@ export default function InventoryScreen() {
         downloadQuery,
         async () => {
           await loadProducts();
-          await loadLastSyncTime();
           Alert.alert("成功", "已同步最新数据");
         },
         (error) => {
@@ -151,93 +148,64 @@ export default function InventoryScreen() {
     }
   };
 
-  // 搜索功能
+  // 筛选和排序功能
   useEffect(() => {
-    if (searchQuery.trim() === "") {
-      setFilteredProducts(products);
-    } else {
+    let result = [...products];
+
+    // 搜索筛选
+    if (searchQuery.trim() !== "") {
       const query = searchQuery.toLowerCase();
-      const filtered = products.filter((p) =>
-        p.sku.toLowerCase().includes(query)
+      result = result.filter((p) =>
+        p.sku.toLowerCase().includes(query) ||
+        p.systemSku?.toLowerCase().includes(query) ||
+        p.storageLocation.toLowerCase().includes(query)
       );
-      setFilteredProducts(filtered);
-    }
-  }, [searchQuery, products]);
-
-  // 手动上传到云端
-  const handleUpload = async () => {
-    setSyncing(true);
-    try {
-      await AutoSync.uploadToCloud(
-        uploadMutation,
-        async () => {
-          await loadLastSyncTime();
-          Alert.alert("成功", "已上传到云端");
-        },
-        (error) => {
-          Alert.alert("上传失败", "请检查网络连接");
-        }
-      );
-    } catch (error: any) {
-      console.error("[Sync] Upload failed:", error);
-      Alert.alert("上传失败", "请检查网络连接");
-    } finally {
-      setSyncing(false);
-    }
-  };
-
-  // 手动从云端下载
-  const handleDownload = async () => {
-    Alert.confirm(
-      "确认下载",
-      "下载云端数据将覆盖本地数据，确定继续吗？",
-      async () => {
-        setSyncing(true);
-        try {
-          await AutoSync.downloadFromCloud(
-            downloadQuery,
-            async () => {
-              await loadProducts();
-              await loadLastSyncTime();
-              Alert.alert("成功", "已从云端下载数据");
-            },
-            (error) => {
-              Alert.alert("下载失败", "请检查网络连接");
-            }
-          );
-        } catch (error: any) {
-          console.error("[Sync] Download failed:", error);
-          Alert.alert("下载失败", "请检查网络连接");
-        } finally {
-          setSyncing(false);
-        }
-      }
-    );
-  };
-
-  // 导出 Excel
-  const handleExport = async () => {
-    if (products.length === 0) {
-      Alert.alert("提示", "暂无数据可导出");
-      return;
     }
 
-    setExporting(true);
+    // 库存状态筛选
+    if (stockFilter === "in_stock") {
+      result = result.filter((p) => p.quantity > 0);
+    } else if (stockFilter === "out_of_stock") {
+      result = result.filter((p) => p.quantity === 0);
+    }
 
-    try {
-      await exportToDianxiaomiFormat(products);
-      Alert.alert("成功", "数据已导出");
-    } catch (error) {
-      console.error("Export error:", error);
-      Alert.alert("导出失败", "请重试");
-    } finally {
-      setExporting(false);
+    // 排序
+    switch (sortType) {
+      case "time_desc":
+        result.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+        break;
+      case "time_asc":
+        result.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+        break;
+      case "quantity_desc":
+        result.sort((a, b) => b.quantity - a.quantity);
+        break;
+      case "quantity_asc":
+        result.sort((a, b) => a.quantity - b.quantity);
+        break;
+    }
+
+    setFilteredProducts(result);
+  }, [searchQuery, products, stockFilter, sortType]);
+
+  // 获取排序显示文本
+  const getSortText = () => {
+    switch (sortType) {
+      case "time_desc": return "时间 ↓";
+      case "time_asc": return "时间 ↑";
+      case "quantity_desc": return "数量 ↓";
+      case "quantity_asc": return "数量 ↑";
     }
   };
+
+  // 输入框样式
+  const inputBg = colorScheme === "dark" ? "rgba(255, 255, 255, 0.1)" : "rgba(0, 0, 0, 0.05)";
+  const inputColor = colorScheme === "dark" ? "#fff" : "#000";
+  const placeholderColor = colorScheme === "dark" ? "rgba(255, 255, 255, 0.4)" : "rgba(0, 0, 0, 0.4)";
 
   return (
     <ThemedView style={styles.container}>
-      {/* 顶部搜索和导出 */}
+      {/* 顶部搜索和筛选 */}
       <View
         style={[
           styles.header,
@@ -256,62 +224,172 @@ export default function InventoryScreen() {
           style={[
             styles.searchInput,
             {
-              backgroundColor:
-                colorScheme === "dark"
-                  ? "rgba(255, 255, 255, 0.1)"
-                  : "rgba(0, 0, 0, 0.05)",
-              color: colorScheme === "dark" ? "#fff" : "#000",
+              backgroundColor: inputBg,
+              color: inputColor,
             },
           ]}
           value={searchQuery}
           onChangeText={setSearchQuery}
-          placeholder="搜索 SKU..."
-          placeholderTextColor={
-            colorScheme === "dark"
-              ? "rgba(255, 255, 255, 0.4)"
-              : "rgba(0, 0, 0, 0.4)"
-          }
+          placeholder="搜索 SKU 或位置..."
+          placeholderTextColor={placeholderColor}
         />
 
-        {/* 导出按钮 */}
-        <Pressable
-          style={[styles.exportButton, exporting && styles.buttonDisabled]}
-          onPress={handleExport}
-          disabled={exporting}
-        >
-          <ThemedText style={styles.exportButtonText}>
-            {exporting ? "导出中..." : "📊 导出 Excel"}
-          </ThemedText>
-        </Pressable>
-
-        {/* 数据同步区域 */}
-        <View style={styles.syncContainer}>
-            <View style={styles.syncButtonsRow}>
-              <Pressable
-                style={[styles.syncButton, styles.uploadButton, syncing && styles.buttonDisabled]}
-                onPress={handleUpload}
-                disabled={syncing}
+        {/* 筛选栏 */}
+        <View style={styles.filterContainer}>
+          {/* 库存状态筛选 */}
+          <View style={styles.stockFilterContainer}>
+            <Pressable
+              style={[
+                styles.filterChip,
+                stockFilter === "all" && styles.filterChipActive,
+              ]}
+              onPress={() => setStockFilter("all")}
+            >
+              <ThemedText
+                style={[
+                  styles.filterChipText,
+                  stockFilter === "all" && styles.filterChipTextActive,
+                ]}
               >
-                <ThemedText style={styles.syncButtonText}>
-                  {syncing ? "同步中..." : "⬆️ 上传到云端"}
-                </ThemedText>
-              </Pressable>
-              
-              <Pressable
-                style={[styles.syncButton, styles.downloadButton, syncing && styles.buttonDisabled]}
-                onPress={handleDownload}
-                disabled={syncing}
+                全部
+              </ThemedText>
+            </Pressable>
+            <Pressable
+              style={[
+                styles.filterChip,
+                stockFilter === "in_stock" && styles.filterChipActive,
+              ]}
+              onPress={() => setStockFilter("in_stock")}
+            >
+              <ThemedText
+                style={[
+                  styles.filterChipText,
+                  stockFilter === "in_stock" && styles.filterChipTextActive,
+                ]}
               >
-                <ThemedText style={styles.syncButtonText}>
-                  {syncing ? "同步中..." : "⬇️ 从云端下载"}
-                </ThemedText>
-              </Pressable>
-            </View>
-            {/* 最后同步时间 */}
-            <ThemedText style={styles.syncTimeText}>
-              最后同步：{AutoSync.formatSyncTime(lastSyncTime)}
-            </ThemedText>
+                有库存
+              </ThemedText>
+            </Pressable>
+            <Pressable
+              style={[
+                styles.filterChip,
+                stockFilter === "out_of_stock" && styles.filterChipActive,
+              ]}
+              onPress={() => setStockFilter("out_of_stock")}
+            >
+              <ThemedText
+                style={[
+                  styles.filterChipText,
+                  stockFilter === "out_of_stock" && styles.filterChipTextActive,
+                ]}
+              >
+                无库存
+              </ThemedText>
+            </Pressable>
           </View>
+
+          {/* 排序按钮 */}
+          <Pressable
+            style={styles.sortButton}
+            onPress={() => setShowSortOptions(!showSortOptions)}
+          >
+            <ThemedText style={styles.sortButtonText}>
+              排序: {getSortText()}
+            </ThemedText>
+          </Pressable>
+        </View>
+
+        {/* 排序选项 */}
+        {showSortOptions && (
+          <View style={styles.sortOptionsContainer}>
+            <Pressable
+              style={[
+                styles.sortOption,
+                sortType === "time_desc" && styles.sortOptionActive,
+              ]}
+              onPress={() => {
+                setSortType("time_desc");
+                setShowSortOptions(false);
+              }}
+            >
+              <ThemedText
+                style={[
+                  styles.sortOptionText,
+                  sortType === "time_desc" && styles.sortOptionTextActive,
+                ]}
+              >
+                时间最新
+              </ThemedText>
+            </Pressable>
+            <Pressable
+              style={[
+                styles.sortOption,
+                sortType === "time_asc" && styles.sortOptionActive,
+              ]}
+              onPress={() => {
+                setSortType("time_asc");
+                setShowSortOptions(false);
+              }}
+            >
+              <ThemedText
+                style={[
+                  styles.sortOptionText,
+                  sortType === "time_asc" && styles.sortOptionTextActive,
+                ]}
+              >
+                时间最早
+              </ThemedText>
+            </Pressable>
+            <Pressable
+              style={[
+                styles.sortOption,
+                sortType === "quantity_desc" && styles.sortOptionActive,
+              ]}
+              onPress={() => {
+                setSortType("quantity_desc");
+                setShowSortOptions(false);
+              }}
+            >
+              <ThemedText
+                style={[
+                  styles.sortOptionText,
+                  sortType === "quantity_desc" && styles.sortOptionTextActive,
+                ]}
+              >
+                数量最多
+              </ThemedText>
+            </Pressable>
+            <Pressable
+              style={[
+                styles.sortOption,
+                sortType === "quantity_asc" && styles.sortOptionActive,
+              ]}
+              onPress={() => {
+                setSortType("quantity_asc");
+                setShowSortOptions(false);
+              }}
+            >
+              <ThemedText
+                style={[
+                  styles.sortOptionText,
+                  sortType === "quantity_asc" && styles.sortOptionTextActive,
+                ]}
+              >
+                数量最少
+              </ThemedText>
+            </Pressable>
+          </View>
+        )}
+
+        {/* 统计信息 */}
+        <View style={styles.statsRow}>
+          <ThemedText style={styles.statsText}>
+            共 {filteredProducts.length} 个产品
+          </ThemedText>
+          <ThemedText style={styles.statsText}>
+            总库存: {filteredProducts.reduce((sum, p) => sum + p.quantity, 0)}
+          </ThemedText>
+        </View>
       </View>
 
       {/* 产品列表 */}
@@ -323,7 +401,7 @@ export default function InventoryScreen() {
         ) : filteredProducts.length === 0 ? (
           <View style={styles.emptyContainer}>
             <ThemedText style={styles.emptyText}>
-              {searchQuery ? "未找到匹配的产品" : "暂无库存记录"}
+              {searchQuery || stockFilter !== "all" ? "未找到匹配的产品" : "暂无库存记录"}
             </ThemedText>
           </View>
         ) : (
@@ -367,6 +445,9 @@ export default function InventoryScreen() {
                   <ThemedText style={styles.productDetail}>
                     位置：{item.storageLocation}
                   </ThemedText>
+                  <ThemedText style={styles.productTime}>
+                    {new Date(item.createdAt).toLocaleString("zh-CN")}
+                  </ThemedText>
                 </View>
               </Pressable>
             )}
@@ -390,33 +471,88 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   header: {
-    paddingBottom: 16,
+    paddingBottom: 12,
   },
   title: {
     marginBottom: 16,
   },
   searchInput: {
-    height: 48,
+    height: 44,
     borderRadius: 12,
     paddingHorizontal: 16,
     fontSize: 16,
     lineHeight: 22,
     marginBottom: 12,
   },
-  exportButton: {
-    height: 48,
-    backgroundColor: "#34C759",
-    borderRadius: 12,
-    justifyContent: "center",
+  filterContainer: {
+    flexDirection: "row",
+    justifyContent: "space-between",
     alignItems: "center",
+    marginBottom: 8,
   },
-  exportButtonText: {
+  stockFilterContainer: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  filterChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    backgroundColor: "rgba(0, 0, 0, 0.05)",
+  },
+  filterChipActive: {
+    backgroundColor: "#007AFF",
+  },
+  filterChipText: {
+    fontSize: 13,
+    fontWeight: "500",
+  },
+  filterChipTextActive: {
     color: "#fff",
-    fontSize: 16,
-    lineHeight: 22,
-    fontWeight: "600",
   },
-  buttonDisabled: {
+  sortButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+    backgroundColor: "rgba(0, 0, 0, 0.05)",
+  },
+  sortButtonText: {
+    fontSize: 13,
+    fontWeight: "500",
+  },
+  sortOptionsContainer: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    marginBottom: 8,
+    padding: 12,
+    backgroundColor: "rgba(0, 0, 0, 0.03)",
+    borderRadius: 12,
+  },
+  sortOption: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    backgroundColor: "rgba(0, 0, 0, 0.05)",
+  },
+  sortOptionActive: {
+    backgroundColor: "#007AFF",
+  },
+  sortOptionText: {
+    fontSize: 13,
+  },
+  sortOptionTextActive: {
+    color: "#fff",
+  },
+  statsRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    paddingVertical: 8,
+    borderTopWidth: 1,
+    borderTopColor: "rgba(0, 0, 0, 0.1)",
+  },
+  statsText: {
+    fontSize: 13,
     opacity: 0.6,
   },
   listContainer: {
@@ -471,6 +607,12 @@ const styles = StyleSheet.create({
     opacity: 0.7,
     marginBottom: 2,
   },
+  productTime: {
+    fontSize: 12,
+    lineHeight: 16,
+    opacity: 0.5,
+    marginTop: 4,
+  },
   // 库存为0的产品样式
   productCardEmpty: {
     backgroundColor: "rgba(142, 142, 147, 0.15)",
@@ -501,65 +643,6 @@ const styles = StyleSheet.create({
   emptyBadgeText: {
     color: "#fff",
     fontSize: 10,
-    fontWeight: "700",
-  },
-  syncContainer: {
-    marginTop: 16,
-    marginBottom: 8,
-  },
-  syncTitle: {
-    marginBottom: 12,
-    fontSize: 16,
-    fontWeight: "600",
-  },
-  syncStatusContainer: {
-    marginBottom: 12,
-  },
-  syncStatusRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginBottom: 6,
-  },
-  syncStatusText: {
-    fontSize: 14,
-    opacity: 0.8,
-  },
-  syncTimeText: {
-    fontSize: 12,
-    opacity: 0.6,
-    marginTop: 8,
-    textAlign: "center",
-  },
-  syncWarningText: {
-    fontSize: 12,
-    color: "#FF9500",
-    marginTop: 6,
-  },
-  syncButtonsRow: {
-    flexDirection: "row",
-    gap: 12,
-  },
-  syncButton: {
-    flex: 1,
-    height: 50,
-    borderRadius: 12,
-    justifyContent: "center",
-    alignItems: "center",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  uploadButton: {
-    backgroundColor: "#007AFF",
-  },
-  downloadButton: {
-    backgroundColor: "#5856D6",
-  },
-  syncButtonText: {
-    color: "#fff",
-    fontSize: 15,
     fontWeight: "700",
   },
 });

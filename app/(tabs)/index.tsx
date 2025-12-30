@@ -4,6 +4,7 @@ import {
   ActivityIndicator,
   FlatList,
   Image,
+  Modal,
   Platform,
   Pressable,
   RefreshControl,
@@ -22,7 +23,7 @@ import { ProductAPI } from "@/lib/api-client";
 import { ProductStorage } from "@/lib/storage";
 import { AutoSync } from "@/lib/auto-sync";
 import { trpc } from "@/lib/trpc";
-import { APP_VERSION, APP_BUILD } from "@/lib/version";
+import { APP_VERSION, APP_BUILD, APP_AUTHOR } from "@/lib/version";
 import type { Product } from "@/types/product";
 
 export default function HomeScreen() {
@@ -33,6 +34,10 @@ export default function HomeScreen() {
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+
+  // 弹窗状态
+  const [showSettingsModal, setShowSettingsModal] = useState(false);
+  const [showDataModal, setShowDataModal] = useState(false);
 
   // 使用 tRPC 同步
   const downloadQuery = trpc.sync.download.useQuery(undefined, {
@@ -112,6 +117,7 @@ export default function HomeScreen() {
   // 登出
   const handleLogout = async () => {
     await UserStorage.logout();
+    setShowSettingsModal(false);
     router.replace("/login");
   };
 
@@ -123,28 +129,20 @@ export default function HomeScreen() {
   }).length;
 
   const totalQuantity = products.reduce((sum, p) => sum + p.quantity, 0);
+  const totalSKU = products.length;
 
-  // 跳过登录检查 - 直接显示主界面
-  // 注释：如果将来需要登录功能，取消下面的注释
-  /*
-  // 如果正在加载认证状态，显示加载指示器
-  if (authLoading) {
-    return (
-      <ThemedView style={styles.loadingContainer}>
-        <ActivityIndicator size="large" />
-      </ThemedView>
-    );
-  }
+  // 获取最近入库记录（按时间倒序，取前10条）
+  const recentProducts = [...products]
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+    .slice(0, 10);
 
-  // 如果未登录，显示欢迎页面
-  if (!isAuthenticated) {
-    return <WelcomeScreen />;
-  }
-  */
+  // 背景色
+  const modalBg = colorScheme === "dark" ? "#1c1c1e" : "#fff";
+  const overlayBg = "rgba(0, 0, 0, 0.5)";
 
   return (
     <ThemedView style={styles.container}>
-      {/* 顶部统计卡片 */}
+      {/* 顶部区域 */}
       <View
         style={[
           styles.header,
@@ -154,28 +152,20 @@ export default function HomeScreen() {
           },
         ]}
       >
-         {/* 顶部标题和用户名 */}
-      <View style={styles.titleRow}>
-        <ThemedText type="title" style={styles.title}>
-          Ladybuty饰品库存管理系统
-        </ThemedText>
-        {currentUser && (
-          <View style={styles.userContainer}>
-            <ThemedText style={styles.userName}>
-              {currentUser.name}
-            </ThemedText>
-            {currentUser.isAdmin && (
-              <Pressable onPress={() => router.push("/user-management" as any)} style={styles.manageButton}>
-                <ThemedText style={styles.manageButtonText}>管理</ThemedText>
-              </Pressable>
-            )}
-            <Pressable onPress={handleLogout} style={styles.logoutButton}>
-              <ThemedText style={styles.logoutButtonText}>登出</ThemedText>
-            </Pressable>
-          </View>
-        )}
-      </View>
+        {/* 顶部标题和设置按钮 */}
+        <View style={styles.titleRow}>
+          <ThemedText type="title" style={styles.title}>
+            WareFlow
+          </ThemedText>
+          <Pressable 
+            onPress={() => setShowSettingsModal(true)} 
+            style={styles.settingsButton}
+          >
+            <ThemedText style={styles.settingsButtonText}>⚙️</ThemedText>
+          </Pressable>
+        </View>
 
+        {/* 仓库状态区 - 三个卡片 */}
         <View style={styles.statsContainer}>
           <View style={styles.statCard}>
             <ThemedText type="subtitle" style={styles.statNumber}>
@@ -190,24 +180,30 @@ export default function HomeScreen() {
             </ThemedText>
             <ThemedText style={styles.statLabel}>总库存</ThemedText>
           </View>
+
+          <View style={styles.statCard}>
+            <ThemedText type="subtitle" style={styles.statNumber}>
+              {totalSKU}
+            </ThemedText>
+            <ThemedText style={styles.statLabel}>总SKU数</ThemedText>
+          </View>
         </View>
 
-        {/* 添加产品按钮 */}
+        {/* 数据安全按钮 */}
         <Pressable
           style={({ pressed }) => [
-            styles.addButton,
-            {
-              backgroundColor: Colors[colorScheme ?? "light"].tint,
-              opacity: pressed ? 0.8 : 1,
-            },
+            styles.dataSecurityButton,
+            { opacity: pressed ? 0.8 : 1 },
           ]}
-          onPress={() => router.push("/add-product-quick" as any)}
+          onPress={() => setShowDataModal(true)}
         >
-          <View style={styles.addButtonContent}>
-            <View style={styles.addButtonTextContainer}>
-              <ThemedText style={styles.addButtonText}>添加产品</ThemedText>
-              <ThemedText style={styles.addButtonHint}>点击开始录入</ThemedText>
+          <View style={styles.dataSecurityContent}>
+            <ThemedText style={styles.dataSecurityIcon}>🔐</ThemedText>
+            <View style={styles.dataSecurityTextContainer}>
+              <ThemedText style={styles.dataSecurityTitle}>数据安全</ThemedText>
+              <ThemedText style={styles.dataSecurityHint}>导出、备份、云同步、回收站</ThemedText>
             </View>
+            <ThemedText style={styles.dataSecurityArrow}>›</ThemedText>
           </View>
         </Pressable>
       </View>
@@ -222,34 +218,49 @@ export default function HomeScreen() {
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" />
           </View>
-        ) : products.length === 0 ? (
+        ) : recentProducts.length === 0 ? (
           <View style={styles.emptyContainer}>
             <ThemedText style={styles.emptyText}>暂无入库记录</ThemedText>
             <ThemedText style={styles.emptyHint}>
-              点击上方按钮开始添加产品
+              点击底部「入库」开始添加产品
             </ThemedText>
           </View>
         ) : (
           <FlatList
-            data={products}
+            data={recentProducts}
             keyExtractor={(item) => item.id}
             renderItem={({ item }) => (
               <Pressable
                 style={({ pressed }) => [
                   styles.productCard,
+                  item.quantity === 0 && styles.productCardEmpty,
                   { opacity: pressed ? 0.7 : 1 },
                 ]}
                 onPress={() => router.push({ pathname: "/product-detail" as any, params: { id: item.id } })}
               >
+                {item.quantity === 0 && (
+                  <View style={styles.emptyBadge}>
+                    <ThemedText style={styles.emptyBadgeText}>库存为0</ThemedText>
+                  </View>
+                )}
                 <Image
                   source={{ uri: item.detailImageUri }}
-                  style={styles.productImage}
+                  style={[
+                    styles.productImage,
+                    item.quantity === 0 && styles.productImageEmpty
+                  ]}
                 />
                 <View style={styles.productInfo}>
-                  <ThemedText type="defaultSemiBold" style={styles.productSku}>
+                  <ThemedText type="defaultSemiBold" style={[
+                    styles.productSku,
+                    item.quantity === 0 && styles.productSkuEmpty
+                  ]}>
                     {item.sku}
                   </ThemedText>
-                  <ThemedText style={styles.productDetail}>
+                  <ThemedText style={[
+                    styles.productDetail,
+                    item.quantity === 0 && styles.productDetailEmpty
+                  ]}>
                     数量：{item.quantity} | 位置：{item.storageLocation}
                   </ThemedText>
                   <ThemedText style={styles.productTime}>
@@ -266,34 +277,151 @@ export default function HomeScreen() {
         )}
       </View>
 
-      {/* 底部按钮区 */}
-      <View style={styles.bottomActions}>
+      {/* 设置底部弹窗 */}
+      <Modal
+        visible={showSettingsModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowSettingsModal(false)}
+      >
         <Pressable 
-          style={styles.actionButton}
-          onPress={() => router.push("/recycle-bin" as any)}
+          style={[styles.modalOverlay, { backgroundColor: overlayBg }]}
+          onPress={() => setShowSettingsModal(false)}
         >
-          <ThemedText style={styles.actionButtonText}>🗑️ 回收站</ThemedText>
-        </Pressable>
-        <Pressable 
-          style={styles.actionButton}
-          onPress={() => router.push("/backup" as any)}
-        >
-          <ThemedText style={styles.actionButtonText}>📦 数据备份</ThemedText>
-        </Pressable>
-        <Pressable 
-          style={styles.actionButton}
-          onPress={() => router.push("/feedback" as any)}
-        >
-          <ThemedText style={styles.actionButtonText}>💬 反馈与建议</ThemedText>
-        </Pressable>
-      </View>
+          <View style={[styles.bottomSheet, { backgroundColor: modalBg }]}>
+            <View style={styles.bottomSheetHandle} />
+            <ThemedText style={styles.bottomSheetTitle}>设置</ThemedText>
+            
+            {/* 当前用户信息 */}
+            {currentUser && (
+              <View style={styles.userInfoSection}>
+                <ThemedText style={styles.userInfoLabel}>当前用户</ThemedText>
+                <ThemedText style={styles.userInfoName}>{currentUser.name}</ThemedText>
+              </View>
+            )}
 
-      {/* 版权标识 */}
-      <View style={styles.copyrightContainer}>
-        <ThemedText style={styles.copyrightText}>作者：潘章杰（By Manus）</ThemedText>
-        <ThemedText style={styles.versionText}>版本：v{APP_VERSION}</ThemedText>
-        <ThemedText style={styles.versionText}>Build: {APP_BUILD}</ThemedText>
-      </View>
+            {/* 设置选项 */}
+            {currentUser?.isAdmin && (
+              <Pressable 
+                style={styles.bottomSheetItem}
+                onPress={() => {
+                  setShowSettingsModal(false);
+                  router.push("/user-management" as any);
+                }}
+              >
+                <ThemedText style={styles.bottomSheetItemIcon}>👥</ThemedText>
+                <ThemedText style={styles.bottomSheetItemText}>多用户管理</ThemedText>
+                <ThemedText style={styles.bottomSheetItemArrow}>›</ThemedText>
+              </Pressable>
+            )}
+
+            <Pressable 
+              style={styles.bottomSheetItem}
+              onPress={() => {
+                setShowSettingsModal(false);
+                router.push("/feedback" as any);
+              }}
+            >
+              <ThemedText style={styles.bottomSheetItemIcon}>💬</ThemedText>
+              <ThemedText style={styles.bottomSheetItemText}>反馈与建议</ThemedText>
+              <ThemedText style={styles.bottomSheetItemArrow}>›</ThemedText>
+            </Pressable>
+
+            <Pressable 
+              style={[styles.bottomSheetItem, styles.logoutItem]}
+              onPress={handleLogout}
+            >
+              <ThemedText style={styles.bottomSheetItemIcon}>🚪</ThemedText>
+              <ThemedText style={[styles.bottomSheetItemText, styles.logoutText]}>登出</ThemedText>
+            </Pressable>
+
+            {/* 版本信息 */}
+            <View style={styles.versionSection}>
+              <ThemedText style={styles.versionText}>作者：{APP_AUTHOR}</ThemedText>
+              <ThemedText style={styles.versionText}>版本：v{APP_VERSION}</ThemedText>
+              <ThemedText style={styles.versionText}>Build: {APP_BUILD}</ThemedText>
+            </View>
+          </View>
+        </Pressable>
+      </Modal>
+
+      {/* 数据安全底部弹窗 */}
+      <Modal
+        visible={showDataModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowDataModal(false)}
+      >
+        <Pressable 
+          style={[styles.modalOverlay, { backgroundColor: overlayBg }]}
+          onPress={() => setShowDataModal(false)}
+        >
+          <View style={[styles.bottomSheet, { backgroundColor: modalBg }]}>
+            <View style={styles.bottomSheetHandle} />
+            <ThemedText style={styles.bottomSheetTitle}>数据安全</ThemedText>
+
+            <Pressable 
+              style={styles.bottomSheetItem}
+              onPress={() => {
+                setShowDataModal(false);
+                router.push("/(tabs)/inventory" as any);
+              }}
+            >
+              <ThemedText style={styles.bottomSheetItemIcon}>📊</ThemedText>
+              <ThemedText style={styles.bottomSheetItemText}>导出 Excel</ThemedText>
+              <ThemedText style={styles.bottomSheetItemArrow}>›</ThemedText>
+            </Pressable>
+
+            <Pressable 
+              style={styles.bottomSheetItem}
+              onPress={() => {
+                setShowDataModal(false);
+                router.push("/(tabs)/inventory" as any);
+              }}
+            >
+              <ThemedText style={styles.bottomSheetItemIcon}>⬆️</ThemedText>
+              <ThemedText style={styles.bottomSheetItemText}>上传到云端</ThemedText>
+              <ThemedText style={styles.bottomSheetItemArrow}>›</ThemedText>
+            </Pressable>
+
+            <Pressable 
+              style={styles.bottomSheetItem}
+              onPress={() => {
+                setShowDataModal(false);
+                router.push("/(tabs)/inventory" as any);
+              }}
+            >
+              <ThemedText style={styles.bottomSheetItemIcon}>⬇️</ThemedText>
+              <ThemedText style={styles.bottomSheetItemText}>从云端下载</ThemedText>
+              <ThemedText style={styles.bottomSheetItemArrow}>›</ThemedText>
+            </Pressable>
+
+            <Pressable 
+              style={styles.bottomSheetItem}
+              onPress={() => {
+                setShowDataModal(false);
+                router.push("/recycle-bin" as any);
+              }}
+            >
+              <ThemedText style={styles.bottomSheetItemIcon}>🗑️</ThemedText>
+              <ThemedText style={styles.bottomSheetItemText}>回收站</ThemedText>
+              <ThemedText style={styles.bottomSheetItemArrow}>›</ThemedText>
+            </Pressable>
+
+            <Pressable 
+              style={styles.bottomSheetItem}
+              onPress={() => {
+                setShowDataModal(false);
+                router.push("/backup" as any);
+              }}
+            >
+              <ThemedText style={styles.bottomSheetItemIcon}>📦</ThemedText>
+              <ThemedText style={styles.bottomSheetItemText}>数据备份</ThemedText>
+              <ThemedText style={styles.bottomSheetItemArrow}>›</ThemedText>
+            </Pressable>
+          </View>
+        </Pressable>
+      </Modal>
     </ThemedView>
   );
 }
@@ -308,7 +436,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   header: {
-    paddingBottom: 24,
+    paddingBottom: 16,
   },
   titleRow: {
     flexDirection: "row",
@@ -317,96 +445,75 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   title: {
-    flex: 1,
+    fontSize: 28,
+    fontWeight: "700",
   },
-  userContainer: {
-    flexDirection: "row",
+  settingsButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: "rgba(0, 0, 0, 0.05)",
+    justifyContent: "center",
     alignItems: "center",
-    gap: 12,
   },
-  userName: {
-    fontSize: 14,
-    lineHeight: 20,
-    opacity: 0.8,
-    fontWeight: "500",
-  },
-  manageButton: {
-    paddingVertical: 4,
-    paddingHorizontal: 12,
-    borderRadius: 6,
-    backgroundColor: "rgba(0, 122, 255, 0.1)",
-  },
-  manageButtonText: {
-    color: "#007AFF",
-    fontSize: 12,
-    lineHeight: 16,
-    fontWeight: "600",
-  },
-  logoutButton: {
-    paddingVertical: 4,
-    paddingHorizontal: 12,
-    borderRadius: 6,
-    backgroundColor: "rgba(255, 59, 48, 0.1)",
-  },
-  logoutButtonText: {
-    color: "#FF3B30",
-    fontSize: 12,
-    lineHeight: 16,
-    fontWeight: "600",
+  settingsButtonText: {
+    fontSize: 22,
   },
   statsContainer: {
     flexDirection: "row",
-    gap: 12,
-    marginBottom: 20,
+    gap: 10,
+    marginBottom: 16,
   },
   statCard: {
     flex: 1,
     backgroundColor: "rgba(0, 122, 255, 0.1)",
     borderRadius: 12,
-    padding: 16,
+    padding: 12,
     alignItems: "center",
   },
   statNumber: {
-    fontSize: 32,
-    lineHeight: 40,
+    fontSize: 24,
+    lineHeight: 32,
     color: "#007AFF",
+    fontWeight: "700",
   },
   statLabel: {
-    fontSize: 14,
-    lineHeight: 20,
+    fontSize: 12,
+    lineHeight: 16,
     marginTop: 4,
     opacity: 0.7,
   },
-  addButton: {
-    height: 72,
-    borderRadius: 16,
-    justifyContent: "center",
-    alignItems: "center",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+  dataSecurityButton: {
+    backgroundColor: "rgba(52, 199, 89, 0.1)",
+    borderRadius: 12,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: "rgba(52, 199, 89, 0.2)",
   },
-  addButtonContent: {
+  dataSecurityContent: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
   },
-  addButtonTextContainer: {
-    alignItems: "center",
+  dataSecurityIcon: {
+    fontSize: 28,
+    marginRight: 12,
   },
-  addButtonText: {
-    color: "#fff",
-    fontSize: 18,
-    lineHeight: 24,
-    fontWeight: "700",
+  dataSecurityTextContainer: {
+    flex: 1,
   },
-  addButtonHint: {
-    color: "rgba(255, 255, 255, 0.8)",
-    fontSize: 13,
-    lineHeight: 18,
+  dataSecurityTitle: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#34C759",
+  },
+  dataSecurityHint: {
+    fontSize: 12,
+    opacity: 0.7,
     marginTop: 2,
+  },
+  dataSecurityArrow: {
+    fontSize: 24,
+    opacity: 0.5,
   },
   listContainer: {
     flex: 1,
@@ -442,11 +549,34 @@ const styles = StyleSheet.create({
     padding: 12,
     marginBottom: 12,
   },
+  productCardEmpty: {
+    backgroundColor: "rgba(142, 142, 147, 0.15)",
+    borderWidth: 1,
+    borderColor: "rgba(142, 142, 147, 0.3)",
+  },
+  emptyBadge: {
+    position: "absolute",
+    top: 8,
+    right: 8,
+    backgroundColor: "#FF3B30",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 4,
+    zIndex: 1,
+  },
+  emptyBadgeText: {
+    color: "#fff",
+    fontSize: 10,
+    fontWeight: "700",
+  },
   productImage: {
     width: 80,
     height: 80,
     borderRadius: 8,
     backgroundColor: "#f0f0f0",
+  },
+  productImageEmpty: {
+    opacity: 0.5,
   },
   productInfo: {
     flex: 1,
@@ -458,51 +588,102 @@ const styles = StyleSheet.create({
     lineHeight: 22,
     marginBottom: 4,
   },
+  productSkuEmpty: {
+    opacity: 0.6,
+  },
   productDetail: {
     fontSize: 14,
     lineHeight: 20,
     opacity: 0.7,
     marginBottom: 4,
   },
+  productDetailEmpty: {
+    color: "#FF3B30",
+    opacity: 1,
+    fontWeight: "600",
+  },
   productTime: {
     fontSize: 12,
     lineHeight: 16,
     opacity: 0.5,
   },
-  bottomActions: {
-    flexDirection: "row",
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    gap: 12,
-  },
-  actionButton: {
+  // 底部弹窗样式
+  modalOverlay: {
     flex: 1,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    backgroundColor: "rgba(0, 0, 0, 0.05)",
+    justifyContent: "flex-end",
+  },
+  bottomSheet: {
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingHorizontal: 20,
+    paddingBottom: 40,
+    maxHeight: "80%",
+  },
+  bottomSheetHandle: {
+    width: 40,
+    height: 4,
+    backgroundColor: "rgba(0, 0, 0, 0.2)",
+    borderRadius: 2,
+    alignSelf: "center",
+    marginTop: 12,
+    marginBottom: 16,
+  },
+  bottomSheetTitle: {
+    fontSize: 20,
+    fontWeight: "700",
+    textAlign: "center",
+    marginBottom: 20,
+  },
+  userInfoSection: {
+    backgroundColor: "rgba(0, 122, 255, 0.1)",
     borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
     alignItems: "center",
   },
-  actionButtonText: {
-    fontSize: 14,
-    lineHeight: 20,
-    fontWeight: "500",
-    opacity: 0.7,
-  },
-  copyrightContainer: {
-    paddingHorizontal: 16,
-    paddingBottom: 16,
-    alignItems: "center",
-  },
-  copyrightText: {
+  userInfoLabel: {
     fontSize: 12,
-    lineHeight: 18,
-    opacity: 0.5,
+    opacity: 0.6,
+    marginBottom: 4,
+  },
+  userInfoName: {
+    fontSize: 18,
+    fontWeight: "600",
+    color: "#007AFF",
+  },
+  bottomSheetItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(0, 0, 0, 0.1)",
+  },
+  bottomSheetItemIcon: {
+    fontSize: 20,
+    marginRight: 12,
+  },
+  bottomSheetItemText: {
+    flex: 1,
+    fontSize: 16,
+  },
+  bottomSheetItemArrow: {
+    fontSize: 20,
+    opacity: 0.4,
+  },
+  logoutItem: {
+    borderBottomWidth: 0,
+    marginTop: 8,
+  },
+  logoutText: {
+    color: "#FF3B30",
+  },
+  versionSection: {
+    marginTop: 24,
+    alignItems: "center",
   },
   versionText: {
-    fontSize: 11,
-    lineHeight: 16,
-    opacity: 0.4,
-    marginTop: 2,
+    fontSize: 12,
+    opacity: 0.5,
+    marginTop: 4,
   },
 });
