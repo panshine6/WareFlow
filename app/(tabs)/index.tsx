@@ -161,7 +161,7 @@ export default function HomeScreen() {
             onPress={() => setShowSettingsModal(true)} 
             style={styles.settingsButton}
           >
-            <ThemedText style={styles.settingsButtonText}>⚙️</ThemedText>
+            <ThemedText style={styles.settingsButtonText}>设置</ThemedText>
           </Pressable>
         </View>
 
@@ -449,15 +449,16 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
   settingsButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 10,
     backgroundColor: "rgba(0, 0, 0, 0.05)",
     justifyContent: "center",
     alignItems: "center",
   },
   settingsButtonText: {
-    fontSize: 22,
+    fontSize: 16,
+    fontWeight: "600",
   },
   statsContainer: {
     flexDirection: "row",
