@@ -4,6 +4,7 @@ import {
   ActivityIndicator,
   FlatList,
   Image,
+  Modal,
   Platform,
   Pressable,
   ScrollView,
@@ -57,6 +58,9 @@ export default function OutboundScreen() {
 
   // 操作状态
   const [processing, setProcessing] = useState(false);
+
+  // 确认弹窗状态
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
 
   // 当前用户
   const [currentUser, setCurrentUser] = useState<{ id: number; name: string } | null>(null);
@@ -164,8 +168,8 @@ export default function OutboundScreen() {
     );
   };
 
-  // 执行出库
-  const handleOutbound = async () => {
+  // 点击出库按钮，显示确认弹窗
+  const handleOutboundClick = () => {
     const selectedProducts = searchResults.filter((p) => p.isSelected && p.selectedQuantity > 0);
 
     if (selectedProducts.length === 0) {
@@ -178,10 +182,18 @@ export default function OutboundScreen() {
       return;
     }
 
-    Alert.confirm(
-      "确认出库",
-      `确定要出库 ${selectedProducts.length} 个产品吗？\n原因: ${reason}\n目的地: ${destination}`,
-      async () => {
+    // 显示自定义确认弹窗
+    setShowConfirmModal(true);
+  };
+
+  // 确认出库操作
+  const handleConfirmOutbound = async () => {
+    setShowConfirmModal(false);
+    const selectedProducts = searchResults.filter((p) => p.isSelected && p.selectedQuantity > 0);
+    
+    if (!currentUser) return;
+    
+    {
         console.log("[Outbound] ========== START OUTBOUND ==========");
         setProcessing(true);
         const updateResults: string[] = [];
@@ -287,8 +299,7 @@ export default function OutboundScreen() {
         } finally {
           setProcessing(false);
         }
-      }
-    );
+    }
   };
 
   // 格式化时间
@@ -507,7 +518,7 @@ export default function OutboundScreen() {
                   styles.outboundButton,
                   (selectedCount === 0 || processing) && styles.buttonDisabled,
                 ]}
-                onPress={handleOutbound}
+                onPress={handleOutboundClick}
                 disabled={selectedCount === 0 || processing}
               >
                 <ThemedText style={styles.outboundButtonText}>
@@ -582,6 +593,38 @@ export default function OutboundScreen() {
           )}
         </View>
       )}
+      {/* 自定义确认弹窗 */}
+      <Modal
+        visible={showConfirmModal}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setShowConfirmModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { backgroundColor: colorScheme === 'dark' ? '#333' : '#fff' }]}>
+            <ThemedText style={styles.modalTitle}>确认出库</ThemedText>
+            <ThemedText style={styles.modalMessage}>
+              确定要出库 {selectedCount} 个产品吗？{"\n"}
+              原因: {reason}{"\n"}
+              目的地: {destination}
+            </ThemedText>
+            <View style={styles.modalButtons}>
+              <Pressable
+                style={[styles.modalButton, styles.modalCancelButton]}
+                onPress={() => setShowConfirmModal(false)}
+              >
+                <ThemedText style={styles.modalCancelText}>取消</ThemedText>
+              </Pressable>
+              <Pressable
+                style={[styles.modalButton, styles.modalConfirmButton]}
+                onPress={handleConfirmOutbound}
+              >
+                <ThemedText style={styles.modalConfirmText}>确认出库</ThemedText>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </ThemedView>
   );
 }
@@ -870,5 +913,61 @@ const styles = StyleSheet.create({
     fontSize: 13,
     opacity: 0.7,
     textAlign: "right",
+  },
+  // 确认弹窗样式
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  modalContent: {
+    width: "85%",
+    maxWidth: 400,
+    borderRadius: 16,
+    padding: 24,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: "bold",
+    textAlign: "center",
+    marginBottom: 16,
+  },
+  modalMessage: {
+    fontSize: 16,
+    textAlign: "center",
+    marginBottom: 24,
+    lineHeight: 24,
+  },
+  modalButtons: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    gap: 12,
+  },
+  modalButton: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 10,
+    alignItems: "center",
+  },
+  modalCancelButton: {
+    backgroundColor: "rgba(0, 0, 0, 0.1)",
+  },
+  modalConfirmButton: {
+    backgroundColor: "#FF3B30",
+  },
+  modalCancelText: {
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  modalConfirmText: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#fff",
   },
 });
