@@ -1,16 +1,21 @@
 /**
+ * 操作类型
+ */
+export type OperationType = 'inbound' | 'outbound';
+
+/**
  * 库存历史记录条目
  */
 export interface InventoryHistoryEntry {
   /** 历史记录 ID */
   id: string;
-  /** 入库时间 */
+  /** 操作时间 */
   timestamp: string;
   /** 操作员 ID */
   operatorId: number;
   /** 操作员姓名 */
   operatorName: string;
-  /** 本次入库数量 */
+  /** 本次操作数量（正数为入库，负数为出库） */
   quantity: number;
   /** 存储位置 */
   location: string;
@@ -22,6 +27,12 @@ export interface InventoryHistoryEntry {
   notes?: string;
   /** 产品 ID（用于 SQLite） */
   productId?: string;
+  /** 操作类型（入库/出库） */
+  type?: OperationType;
+  /** 出库原因（仅出库时） */
+  reason?: string;
+  /** 出库目的地（仅出库时） */
+  destination?: string;
 }
 
 /**
@@ -81,4 +92,44 @@ export interface AppSettings {
   lastOperatorId?: number;
   /** 上次选择的操作员名称 */
   lastOperatorName?: string;
+}
+
+/**
+ * 出库记录（用于出库管理页面显示）
+ */
+export interface OutboundRecord {
+  /** 出库记录 ID */
+  id: string;
+  /** 出库时间 */
+  timestamp: string;
+  /** 操作员 ID */
+  operatorId: number;
+  /** 操作员姓名 */
+  operatorName: string;
+  /** 出库原因 */
+  reason: string;
+  /** 出库目的地 */
+  destination: string;
+  /** 出库产品列表 */
+  items: OutboundItem[];
+  /** 备注 */
+  notes?: string;
+}
+
+/**
+ * 出库产品项
+ */
+export interface OutboundItem {
+  /** 产品 ID */
+  productId: string;
+  /** SKU */
+  sku: string;
+  /** 系统 SKU */
+  systemSku?: string;
+  /** 出库数量 */
+  quantity: number;
+  /** 存储位置 */
+  storageLocation: string;
+  /** 产品细节图 */
+  detailImageUri: string;
 }

@@ -414,70 +414,105 @@ export default function ProductDetailScreen() {
           </View>
         )}
 
-        {/* 入库历史记录 */}
+        {/* 库存操作历史记录 */}
         {product.history && product.history.length > 0 && (
           <View style={styles.historyContainer}>
             <ThemedText type="subtitle" style={styles.historyTitle}>
-              📦 入库历史记录
+              📝 库存操作记录
             </ThemedText>
             <View style={styles.historySummary}>
               <ThemedText style={styles.historySummaryText}>
-                共 <ThemedText style={styles.historySummaryHighlight}>{product.history.length}</ThemedText> 次入库，
-                总计 <ThemedText style={styles.historySummaryHighlight}>{product.quantity}</ThemedText> 件
+                共 <ThemedText style={styles.historySummaryHighlight}>{product.history.length}</ThemedText> 次操作，
+                当前库存 <ThemedText style={styles.historySummaryHighlight}>{product.quantity}</ThemedText> 件
               </ThemedText>
             </View>
-            {product.history.map((entry, index) => (
-              <View key={entry.id || index} style={styles.historyEntry}>
-                <View style={styles.historyHeader}>
-                  <View style={styles.historyIndexBadge}>
-                    <ThemedText style={styles.historyIndexText}>
-                      第 {index + 1} 次
-                    </ThemedText>
-                  </View>
-                  <ThemedText style={styles.historyDate}>
-                    {new Date(entry.timestamp).toLocaleString("zh-CN")}
-                  </ThemedText>
-                </View>
-                
-                {/* 细节图片 */}
-                {entry.detailImageUri && (
-                  <Image
-                    source={{ uri: entry.detailImageUri }}
-                    style={styles.historyImage}
-                  />
-                )}
-
-                {/* 历史记录详情 */}
-                <View style={styles.historyDetails}>
-                  <View style={styles.historyDetailRow}>
-                    <ThemedText style={styles.historyDetailLabel}>数量</ThemedText>
-                    <ThemedText style={styles.historyDetailValue}>
-                      {entry.quantity} 件
-                    </ThemedText>
-                  </View>
-                  <View style={styles.historyDetailRow}>
-                    <ThemedText style={styles.historyDetailLabel}>位置</ThemedText>
-                    <ThemedText style={styles.historyDetailValue}>
-                      {entry.location}
-                    </ThemedText>
-                  </View>
-                  <View style={styles.historyDetailRow}>
-                    <ThemedText style={styles.historyDetailLabel}>操作员</ThemedText>
-                    <ThemedText style={styles.historyDetailValue}>
-                      {entry.operatorName}
-                    </ThemedText>
-                  </View>
-                  {entry.notes && (
-                    <View style={styles.historyDetailRow}>
-                      <ThemedText style={styles.historyDetailLabel}>备注</ThemedText>
-                      <ThemedText style={styles.historyDetailValue}>
-                        {entry.notes}
+            {product.history.map((entry, index) => {
+              const isOutbound = entry.type === 'outbound' || entry.quantity < 0;
+              const displayQuantity = Math.abs(entry.quantity);
+              
+              return (
+                <View 
+                  key={entry.id || index} 
+                  style={[
+                    styles.historyEntry,
+                    isOutbound && styles.historyEntryOutbound
+                  ]}
+                >
+                  <View style={styles.historyHeader}>
+                    <View style={[
+                      styles.historyIndexBadge,
+                      isOutbound && styles.historyIndexBadgeOutbound
+                    ]}>
+                      <ThemedText style={styles.historyIndexText}>
+                        {isOutbound ? '📤 出库' : '📥 入库'}
                       </ThemedText>
                     </View>
+                    <ThemedText style={styles.historyDate}>
+                      {new Date(entry.timestamp).toLocaleString("zh-CN")}
+                    </ThemedText>
+                  </View>
+                  
+                  {/* 细节图片（仅入库显示） */}
+                  {!isOutbound && entry.detailImageUri && (
+                    <Image
+                      source={{ uri: entry.detailImageUri }}
+                      style={styles.historyImage}
+                    />
                   )}
+
+                  {/* 历史记录详情 */}
+                  <View style={styles.historyDetails}>
+                    <View style={styles.historyDetailRow}>
+                      <ThemedText style={styles.historyDetailLabel}>数量</ThemedText>
+                      <ThemedText style={[
+                        styles.historyDetailValue,
+                        isOutbound ? styles.outboundQuantity : styles.inboundQuantity
+                      ]}>
+                        {isOutbound ? `-${displayQuantity}` : `+${displayQuantity}`} 件
+                      </ThemedText>
+                    </View>
+                    <View style={styles.historyDetailRow}>
+                      <ThemedText style={styles.historyDetailLabel}>位置</ThemedText>
+                      <ThemedText style={styles.historyDetailValue}>
+                        {entry.location}
+                      </ThemedText>
+                    </View>
+                    <View style={styles.historyDetailRow}>
+                      <ThemedText style={styles.historyDetailLabel}>操作员</ThemedText>
+                      <ThemedText style={styles.historyDetailValue}>
+                        {entry.operatorName}
+                      </ThemedText>
+                    </View>
+                    {/* 出库原因 */}
+                    {isOutbound && entry.reason && (
+                      <View style={styles.historyDetailRow}>
+                        <ThemedText style={styles.historyDetailLabel}>出库原因</ThemedText>
+                        <ThemedText style={styles.historyDetailValue}>
+                          {entry.reason}
+                        </ThemedText>
+                      </View>
+                    )}
+                    {/* 出库目的地 */}
+                    {isOutbound && entry.destination && (
+                      <View style={styles.historyDetailRow}>
+                        <ThemedText style={styles.historyDetailLabel}>目的地</ThemedText>
+                        <ThemedText style={styles.historyDetailValue}>
+                          {entry.destination}
+                        </ThemedText>
+                      </View>
+                    )}
+                    {entry.notes && (
+                      <View style={styles.historyDetailRow}>
+                        <ThemedText style={styles.historyDetailLabel}>备注</ThemedText>
+                        <ThemedText style={styles.historyDetailValue}>
+                          {entry.notes}
+                        </ThemedText>
+                      </View>
+                    )}
+                  </View>
                 </View>
-              </View>
-            ))}
+              );
+            })}
           </View>
         )}
 
@@ -740,6 +775,21 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: 18,
     fontWeight: "500",
+  },
+  // 出库记录样式
+  historyEntryOutbound: {
+    borderLeftColor: "#FF3B30",
+  },
+  historyIndexBadgeOutbound: {
+    backgroundColor: "#FF3B30",
+  },
+  outboundQuantity: {
+    color: "#FF3B30",
+    fontWeight: "700",
+  },
+  inboundQuantity: {
+    color: "#34C759",
+    fontWeight: "700",
   },
   // 打印标签相关样式
   printSection: {

@@ -334,19 +334,34 @@ export default function InventoryScreen() {
               <Pressable
                 style={({ pressed }) => [
                   styles.productCard,
+                  item.quantity === 0 && styles.productCardEmpty,
                   { opacity: pressed ? 0.7 : 1 },
                 ]}
                 onPress={() => router.push({ pathname: "/product-detail" as any, params: { id: item.id } })}
               >
+                {item.quantity === 0 && (
+                  <View style={styles.emptyBadge}>
+                    <ThemedText style={styles.emptyBadgeText}>库存为0</ThemedText>
+                  </View>
+                )}
                 <Image
                   source={{ uri: item.detailImageUri }}
-                  style={styles.productImage}
+                  style={[
+                    styles.productImage,
+                    item.quantity === 0 && styles.productImageEmpty
+                  ]}
                 />
                 <View style={styles.productInfo}>
-                  <ThemedText type="defaultSemiBold" style={styles.productSku}>
+                  <ThemedText type="defaultSemiBold" style={[
+                    styles.productSku,
+                    item.quantity === 0 && styles.productSkuEmpty
+                  ]}>
                     {item.sku}
                   </ThemedText>
-                  <ThemedText style={styles.productDetail}>
+                  <ThemedText style={[
+                    styles.productDetail,
+                    item.quantity === 0 && styles.productDetailEmpty
+                  ]}>
                     数量：{item.quantity}
                   </ThemedText>
                   <ThemedText style={styles.productDetail}>
@@ -455,6 +470,38 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     opacity: 0.7,
     marginBottom: 2,
+  },
+  // 库存为0的产品样式
+  productCardEmpty: {
+    backgroundColor: "rgba(142, 142, 147, 0.15)",
+    borderWidth: 1,
+    borderColor: "rgba(142, 142, 147, 0.3)",
+  },
+  productImageEmpty: {
+    opacity: 0.5,
+  },
+  productSkuEmpty: {
+    opacity: 0.6,
+  },
+  productDetailEmpty: {
+    color: "#FF3B30",
+    opacity: 1,
+    fontWeight: "600",
+  },
+  emptyBadge: {
+    position: "absolute",
+    top: 8,
+    right: 8,
+    backgroundColor: "#FF3B30",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 4,
+    zIndex: 1,
+  },
+  emptyBadgeText: {
+    color: "#fff",
+    fontSize: 10,
+    fontWeight: "700",
   },
   syncContainer: {
     marginTop: 16,
