@@ -131,26 +131,36 @@ export default function ProductDetailScreen() {
   };
 
   // 删除产品（移至回收站）
-  const handleDelete = () => {
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  
+  const handleDelete = async () => {
     console.log('[ProductDetail] handleDelete called');
     
-    // Web 平台直接使用 window.confirm
+    // Web 平台直接执行删除（确认已在 UI 中处理）
     if (Platform.OS === 'web') {
-      const confirmed = window.confirm('确认删除\n\n确定要删除这个产品吗？删除后可以在回收站中恢复。');
-      console.log('[ProductDetail] Web confirm result:', confirmed);
+      if (!product) return;
       
-      if (confirmed && product) {
+      try {
         console.log('[ProductDetail] Deleting product:', product.id);
-        ProductStorage.softDelete(product.id)
-          .then(() => {
-            console.log('[ProductDetail] Product deleted successfully');
-            window.alert('产品已移至回收站');
-            router.replace('/(tabs)');
-          })
-          .catch((error) => {
-            console.error('[ProductDetail] Delete failed:', error);
-            window.alert('删除产品失败: ' + (error.message || '未知错误'));
-          });
+        await ProductStorage.softDelete(product.id);
+        console.log('[ProductDetail] Product deleted successfully');
+        
+        // 自动上传到云端（静默）
+        try {
+          await AutoSync.uploadToCloud(
+            uploadMutation,
+            () => console.log("删除后自动上传成功"),
+            (error) => console.log("自动上传失败（静默）", error)
+          );
+        } catch (error) {
+          console.log("自动上传失败", error);
+        }
+        
+        window.alert('产品已移至回收站');
+        router.replace('/(tabs)');
+      } catch (error: any) {
+        console.error('[ProductDetail] Delete failed:', error);
+        window.alert('删除产品失败: ' + (error.message || '未知错误'));
       }
       return;
     }
@@ -227,15 +237,9 @@ export default function ProductDetailScreen() {
         </ThemedText>
 
         {/* 产品照片 */}
-        <View style={styles.photosContainer}>
-          <View style={styles.photoWrapper}>
-            <ThemedText style={styles.photoLabel}>细节照片</ThemedText>
-            <Image source={{ uri: product.detailImageUri }} style={styles.photo} />
-          </View>
-          <View style={styles.photoWrapper}>
-            <ThemedText style={styles.photoLabel}>全景照片</ThemedText>
-            <Image source={{ uri: product.overviewImageUri }} style={styles.photo} />
-          </View>
+        <View style={styles.photoContainer}>
+          <ThemedText style={styles.photoLabel}>产品照片</ThemedText>
+          <Image source={{ uri: product.detailImageUri }} style={styles.photo} />
         </View>
 
         {/* 产品信息 */}
@@ -511,7 +515,7 @@ export default function ProductDetailScreen() {
                 <ThemedText style={styles.buttonText}>编辑</ThemedText>
               </Pressable>
               <Pressable
-                onPress={handleDelete}
+                onPress={() => setShowDeleteConfirm(true)}
                 style={[styles.button, styles.deleteButton]}
               >
                 <ThemedText style={styles.buttonText}>删除</ThemedText>
@@ -520,6 +524,35 @@ export default function ProductDetailScreen() {
           )}
         </View>
       </ScrollView>
+      
+      {/* 删除确认对话框 */}
+      {showDeleteConfirm && (
+        <View style={styles.confirmOverlay}>
+          <View style={styles.confirmDialog}>
+            <ThemedText style={styles.confirmTitle}>确认删除</ThemedText>
+            <ThemedText style={styles.confirmMessage}>
+              确定要删除这个产品吗？删除后可以在回收站中恢复。
+            </ThemedText>
+            <View style={styles.confirmButtons}>
+              <Pressable
+                onPress={() => setShowDeleteConfirm(false)}
+                style={[styles.confirmButton, styles.confirmCancelButton]}
+              >
+                <ThemedText style={styles.confirmCancelText}>取消</ThemedText>
+              </Pressable>
+              <Pressable
+                onPress={() => {
+                  setShowDeleteConfirm(false);
+                  handleDelete();
+                }}
+                style={[styles.confirmButton, styles.confirmDeleteButton]}
+              >
+                <ThemedText style={styles.confirmDeleteText}>删除</ThemedText>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      )}
     </ThemedView>
   );
 }
@@ -550,12 +583,7 @@ const styles = StyleSheet.create({
   title: {
     marginBottom: 8,
   },
-  photosContainer: {
-    flexDirection: "row",
-    gap: 12,
-  },
-  photoWrapper: {
-    flex: 1,
+  photoContainer: {
     gap: 8,
   },
   photoLabel: {
@@ -752,5 +780,63 @@ const styles = StyleSheet.create({
     opacity: 0.6,
     textAlign: "center",
     marginTop: 4,
+  },
+  // 确认对话框样式
+  confirmOverlay: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    justifyContent: "center",
+    alignItems: "center",
+    zIndex: 1000,
+  },
+  confirmDialog: {
+    backgroundColor: "#fff",
+    borderRadius: 16,
+    padding: 24,
+    width: "85%",
+    maxWidth: 320,
+    gap: 16,
+  },
+  confirmTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    textAlign: "center",
+  },
+  confirmMessage: {
+    fontSize: 14,
+    lineHeight: 20,
+    textAlign: "center",
+    opacity: 0.7,
+  },
+  confirmButtons: {
+    flexDirection: "row",
+    gap: 12,
+    marginTop: 8,
+  },
+  confirmButton: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 8,
+    alignItems: "center",
+  },
+  confirmCancelButton: {
+    backgroundColor: "#E5E5EA",
+  },
+  confirmDeleteButton: {
+    backgroundColor: "#FF3B30",
+  },
+  confirmCancelText: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#000",
+  },
+  confirmDeleteText: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#fff",
   },
 });
