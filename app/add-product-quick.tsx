@@ -191,10 +191,10 @@ export default function AddProductQuickScreen() {
     setShowDuplicateModal(true);
   };
 
-  // 选择新建 SKU
+  // 选择新建 SKU（确认弹窗中输入的 SKU）
   const handleNewSku = () => {
+    // 不清空 SKU，保留用户在弹窗中输入的值
     setMergeToProductId(null);
-    setSku(""); // 用户需要输入新 SKU
     setShowDuplicateModal(false);
   };
 
