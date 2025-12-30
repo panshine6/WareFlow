@@ -264,12 +264,17 @@ export default function AddProductQuickScreen() {
 
       if (mergeToProductId) {
         // ========== 合并到现有产品 ==========
-        console.log("[QuickAdd] Merging to existing product:", mergeToProductId);
+        console.log("[QuickAdd] ========== MERGE MODE ==========");
+        console.log("[QuickAdd] Merging to existing product ID:", mergeToProductId);
+        console.log("[QuickAdd] New quantity to add:", quantity);
 
         const existingProduct = await ProductStorage.getById(mergeToProductId);
         if (!existingProduct) {
           throw new Error("产品不存在");
         }
+        console.log("[QuickAdd] Existing product found:", existingProduct.sku);
+        console.log("[QuickAdd] Existing quantity:", existingProduct.quantity);
+        console.log("[QuickAdd] Existing history count:", existingProduct.history?.length || 0);
 
         const historyEntry = createHistoryEntry(
           mergeToProductId,
@@ -279,19 +284,33 @@ export default function AddProductQuickScreen() {
           operatorId,
           operatorName
         );
+        console.log("[QuickAdd] New history entry created:", historyEntry.id);
 
         const existingHistory = existingProduct.history || [];
+        const newHistory = [...existingHistory, historyEntry];
+        const newQuantity = existingProduct.quantity + quantity;
 
-        await ProductStorage.update(mergeToProductId, {
-          quantity: existingProduct.quantity + quantity,
+        console.log("[QuickAdd] New total quantity:", newQuantity);
+        console.log("[QuickAdd] New history count:", newHistory.length);
+
+        const updateData = {
+          quantity: newQuantity,
           storageLocation: locationValue,
           updatedAt: now,
           price: price,
-          history: [...existingHistory, historyEntry],
-        });
+          history: newHistory,
+        };
+        console.log("[QuickAdd] Update data:", JSON.stringify(updateData, null, 2));
 
-        savedProduct = { ...existingProduct, quantity: existingProduct.quantity + quantity };
-        console.log("[QuickAdd] Product merged");
+        await ProductStorage.update(mergeToProductId, updateData);
+
+        // 验证更新是否成功
+        const verifyProduct = await ProductStorage.getById(mergeToProductId);
+        console.log("[QuickAdd] Verify after update - quantity:", verifyProduct?.quantity);
+        console.log("[QuickAdd] Verify after update - history count:", verifyProduct?.history?.length);
+
+        savedProduct = { ...existingProduct, quantity: newQuantity };
+        console.log("[QuickAdd] ========== MERGE COMPLETE ==========");
       } else {
         // ========== 新产品 ==========
         const productId = Date.now().toString();
