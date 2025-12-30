@@ -182,10 +182,15 @@ export default function OutboundScreen() {
       "确认出库",
       `确定要出库 ${selectedProducts.length} 个产品吗？\n原因: ${reason}\n目的地: ${destination}`,
       async () => {
+        console.log("[Outbound] ========== START OUTBOUND ==========");
         setProcessing(true);
+        const updateResults: string[] = [];
+        
         try {
           const now = new Date().toISOString();
           const outboundId = `OUT-${Date.now()}`;
+          console.log("[Outbound] Outbound ID:", outboundId);
+          console.log("[Outbound] Selected products:", selectedProducts.length);
 
           // 创建出库记录
           const outboundItems: OutboundItem[] = selectedProducts.map((p) => ({
@@ -208,12 +213,23 @@ export default function OutboundScreen() {
           };
 
           // 保存出库记录
+          console.log("[Outbound] Saving outbound record...");
           await OutboundStorage.add(outboundRecord);
+          console.log("[Outbound] Outbound record saved");
 
           // 更新每个产品的库存和历史记录
           for (const product of selectedProducts) {
+            console.log(`[Outbound] Processing product: ${product.sku} (ID: ${product.id})`);
+            
             const existingProduct = await ProductStorage.getById(product.id);
-            if (!existingProduct) continue;
+            if (!existingProduct) {
+              console.log(`[Outbound] Product not found: ${product.id}`);
+              updateResults.push(`${product.sku}: 未找到产品`);
+              continue;
+            }
+
+            console.log(`[Outbound] Existing product quantity: ${existingProduct.quantity}`);
+            console.log(`[Outbound] Existing history count: ${existingProduct.history?.length || 0}`);
 
             // 创建出库历史记录
             const historyEntry: InventoryHistoryEntry = {
@@ -232,23 +248,42 @@ export default function OutboundScreen() {
 
             // 更新产品
             const existingHistory = existingProduct.history || [];
-            const newQuantity = existingProduct.quantity - product.selectedQuantity;
+            const newQuantity = Math.max(0, existingProduct.quantity - product.selectedQuantity);
+            const newHistory = [...existingHistory, historyEntry];
+
+            console.log(`[Outbound] New quantity: ${newQuantity}`);
+            console.log(`[Outbound] New history count: ${newHistory.length}`);
 
             await ProductStorage.update(product.id, {
-              quantity: Math.max(0, newQuantity),
-              history: [...existingHistory, historyEntry],
+              quantity: newQuantity,
+              history: newHistory,
               updatedAt: now,
             });
+
+            // 验证更新是否成功
+            const verifyProduct = await ProductStorage.getById(product.id);
+            if (verifyProduct) {
+              console.log(`[Outbound] Verify - quantity: ${verifyProduct.quantity}, history: ${verifyProduct.history?.length || 0}`);
+              updateResults.push(`${product.sku}: ${existingProduct.quantity} → ${verifyProduct.quantity} (历史: ${verifyProduct.history?.length || 0}条)`);
+            } else {
+              updateResults.push(`${product.sku}: 验证失败`);
+            }
           }
 
-          Alert.alert("成功", `已出库 ${selectedProducts.length} 个产品`);
+          console.log("[Outbound] ========== OUTBOUND COMPLETE ==========");
+
+          // 显示详细结果
+          Alert.alert(
+            "出库成功！",
+            `已出库 ${selectedProducts.length} 个产品\n\n详细结果：\n${updateResults.join("\n")}`
+          );
 
           // 清空搜索结果
           setSearchResults([]);
           setSearchQuery("");
         } catch (error) {
           console.error("[Outbound] Failed to process outbound:", error);
-          Alert.alert("错误", "出库失败，请重试");
+          Alert.alert("错误", `出库失败：${error instanceof Error ? error.message : '未知错误'}\n\n已处理：\n${updateResults.join("\n")}`);
         } finally {
           setProcessing(false);
         }
