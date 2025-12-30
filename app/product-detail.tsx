@@ -22,6 +22,7 @@ import { Platform } from "react-native";
 import { AutoSync } from "@/lib/auto-sync";
 import { trpc } from "@/lib/trpc";
 import type { Product } from "@/types/product";
+import { generateLabelForPTP300BT, generateSystemSKU, shareBarcodeImage } from "@/lib/barcode";
 
 /**
  * 产品详情页面
@@ -37,6 +38,8 @@ export default function ProductDetailScreen() {
   const [isEditing, setIsEditing] = useState(false);
   const [editedProduct, setEditedProduct] = useState<Product | null>(null);
   const [saving, setSaving] = useState(false);
+  const [printingLabel, setPrintingLabel] = useState(false);
+  const [barcodePreview, setBarcodePreview] = useState<string | null>(null);
 
   // 使用 tRPC 同步
   const uploadMutation = trpc.sync.upload.useMutation();
@@ -326,7 +329,86 @@ export default function ProductDetailScreen() {
               {new Date(product.createdAt).toLocaleString("zh-CN")}
             </ThemedText>
           </View>
+
+          {/* 系统 SKU（条形码） */}
+          <View style={styles.infoRow}>
+            <ThemedText style={styles.label}>系统 SKU</ThemedText>
+            <ThemedText style={styles.value}>
+              {product.systemSku || '未生成'}
+            </ThemedText>
+          </View>
         </View>
+
+        {/* 打印标签区域 */}
+        {Platform.OS === 'web' && (
+          <View style={styles.printSection}>
+            <ThemedText type="subtitle" style={styles.printTitle}>
+              🏷️ 打印标签
+            </ThemedText>
+            
+            {/* 条形码预览 */}
+            {barcodePreview && (
+              <View style={styles.barcodePreviewContainer}>
+                <Image 
+                  source={{ uri: barcodePreview }} 
+                  style={styles.barcodePreview}
+                  contentFit="contain"
+                />
+              </View>
+            )}
+            
+            <View style={styles.printButtonsContainer}>
+              <Pressable
+                onPress={async () => {
+                  try {
+                    setPrintingLabel(true);
+                    // 如果没有 systemSku，先生成一个并保存
+                    let skuToUse = product.systemSku;
+                    if (!skuToUse) {
+                      skuToUse = generateSystemSKU();
+                      // 保存到产品
+                      await ProductStorage.update(product.id, { systemSku: skuToUse });
+                      setProduct({ ...product, systemSku: skuToUse });
+                      setEditedProduct({ ...editedProduct, systemSku: skuToUse });
+                    }
+                    // 生成条形码图片
+                    const dataUrl = await generateLabelForPTP300BT(skuToUse);
+                    setBarcodePreview(dataUrl);
+                  } catch (error) {
+                    console.error('生成条形码失败:', error);
+                    Alert.alert('错误', '生成条形码失败');
+                  } finally {
+                    setPrintingLabel(false);
+                  }
+                }}
+                disabled={printingLabel}
+                style={[styles.button, styles.previewButton]}
+              >
+                <ThemedText style={styles.buttonText}>
+                  {printingLabel ? '生成中...' : '生成条形码'}
+                </ThemedText>
+              </Pressable>
+              
+              {barcodePreview && (
+                <Pressable
+                  onPress={async () => {
+                    const skuToUse = product.systemSku || 'unknown';
+                    await shareBarcodeImage(barcodePreview, skuToUse);
+                  }}
+                  style={[styles.button, styles.printButton]}
+                >
+                  <ThemedText style={styles.buttonText}>
+                    保存/分享标签
+                  </ThemedText>
+                </Pressable>
+              )}
+            </View>
+            
+            <ThemedText style={styles.printHint}>
+              点击"保存/分享标签"后，打开 Brother P-touch Design&Print App 导入图片进行打印
+            </ThemedText>
+          </View>
+        )}
 
         {/* 入库历史记录 */}
         {product.history && product.history.length > 0 && (
@@ -630,5 +712,45 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: 18,
     fontWeight: "500",
+  },
+  // 打印标签相关样式
+  printSection: {
+    gap: 12,
+    marginTop: 16,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: "rgba(0, 0, 0, 0.1)",
+  },
+  printTitle: {
+    marginBottom: 4,
+  },
+  barcodePreviewContainer: {
+    backgroundColor: "#fff",
+    padding: 16,
+    borderRadius: 12,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "rgba(0, 0, 0, 0.1)",
+  },
+  barcodePreview: {
+    width: "100%",
+    height: 80,
+  },
+  printButtonsContainer: {
+    flexDirection: "row",
+    gap: 12,
+  },
+  previewButton: {
+    backgroundColor: "#5856D6",
+  },
+  printButton: {
+    backgroundColor: "#FF9500",
+  },
+  printHint: {
+    fontSize: 12,
+    lineHeight: 18,
+    opacity: 0.6,
+    textAlign: "center",
+    marginTop: 4,
   },
 });

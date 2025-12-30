@@ -17,6 +17,7 @@ import { useColorScheme } from "@/hooks/use-color-scheme";
 import { UserStorage } from "@/lib/user-storage";
 import { SettingsStorage, ProductStorage } from "@/lib/storage";
 import { calculateAndSaveProductHash, imageToBase64 } from "@/lib/deduplication";
+import { generateSystemSKU } from "@/lib/barcode";
 import type { Product, InventoryHistoryEntry } from "@/types/product";
 
 /**
@@ -160,11 +161,16 @@ export default function AddProductLocationScreen() {
           operatorName
         );
         
+        // 生成系统 SKU（用于条形码打印）
+        const systemSku = generateSystemSKU();
+        console.log('[AddProductLocation] Generated system SKU:', systemSku);
+        
         let product: Product = {
           id: productId,
           detailImageUri: params.detailImageUri,
           overviewImageUri: "", // 不保存全景图，节省存储空间
           sku: params.sku,
+          systemSku, // 系统生成的唯一 SKU
           quantity,
           storageLocation: locationValue,
           operatorName,

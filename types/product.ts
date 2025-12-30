@@ -61,6 +61,8 @@ export interface Product {
   deletedAt?: string;
   /** 图片感知哈希值（用于快速相似度预筛选） */
   imageHash?: string;
+  /** 系统生成的唯一 SKU（用于条形码打印） */
+  systemSku?: string;
 }
 
 /**
