@@ -1,6 +1,6 @@
 import { Image } from "expo-image";
-import { useLocalSearchParams, useRouter } from "expo-router";
-import { useEffect, useState } from "react";
+import { useLocalSearchParams, useRouter, useFocusEffect } from "expo-router";
+import { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Pressable,
@@ -44,10 +44,12 @@ export default function ProductDetailScreen() {
   // 使用 tRPC 同步
   const uploadMutation = trpc.sync.upload.useMutation();
 
-  // 加载产品数据
-  useEffect(() => {
-    loadProduct();
-  }, [params.id]);
+  // 加载产品数据 - 使用 useFocusEffect 确保每次页面获得焦点时重新加载
+  useFocusEffect(
+    useCallback(() => {
+      loadProduct();
+    }, [params.id])
+  );
 
   const loadProduct = async () => {
     try {
