@@ -272,9 +272,12 @@ export default function AddProductQuickScreen() {
         if (!existingProduct) {
           throw new Error("产品不存在");
         }
+        
+        const oldQuantity = existingProduct.quantity;
+        const oldHistoryCount = existingProduct.history?.length || 0;
         console.log("[QuickAdd] Existing product found:", existingProduct.sku);
-        console.log("[QuickAdd] Existing quantity:", existingProduct.quantity);
-        console.log("[QuickAdd] Existing history count:", existingProduct.history?.length || 0);
+        console.log("[QuickAdd] Existing quantity:", oldQuantity);
+        console.log("[QuickAdd] Existing history count:", oldHistoryCount);
 
         const historyEntry = createHistoryEntry(
           mergeToProductId,
@@ -288,7 +291,7 @@ export default function AddProductQuickScreen() {
 
         const existingHistory = existingProduct.history || [];
         const newHistory = [...existingHistory, historyEntry];
-        const newQuantity = existingProduct.quantity + quantity;
+        const newQuantity = oldQuantity + quantity;
 
         console.log("[QuickAdd] New total quantity:", newQuantity);
         console.log("[QuickAdd] New history count:", newHistory.length);
@@ -306,8 +309,24 @@ export default function AddProductQuickScreen() {
 
         // 验证更新是否成功
         const verifyProduct = await ProductStorage.getById(mergeToProductId);
-        console.log("[QuickAdd] Verify after update - quantity:", verifyProduct?.quantity);
-        console.log("[QuickAdd] Verify after update - history count:", verifyProduct?.history?.length);
+        const verifyQuantity = verifyProduct?.quantity;
+        const verifyHistoryCount = verifyProduct?.history?.length;
+        console.log("[QuickAdd] Verify after update - quantity:", verifyQuantity);
+        console.log("[QuickAdd] Verify after update - history count:", verifyHistoryCount);
+
+        // 显示详细的合并结果
+        const mergeSuccess = verifyQuantity === newQuantity && verifyHistoryCount === newHistory.length;
+        alert(
+          `合并${mergeSuccess ? "成功" : "失败"}！\n\n` +
+          `SKU: ${existingProduct.sku}\n` +
+          `原数量: ${oldQuantity} → 新数量: ${verifyQuantity}\n` +
+          `原历史记录: ${oldHistoryCount} 条 → 新历史记录: ${verifyHistoryCount} 条\n` +
+          `本次添加: ${quantity} 件`
+        );
+
+        if (!mergeSuccess) {
+          throw new Error(`合并验证失败: 期望数量=${newQuantity}, 实际=${verifyQuantity}; 期望历史=${newHistory.length}, 实际=${verifyHistoryCount}`);
+        }
 
         savedProduct = { ...existingProduct, quantity: newQuantity };
         console.log("[QuickAdd] ========== MERGE COMPLETE ==========");
