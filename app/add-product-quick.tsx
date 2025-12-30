@@ -634,6 +634,23 @@ export default function AddProductQuickScreen() {
           <View style={styles.modalContent}>
             <ThemedText type="title" style={styles.modalTitle}>查重结果</ThemedText>
 
+            {/* 调试信息 */}
+            {duplicateResult?.stats && (
+              <View style={styles.debugInfo}>
+                <ThemedText style={styles.debugText}>
+                  📊 查重统计: 总产品 {duplicateResult.stats.totalProducts} | 
+                  pHash筛选 {duplicateResult.stats.pHashFiltered} | 
+                  AI对比 {duplicateResult.stats.aiCompared} | 
+                  耗时 {duplicateResult.stats.durationMs}ms
+                </ThemedText>
+                {duplicateResult.error && (
+                  <ThemedText style={styles.debugError}>
+                    ❌ 错误: {duplicateResult.error}
+                  </ThemedText>
+                )}
+              </View>
+            )}
+
             {duplicateResult?.hasDuplicates && duplicateResult.duplicates.length > 0 ? (
               <>
                 <ThemedText style={styles.modalHint}>
@@ -1028,6 +1045,23 @@ const styles = StyleSheet.create({
     textAlign: "center",
     marginBottom: 16,
     color: "#000",
+  },
+  debugInfo: {
+    backgroundColor: "#f0f0f0",
+    padding: 10,
+    borderRadius: 8,
+    marginBottom: 12,
+  },
+  debugText: {
+    fontSize: 11,
+    color: "#666",
+    textAlign: "center",
+  },
+  debugError: {
+    fontSize: 11,
+    color: "#ff3b30",
+    textAlign: "center",
+    marginTop: 4,
   },
   modalHint: {
     fontSize: 14,
