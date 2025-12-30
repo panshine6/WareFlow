@@ -63,6 +63,8 @@ export interface Product {
   imageHash?: string;
   /** 系统生成的唯一 SKU（用于条形码打印） */
   systemSku?: string;
+  /** 产品价格（美元） */
+  price?: number;
 }
 
 /**
@@ -73,4 +75,10 @@ export interface AppSettings {
   lastSku: string;
   /** 默认存储位置 */
   defaultLocation: string;
+  /** 上次输入的价格（美元） */
+  lastPrice?: number;
+  /** 上次选择的操作员 ID */
+  lastOperatorId?: number;
+  /** 上次选择的操作员名称 */
+  lastOperatorName?: string;
 }

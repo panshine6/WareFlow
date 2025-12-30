@@ -201,7 +201,7 @@ export default function HomeScreen() {
               opacity: pressed ? 0.8 : 1,
             },
           ]}
-          onPress={() => router.push("/add-product" as any)}
+          onPress={() => router.push("/add-product-quick" as any)}
         >
           <View style={styles.addButtonContent}>
             <View style={styles.addButtonTextContainer}>
