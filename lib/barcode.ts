@@ -231,41 +231,39 @@ export async function generateLabelForNiimbotD110(
     scaledBarcodeHeight
   );
   
-  // 2. 绘制底部文字：系统SKU + 用户SKU（分开绘制，不同样式）
+  // 2. 绘制底部文字：系统SKU + 用户SKU（统一字体样式）
   const textY = LABEL_HEIGHT - 2;  // 底部位置（整数）
   
-  // 字体大小设置（使用像素字体确保清晰）
-  const systemSkuFontSize = 8;      // 系统SKU字体大小
-  const userSkuFontSize = 10;       // 用户SKU字体大小（加大约25%）
+  // 字体设置（统一样式，确保清晰）
+  const FONT_SIZE = 9;              // 统一字体大小
+  const FONT_STYLE = `${FONT_SIZE}px Arial, sans-serif`;  // 统一字体样式
   const SKU_GAP = 12;               // 两个SKU之间的间距（像素）
   
   if (userSku) {
     // 有用户SKU时，分开绘制两个SKU
     
-    // 先计算两个文字的宽度
-    ctx.font = `${systemSkuFontSize}px Arial, sans-serif`;
-    const systemSkuWidth = Math.ceil(ctx.measureText(systemSku).width);
+    // 设置统一字体
+    ctx.font = FONT_STYLE;
     
-    ctx.font = `bold ${userSkuFontSize}px Arial, sans-serif`;
+    // 计算两个文字的宽度
+    const systemSkuWidth = Math.ceil(ctx.measureText(systemSku).width);
     const userSkuWidth = Math.ceil(ctx.measureText(userSku).width);
     
     // 计算总宽度和起始位置（居中，整数像素）
     const totalWidth = systemSkuWidth + SKU_GAP + userSkuWidth;
     const startX = Math.floor((LABEL_WIDTH - totalWidth) / 2);
     
-    // 绘制系统SKU（普通字体，较小）
-    ctx.font = `${systemSkuFontSize}px Arial, sans-serif`;
+    // 绘制系统SKU
     ctx.textAlign = 'left';
     ctx.textBaseline = 'bottom';
     ctx.fillText(systemSku, startX, textY);
     
-    // 绘制用户SKU（加粗加大）
-    ctx.font = `bold ${userSkuFontSize}px Arial, sans-serif`;
+    // 绘制用户SKU（统一字体）
     ctx.fillText(userSku, startX + systemSkuWidth + SKU_GAP, textY);
     
   } else {
     // 只有系统SKU时，居中显示
-    ctx.font = `bold ${systemSkuFontSize}px Arial, sans-serif`;
+    ctx.font = FONT_STYLE;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'bottom';
     ctx.fillText(systemSku, Math.floor(LABEL_WIDTH / 2), textY);
