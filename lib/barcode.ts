@@ -188,7 +188,7 @@ export async function generateLabelForNiimbotD110(
   
   // 边距（整数像素）
   const MARGIN = 4;
-  const TEXT_HEIGHT = 14;  // 底部文字区域高度
+  const TEXT_HEIGHT = 28;  // 底部文字区域高度（放大后需要更多空间）
   
   // 1. 生成条形码（使用整数像素宽度）
   const barcodeCanvas = document.createElement('canvas');
@@ -232,12 +232,12 @@ export async function generateLabelForNiimbotD110(
   );
   
   // 2. 绘制底部文字：系统SKU + 用户SKU（统一字体样式）
-  const textY = LABEL_HEIGHT - 2;  // 底部位置（整数）
+  const textY = LABEL_HEIGHT - 4;  // 底部位置（整数）
   
-  // 字体设置（统一样式，确保清晰）
-  const FONT_SIZE = 9;              // 统一字体大小
+  // 字体设置（放大约2.5倍，从9px到9px*2.5≈22px）
+  const FONT_SIZE = 22;             // 放大后的字体大小
   const FONT_STYLE = `${FONT_SIZE}px Arial, sans-serif`;  // 统一字体样式
-  const SKU_GAP = 12;               // 两个SKU之间的间距（像素）
+  const SKU_GAP = 20;               // 两个SKU之间的间距（像素）
   
   if (userSku) {
     // 有用户SKU时，分开绘制两个SKU
