@@ -312,3 +312,157 @@ export async function shareBarcodeImage(
     return false;
   }
 }
+
+
+/**
+ * WareFlow Print Agent 连接和打印功能
+ */
+
+// Print Agent 配置
+const PRINT_AGENT_URL = 'ws://127.0.0.1:9100';
+const PRINT_AGENT_TIMEOUT = 5000; // 5秒超时
+
+/**
+ * 检查 Print Agent 是否运行
+ */
+export async function checkPrintAgentStatus(): Promise<{
+  connected: boolean;
+  printer?: string;
+  version?: string;
+  message?: string;
+}> {
+  return new Promise((resolve) => {
+    try {
+      const ws = new WebSocket(PRINT_AGENT_URL);
+      
+      const timeout = setTimeout(() => {
+        ws.close();
+        resolve({
+          connected: false,
+          message: '连接超时，请确保 WareFlow Print Agent 正在运行'
+        });
+      }, PRINT_AGENT_TIMEOUT);
+      
+      ws.onopen = () => {
+        ws.send(JSON.stringify({ action: 'status' }));
+      };
+      
+      ws.onmessage = (event) => {
+        clearTimeout(timeout);
+        try {
+          const data = JSON.parse(event.data);
+          ws.close();
+          resolve({
+            connected: data.connected || data.niimprintx_found,
+            printer: data.printer,
+            version: data.version,
+          });
+        } catch {
+          ws.close();
+          resolve({
+            connected: false,
+            message: '无效的响应数据'
+          });
+        }
+      };
+      
+      ws.onerror = () => {
+        clearTimeout(timeout);
+        resolve({
+          connected: false,
+          message: '无法连接到 WareFlow Print Agent，请确保已启动'
+        });
+      };
+      
+      ws.onclose = () => {
+        clearTimeout(timeout);
+      };
+      
+    } catch (error) {
+      resolve({
+        connected: false,
+        message: `连接错误: ${error}`
+      });
+    }
+  });
+}
+
+/**
+ * 通过 Print Agent 打印标签
+ */
+export async function printLabelViaPrintAgent(
+  imageDataURL: string,
+  options?: {
+    model?: string;
+    density?: number;
+    quantity?: number;
+    rotate?: number;
+  }
+): Promise<{
+  success: boolean;
+  message: string;
+}> {
+  return new Promise((resolve) => {
+    try {
+      const ws = new WebSocket(PRINT_AGENT_URL);
+      
+      const timeout = setTimeout(() => {
+        ws.close();
+        resolve({
+          success: false,
+          message: '打印超时，请检查打印机连接'
+        });
+      }, 60000); // 打印超时 60 秒
+      
+      ws.onopen = () => {
+        const printRequest = {
+          action: 'print',
+          data: {
+            image: imageDataURL,
+            model: options?.model || 'd110',
+            density: options?.density || 3,
+            quantity: options?.quantity || 1,
+            rotate: options?.rotate || 0,
+          }
+        };
+        ws.send(JSON.stringify(printRequest));
+      };
+      
+      ws.onmessage = (event) => {
+        clearTimeout(timeout);
+        try {
+          const data = JSON.parse(event.data);
+          ws.close();
+          resolve({
+            success: data.success,
+            message: data.message || (data.success ? '打印成功' : '打印失败')
+          });
+        } catch {
+          ws.close();
+          resolve({
+            success: false,
+            message: '无效的响应数据'
+          });
+        }
+      };
+      
+      ws.onerror = () => {
+        clearTimeout(timeout);
+        resolve({
+          success: false,
+          message: '无法连接到 WareFlow Print Agent，请确保已启动'
+        });
+      };
+      
+      ws.onclose = () => {
+        clearTimeout(timeout);
+      };
+      
+    } catch (error) {
+      resolve({
+        success: false,
+        message: `连接错误: ${error}`
+      });
+    }
+  });
+}

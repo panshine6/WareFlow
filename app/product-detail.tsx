@@ -22,7 +22,7 @@ import { Platform } from "react-native";
 import { AutoSync } from "@/lib/auto-sync";
 import { trpc } from "@/lib/trpc";
 import type { Product } from "@/types/product";
-import { generateLabelForNiimbotD110, generateSystemSKU, shareBarcodeImage } from "@/lib/barcode";
+import { generateLabelForNiimbotD110, generateSystemSKU, shareBarcodeImage, checkPrintAgentStatus, printLabelViaPrintAgent } from "@/lib/barcode";
 
 /**
  * 产品详情页面
@@ -40,9 +40,20 @@ export default function ProductDetailScreen() {
   const [saving, setSaving] = useState(false);
   const [printingLabel, setPrintingLabel] = useState(false);
   const [barcodePreview, setBarcodePreview] = useState<string | null>(null);
+  const [printAgentConnected, setPrintAgentConnected] = useState<boolean | null>(null);
+  const [isPrinting, setIsPrinting] = useState(false);
 
   // 使用 tRPC 同步
   const uploadMutation = trpc.sync.upload.useMutation();
+
+  // 检查 Print Agent 状态（仅 Web 端）
+  useEffect(() => {
+    if (Platform.OS === 'web') {
+      checkPrintAgentStatus().then(status => {
+        setPrintAgentConnected(status.connected);
+      });
+    }
+  }, []);
 
   // 加载产品数据 - 使用 useFocusEffect 确保每次页面获得焦点时重新加载
   useFocusEffect(
@@ -396,23 +407,72 @@ export default function ProductDetailScreen() {
               </Pressable>
               
               {barcodePreview && (
-                <Pressable
-                  onPress={async () => {
-                    const skuToUse = product.systemSku || 'unknown';
-                    await shareBarcodeImage(barcodePreview, skuToUse);
-                  }}
-                  style={[styles.button, styles.printButton]}
-                >
-                  <ThemedText style={styles.buttonText}>
-                    保存/分享标签
-                  </ThemedText>
-                </Pressable>
+                <>
+                  <Pressable
+                    onPress={async () => {
+                      const skuToUse = product.systemSku || 'unknown';
+                      await shareBarcodeImage(barcodePreview, skuToUse);
+                    }}
+                    style={[styles.button, styles.saveButton]}
+                  >
+                    <ThemedText style={styles.buttonText}>
+                      保存/分享标签
+                    </ThemedText>
+                  </Pressable>
+                  
+                  {/* 一键打印按钮 */}
+                  <Pressable
+                    onPress={async () => {
+                      if (!barcodePreview) return;
+                      
+                      // 先检查 Print Agent 状态
+                      const status = await checkPrintAgentStatus();
+                      if (!status.connected) {
+                        window.alert('无法连接到 WareFlow Print Agent\n\n请确保：\n1. 已下载并运行 WareFlow Print Agent\n2. 打印机已通过蓝牙连接\n\n下载地址：https://github.com/user/wareflow-print-agent');
+                        return;
+                      }
+                      
+                      setIsPrinting(true);
+                      try {
+                        const result = await printLabelViaPrintAgent(barcodePreview);
+                        if (result.success) {
+                          window.alert('✅ ' + result.message);
+                        } else {
+                          window.alert('❌ ' + result.message);
+                        }
+                      } catch (error: any) {
+                        window.alert('打印失败: ' + (error.message || '未知错误'));
+                      } finally {
+                        setIsPrinting(false);
+                      }
+                    }}
+                    disabled={isPrinting}
+                    style={[styles.button, styles.printButton, isPrinting && styles.buttonDisabled]}
+                  >
+                    <ThemedText style={styles.buttonText}>
+                      {isPrinting ? '打印中...' : '🖨️ 一键打印'}
+                    </ThemedText>
+                  </Pressable>
+                </>
               )}
             </View>
             
-            <ThemedText style={styles.printHint}>
-              点击"保存/分享标签"后，打开 Niimbot App 导入图片进行打印（12mm × 40mm 标签）
-            </ThemedText>
+            {/* Print Agent 状态提示 */}
+            {printAgentConnected === true && (
+              <ThemedText style={[styles.printHint, styles.printHintSuccess]}>
+                ✅ 已连接 WareFlow Print Agent，可以一键打印
+              </ThemedText>
+            )}
+            {printAgentConnected === false && (
+              <ThemedText style={[styles.printHint, styles.printHintWarning]}>
+                ⚠️ 未连接 Print Agent，请下载并运行 WareFlow Print Agent 客户端
+              </ThemedText>
+            )}
+            {printAgentConnected === null && (
+              <ThemedText style={styles.printHint}>
+                点击"保存/分享标签"后，打开 Niimbot App 导入图片进行打印（12mm × 38mm 标签）
+              </ThemedText>
+            )}
           </View>
         )}
 
@@ -824,7 +884,13 @@ const styles = StyleSheet.create({
     backgroundColor: "#5856D6",
   },
   printButton: {
-    backgroundColor: "#FF9500",
+    backgroundColor: "#007AFF",
+  },
+  saveButton: {
+    backgroundColor: "#34C759",
+  },
+  buttonDisabled: {
+    opacity: 0.6,
   },
   printHint: {
     fontSize: 12,
@@ -832,6 +898,14 @@ const styles = StyleSheet.create({
     opacity: 0.6,
     textAlign: "center",
     marginTop: 4,
+  },
+  printHintSuccess: {
+    color: "#34C759",
+    opacity: 1,
+  },
+  printHintWarning: {
+    color: "#FF9500",
+    opacity: 1,
   },
   // 确认对话框样式
   confirmOverlay: {
