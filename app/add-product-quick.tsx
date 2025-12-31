@@ -24,7 +24,7 @@ import { useColorScheme } from "@/hooks/use-color-scheme";
 import { UserStorage } from "@/lib/user-storage";
 import { SettingsStorage, ProductStorage } from "@/lib/storage";
 import { calculateAndSaveProductHash, imageToBase64, performDuplicateCheck, DuplicateCheckResult } from "@/lib/deduplication";
-import { generateSystemSKU, generateLabelForPTP300BT, shareBarcodeImage } from "@/lib/barcode";
+import { generateSystemSKU, generateLabelForNiimbotD110, shareBarcodeImage } from "@/lib/barcode";
 import { countProductsInImage } from "@/lib/ai-vision";
 import { compressImage, base64ToDataUrl } from "@/lib/image-utils";
 import type { Product, InventoryHistoryEntry } from "@/types/product";
@@ -386,7 +386,7 @@ export default function AddProductQuickScreen() {
       // 打印条形码
       if (printBarcode && savedProduct?.systemSku) {
         try {
-          const barcodeDataUrl = await generateLabelForPTP300BT(savedProduct.systemSku);
+          const barcodeDataUrl = await generateLabelForNiimbotD110(savedProduct.systemSku, savedProduct.sku);
           await shareBarcodeImage(barcodeDataUrl, savedProduct.systemSku);
         } catch (error) {
           console.error("[QuickAdd] Failed to generate barcode:", error);

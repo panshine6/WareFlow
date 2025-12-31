@@ -22,7 +22,7 @@ import { Platform } from "react-native";
 import { AutoSync } from "@/lib/auto-sync";
 import { trpc } from "@/lib/trpc";
 import type { Product } from "@/types/product";
-import { generateLabelForPTP300BT, generateSystemSKU, shareBarcodeImage } from "@/lib/barcode";
+import { generateLabelForNiimbotD110, generateSystemSKU, shareBarcodeImage } from "@/lib/barcode";
 
 /**
  * 产品详情页面
@@ -377,8 +377,8 @@ export default function ProductDetailScreen() {
                       setProduct({ ...product, systemSku: skuToUse });
                       setEditedProduct({ ...editedProduct, systemSku: skuToUse });
                     }
-                    // 生成条形码图片
-                    const dataUrl = await generateLabelForPTP300BT(skuToUse);
+                    // 生成条形码图片（传入系统SKU和用户SKU）
+                    const dataUrl = await generateLabelForNiimbotD110(skuToUse, product.sku);
                     setBarcodePreview(dataUrl);
                   } catch (error) {
                     console.error('生成条形码失败:', error);
@@ -411,7 +411,7 @@ export default function ProductDetailScreen() {
             </View>
             
             <ThemedText style={styles.printHint}>
-              点击"保存/分享标签"后，打开 Brother P-touch Design&Print App 导入图片进行打印
+              点击"保存/分享标签"后，打开 Niimbot App 导入图片进行打印（12mm × 40mm 标签）
             </ThemedText>
           </View>
         )}
@@ -813,8 +813,8 @@ const styles = StyleSheet.create({
     borderColor: "rgba(0, 0, 0, 0.1)",
   },
   barcodePreview: {
-    width: "100%",
-    height: 80,
+    width: 96,
+    height: 319,
   },
   printButtonsContainer: {
     flexDirection: "row",

@@ -1,6 +1,19 @@
 /**
  * SKU 生成和条形码工具库
- * 适配 Brother PT-P300BT (12mm 标签宽度)
+ * 适配 Niimbot D110 (12mm × 40mm 标签)
+ * 
+ * 标签布局（纵向）：
+ * ┌─────────────┐  ↑
+ * │   用户SKU   │  │
+ * │  (人工阅读)  │  │
+ * │             │  │
+ * │  ┃┃┃┃┃┃┃┃  │  40mm
+ * │  条形码     │  │
+ * │  ┃┃┃┃┃┃┃┃  │  │
+ * │             │  │
+ * │  系统SKU   │  │
+ * └─────────────┘  ↓
+ *    ← 12mm →
  */
 
 // Luhn Mod 36 校验位计算
@@ -82,7 +95,7 @@ export function generateSystemSKU(): string {
 
 /**
  * 生成条形码 Canvas
- * 适配 12mm 标签宽度
+ * 基础条形码生成
  */
 export async function generateBarcodeCanvas(
   sku: string,
@@ -98,16 +111,15 @@ export async function generateBarcodeCanvas(
   
   const canvas = document.createElement('canvas');
   
-  // 默认配置适配 12mm 标签
-  // 12mm ≈ 45px @96dpi, 但我们用更高分辨率以便打印
+  // 默认配置
   const defaultOptions = {
     format: 'CODE128',
-    width: 1.5,           // 条形码线条宽度
-    height: 40,           // 条形码高度（像素）
-    displayValue: true,   // 显示 SKU 文字
-    fontSize: 12,         // 字体大小
-    textMargin: 2,        // 文字与条形码间距
-    margin: 5,            // 边距
+    width: 1.5,
+    height: 40,
+    displayValue: true,
+    fontSize: 12,
+    textMargin: 2,
+    margin: 5,
     background: '#ffffff',
     lineColor: '#000000',
   };
@@ -137,33 +149,127 @@ export async function generateBarcodeDataURL(
 }
 
 /**
- * 生成适合 PT-P300BT 的标签图片
+ * 生成适合 Niimbot D110 的标签图片
+ * 标签尺寸: 12mm（宽）× 40mm（长）
+ * 打印精度: 203dpi
+ * 
+ * 像素计算:
+ * - 12mm @ 203dpi ≈ 96px (宽度)
+ * - 40mm @ 203dpi ≈ 319px (长度/高度)
+ * 
+ * 布局（从上到下）:
+ * 1. 用户SKU（人工阅读）
+ * 2. 条形码（Code 128，旋转90度，纵向显示）
+ * 3. 系统SKU
+ */
+export async function generateLabelForNiimbotD110(
+  systemSku: string,
+  userSku?: string
+): Promise<string> {
+  const JsBarcode = (await import('jsbarcode')).default;
+  
+  // 标签尺寸（像素 @ 203dpi）
+  const LABEL_WIDTH = 96;   // 12mm
+  const LABEL_HEIGHT = 319; // 40mm
+  
+  // 创建主 canvas
+  const canvas = document.createElement('canvas');
+  canvas.width = LABEL_WIDTH;
+  canvas.height = LABEL_HEIGHT;
+  const ctx = canvas.getContext('2d')!;
+  
+  // 白色背景
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, LABEL_WIDTH, LABEL_HEIGHT);
+  
+  // 设置文字样式
+  ctx.fillStyle = '#000000';
+  ctx.textAlign = 'center';
+  
+  // 边距
+  const MARGIN = 4;
+  const centerX = LABEL_WIDTH / 2;
+  
+  // 1. 绘制用户SKU（顶部，人工阅读）
+  if (userSku) {
+    ctx.font = 'bold 11px Arial, sans-serif';
+    // 如果 SKU 太长，需要缩小字体或换行
+    const maxWidth = LABEL_WIDTH - MARGIN * 2;
+    let displaySku = userSku;
+    let fontSize = 11;
+    
+    // 自动调整字体大小
+    while (ctx.measureText(displaySku).width > maxWidth && fontSize > 6) {
+      fontSize--;
+      ctx.font = `bold ${fontSize}px Arial, sans-serif`;
+    }
+    
+    // 如果还是太长，截断并添加省略号
+    if (ctx.measureText(displaySku).width > maxWidth) {
+      while (ctx.measureText(displaySku + '...').width > maxWidth && displaySku.length > 3) {
+        displaySku = displaySku.slice(0, -1);
+      }
+      displaySku += '...';
+    }
+    
+    ctx.fillText(displaySku, centerX, MARGIN + 12);
+  }
+  
+  // 2. 生成条形码（中间部分）
+  // 先生成横向条形码
+  const barcodeCanvas = document.createElement('canvas');
+  JsBarcode(barcodeCanvas, systemSku, {
+    format: 'CODE128',
+    width: 1,              // 条形码线条宽度（较窄以适应小标签）
+    height: 70,            // 条形码高度（旋转后变成宽度）
+    displayValue: false,   // 不显示文字（我们单独绘制）
+    margin: 0,
+    background: '#ffffff',
+    lineColor: '#000000',
+  });
+  
+  // 计算条形码区域
+  const barcodeStartY = userSku ? 30 : 15;
+  const barcodeEndY = LABEL_HEIGHT - 45;
+  const barcodeAreaHeight = barcodeEndY - barcodeStartY;
+  
+  // 旋转条形码 90 度并绘制
+  ctx.save();
+  ctx.translate(centerX, barcodeStartY + barcodeAreaHeight / 2);
+  ctx.rotate(-Math.PI / 2); // 逆时针旋转90度
+  
+  // 计算缩放比例，使条形码适应可用空间
+  const scale = Math.min(
+    barcodeAreaHeight / barcodeCanvas.width,
+    (LABEL_WIDTH - MARGIN * 2) / barcodeCanvas.height
+  );
+  
+  const scaledWidth = barcodeCanvas.width * scale;
+  const scaledHeight = barcodeCanvas.height * scale;
+  
+  ctx.drawImage(
+    barcodeCanvas,
+    -scaledWidth / 2,
+    -scaledHeight / 2,
+    scaledWidth,
+    scaledHeight
+  );
+  ctx.restore();
+  
+  // 3. 绘制系统SKU（底部）
+  ctx.font = '9px monospace';
+  ctx.fillText(systemSku, centerX, LABEL_HEIGHT - MARGIN - 3);
+  
+  return canvas.toDataURL('image/png');
+}
+
+/**
+ * 生成适合 PT-P300BT 的标签图片（保留兼容性）
  * 12mm 宽度，只包含条形码和 SKU
  */
 export async function generateLabelForPTP300BT(sku: string): Promise<string> {
-  const JsBarcode = (await import('jsbarcode')).default;
-  
-  // 创建 canvas
-  // 12mm ≈ 45px @96dpi，但打印需要更高分辨率
-  // 使用 180dpi (PT-P300BT 分辨率)，12mm ≈ 85px
-  const canvas = document.createElement('canvas');
-  
-  // 先生成条形码获取尺寸
-  JsBarcode(canvas, sku, {
-    format: 'CODE128',
-    width: 1.2,           // 较窄的条形码线条
-    height: 50,           // 条形码高度
-    displayValue: true,   // 显示 SKU 文字
-    fontSize: 14,         // 字体大小
-    textMargin: 3,        // 文字与条形码间距
-    margin: 8,            // 边距
-    background: '#ffffff',
-    lineColor: '#000000',
-    font: 'monospace',
-    textAlign: 'center',
-  });
-  
-  return canvas.toDataURL('image/png');
+  // 使用新的 D110 格式，不传用户SKU
+  return generateLabelForNiimbotD110(sku);
 }
 
 /**
