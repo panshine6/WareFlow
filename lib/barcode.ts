@@ -188,56 +188,41 @@ export async function generateLabelForNiimbotD110(
   
   // 边距（整数像素）
   const MARGIN = 4;
-  const TEXT_HEIGHT = 28;  // 底部文字区域高度（放大后需要更多空间）
+  const TEXT_HEIGHT = 18;  // 底部文字区域高度
   
-  // 1. 生成条形码（使用整数像素宽度）
+  // 1. 生成条形码（直接绘制，不缩放，避免锯齿）
+  // 计算可用的条形码区域
+  const barcodeAreaHeight = LABEL_HEIGHT - TEXT_HEIGHT - MARGIN * 2;
+  
+  // 直接生成条形码到主 canvas，不缩放
   const barcodeCanvas = document.createElement('canvas');
   JsBarcode(barcodeCanvas, systemSku, {
     format: 'CODE128',
     width: 1,                // 最小模块宽度 = 1像素（整数）
-    height: 60,              // 条形码高度（整数）
+    height: barcodeAreaHeight,  // 直接使用目标高度
     displayValue: false,     // 不显示文字（我们单独绘制）
     margin: 0,
     background: '#ffffff',
     lineColor: '#000000',
   });
   
-  // 计算条形码区域
-  const barcodeAreaWidth = LABEL_WIDTH - MARGIN * 2;
-  const barcodeAreaHeight = LABEL_HEIGHT - TEXT_HEIGHT - MARGIN;
-  
-  // 计算缩放比例（尽量使用整数缩放或接近整数）
-  const scaleX = barcodeAreaWidth / barcodeCanvas.width;
-  const scaleY = barcodeAreaHeight / barcodeCanvas.height;
-  const barcodeScale = Math.min(scaleX, scaleY);
-  
-  // 使用 Math.floor 确保整数像素
-  const scaledBarcodeWidth = Math.floor(barcodeCanvas.width * barcodeScale);
-  const scaledBarcodeHeight = Math.floor(barcodeCanvas.height * barcodeScale);
-  
   // 条形码水平居中（整数像素）
-  const barcodeX = Math.floor((LABEL_WIDTH - scaledBarcodeWidth) / 2);
+  const barcodeX = Math.floor((LABEL_WIDTH - barcodeCanvas.width) / 2);
   const barcodeY = MARGIN;
   
   // *** 关键：绘制前再次确保禁用平滑 ***
   ctx.imageSmoothingEnabled = false;
   
-  // 绘制条形码
-  ctx.drawImage(
-    barcodeCanvas,
-    barcodeX,
-    barcodeY,
-    scaledBarcodeWidth,
-    scaledBarcodeHeight
-  );
+  // 绘制条形码（1:1 不缩放）
+  ctx.drawImage(barcodeCanvas, barcodeX, barcodeY);
   
   // 2. 绘制底部文字：系统SKU + 用户SKU（统一字体样式）
-  const textY = LABEL_HEIGHT - 4;  // 底部位置（整数）
+  const textY = LABEL_HEIGHT - 2;  // 底部位置（整数）
   
-  // 字体设置（放大约2.5倍，从9px到9px*2.5≈22px）
-  const FONT_SIZE = 22;             // 放大后的字体大小
+  // 字体设置（放大约1.5倍，从9px到14px）
+  const FONT_SIZE = 14;             // 1.5倍字体大小
   const FONT_STYLE = `${FONT_SIZE}px Arial, sans-serif`;  // 统一字体样式
-  const SKU_GAP = 20;               // 两个SKU之间的间距（像素）
+  const SKU_GAP = 16;               // 两个SKU之间的间距（像素）
   
   if (userSku) {
     // 有用户SKU时，分开绘制两个SKU
