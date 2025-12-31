@@ -163,7 +163,7 @@ export async function generateLabelForNiimbotD110(
   const JsBarcode = (await import('jsbarcode')).default;
   
   // 标签尺寸（像素 @ 203dpi）- 横向
-  const LABEL_WIDTH = 319;  // 40mm
+  const LABEL_WIDTH = 303;  // 38mm (从40mm减少2mm)
   const LABEL_HEIGHT = 96;  // 12mm
   
   // 创建主 canvas

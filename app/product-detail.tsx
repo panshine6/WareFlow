@@ -813,7 +813,7 @@ const styles = StyleSheet.create({
     borderColor: "rgba(0, 0, 0, 0.1)",
   },
   barcodePreview: {
-    width: 319,
+    width: 303,
     height: 96,
   },
   printButtonsContainer: {
