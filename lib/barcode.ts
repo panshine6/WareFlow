@@ -4,8 +4,9 @@
  * 
  * 标签布局（横向）：
  * ┌─────────────────────────────────────────────┐  ↑
- * │  用户SKU   |||||||||||||||||||  系统SKU     │  12mm
- * │  (人工阅读)    条形码                        │  ↓
+ * │      |||||||||||||||||||||||||||||||        │  
+ * │          条形码 (Code 128)                   │  12mm
+ * │      系统SKU  用户SKU                        │  ↓
  * └─────────────────────────────────────────────┘
  *                    ← 40mm →
  */
@@ -151,10 +152,9 @@ export async function generateBarcodeDataURL(
  * - 40mm @ 203dpi ≈ 319px (宽度)
  * - 12mm @ 203dpi ≈ 96px (高度)
  * 
- * 布局（从左到右）:
- * 1. 用户SKU（左侧，人工阅读）
- * 2. 条形码（中间，Code 128）
- * 3. 系统SKU（条形码下方）
+ * 布局：
+ * - 上方：条形码（Code 128）
+ * - 下方：系统SKU + 用户SKU（一行显示）
  */
 export async function generateLabelForNiimbotD110(
   systemSku: string,
@@ -181,42 +181,35 @@ export async function generateLabelForNiimbotD110(
   
   // 边距
   const MARGIN = 4;
+  const TEXT_HEIGHT = 14;  // 底部文字区域高度
   
-  // 1. 生成条形码（中间主体部分）
+  // 1. 生成条形码
   const barcodeCanvas = document.createElement('canvas');
   JsBarcode(barcodeCanvas, systemSku, {
     format: 'CODE128',
-    width: 1.2,              // 条形码线条宽度
-    height: 50,              // 条形码高度
+    width: 1.5,              // 条形码线条宽度
+    height: 60,              // 条形码高度
     displayValue: false,     // 不显示文字（我们单独绘制）
     margin: 0,
     background: '#ffffff',
     lineColor: '#000000',
   });
   
-  // 计算布局
-  // 用户SKU区域宽度（如果有的话）
-  let userSkuWidth = 0;
-  if (userSku) {
-    ctx.font = 'bold 10px Arial, sans-serif';
-    userSkuWidth = Math.min(ctx.measureText(userSku).width + 8, 80);
-  }
-  
-  // 条形码区域
-  const barcodeAreaStart = userSku ? userSkuWidth : MARGIN;
-  const barcodeAreaWidth = LABEL_WIDTH - barcodeAreaStart - MARGIN;
+  // 计算条形码区域
+  const barcodeAreaWidth = LABEL_WIDTH - MARGIN * 2;
+  const barcodeAreaHeight = LABEL_HEIGHT - TEXT_HEIGHT - MARGIN;
   
   // 缩放条形码以适应可用空间
   const barcodeScale = Math.min(
     barcodeAreaWidth / barcodeCanvas.width,
-    (LABEL_HEIGHT - 20) / barcodeCanvas.height  // 留出空间给系统SKU文字
+    barcodeAreaHeight / barcodeCanvas.height
   );
   
   const scaledBarcodeWidth = barcodeCanvas.width * barcodeScale;
   const scaledBarcodeHeight = barcodeCanvas.height * barcodeScale;
   
-  // 条形码水平居中在其区域内
-  const barcodeX = barcodeAreaStart + (barcodeAreaWidth - scaledBarcodeWidth) / 2;
+  // 条形码水平居中
+  const barcodeX = (LABEL_WIDTH - scaledBarcodeWidth) / 2;
   const barcodeY = MARGIN;
   
   // 绘制条形码
@@ -228,40 +221,33 @@ export async function generateLabelForNiimbotD110(
     scaledBarcodeHeight
   );
   
-  // 2. 绘制系统SKU（条形码下方）
-  ctx.font = '9px monospace';
-  ctx.textAlign = 'center';
-  const systemSkuX = barcodeX + scaledBarcodeWidth / 2;
-  const systemSkuY = barcodeY + scaledBarcodeHeight + 10;
-  ctx.fillText(systemSku, systemSkuX, systemSkuY);
+  // 2. 绘制底部文字：系统SKU + 用户SKU
+  const textY = LABEL_HEIGHT - 4;  // 底部位置
   
-  // 3. 绘制用户SKU（左侧，垂直居中，旋转90度）
+  // 组合显示文字
+  let displayText = systemSku;
   if (userSku) {
-    ctx.save();
-    ctx.font = 'bold 10px Arial, sans-serif';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    
-    // 移动到左侧区域中心，旋转文字
-    const userSkuCenterX = userSkuWidth / 2;
-    const userSkuCenterY = LABEL_HEIGHT / 2;
-    
-    ctx.translate(userSkuCenterX, userSkuCenterY);
-    ctx.rotate(-Math.PI / 2);  // 逆时针旋转90度
-    
-    // 截断过长的SKU
-    let displaySku = userSku;
-    const maxTextWidth = LABEL_HEIGHT - MARGIN * 2;
-    while (ctx.measureText(displaySku).width > maxTextWidth && displaySku.length > 3) {
-      displaySku = displaySku.slice(0, -1);
-    }
-    if (displaySku !== userSku) {
-      displaySku = displaySku.slice(0, -2) + '..';
-    }
-    
-    ctx.fillText(displaySku, 0, 0);
-    ctx.restore();
+    displayText = `${systemSku} ${userSku}`;
   }
+  
+  // 设置字体并计算文字宽度
+  ctx.font = 'bold 11px Arial, sans-serif';
+  let textWidth = ctx.measureText(displayText).width;
+  
+  // 如果文字太长，尝试缩小字体
+  if (textWidth > LABEL_WIDTH - MARGIN * 2) {
+    ctx.font = 'bold 10px Arial, sans-serif';
+    textWidth = ctx.measureText(displayText).width;
+  }
+  if (textWidth > LABEL_WIDTH - MARGIN * 2) {
+    ctx.font = 'bold 9px Arial, sans-serif';
+    textWidth = ctx.measureText(displayText).width;
+  }
+  
+  // 文字水平居中
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'bottom';
+  ctx.fillText(displayText, LABEL_WIDTH / 2, textY);
   
   return canvas.toDataURL('image/png');
 }
