@@ -152,3 +152,212 @@ export async function exportToDianxiaomiFormat(
   // 使用相同的导出逻辑
   return exportToExcel(products);
 }
+
+
+// ============================================
+// NIIMBOT 标签打印 Excel 导出功能
+// ============================================
+
+import * as XLSX from 'xlsx';
+import { ProductStorage } from './storage';
+
+// 待打印标签项
+export interface LabelItem {
+  id: string;
+  systemSku: string;
+  userSku: string;
+  productName?: string;
+  quantity: number;
+  inboundTime: number;
+}
+
+// 批次分组结果
+export interface BatchGroup {
+  startTime: number;
+  endTime: number;
+  items: LabelItem[];
+  isSameBatch: boolean;
+}
+
+/**
+ * 获取最近入库的商品列表
+ * @param hours 最近多少小时内的入库记录，默认 24 小时
+ */
+export async function getRecentInboundProducts(hours: number = 24): Promise<LabelItem[]> {
+  const allProducts = await ProductStorage.getAll();
+  const cutoffTime = Date.now() - hours * 60 * 60 * 1000;
+  
+  const recentItems: LabelItem[] = [];
+  
+  for (const product of allProducts) {
+    // 检查是否有系统 SKU
+    if (!product.systemSku) continue;
+    
+    // 获取最近的入库记录
+    const inboundHistory = (product.history || []).filter(
+      h => h.type === 'inbound' && new Date(h.timestamp).getTime() >= cutoffTime
+    );
+    
+    for (const entry of inboundHistory) {
+      recentItems.push({
+        id: product.id,
+        systemSku: product.systemSku,
+        userSku: product.sku || '',
+        productName: product.sku, // 使用 sku 作为名称
+        quantity: entry.quantity,
+        inboundTime: new Date(entry.timestamp).getTime(),
+      });
+    }
+  }
+  
+  // 按入库时间降序排列
+  recentItems.sort((a, b) => b.inboundTime - a.inboundTime);
+  
+  return recentItems;
+}
+
+/**
+ * 将商品按入库时间分组（识别同一批次）
+ * @param items 商品列表
+ * @param batchIntervalMinutes 同一批次的时间间隔（分钟），默认 30 分钟
+ */
+export function groupByBatch(items: LabelItem[], batchIntervalMinutes: number = 30): BatchGroup[] {
+  if (items.length === 0) return [];
+  
+  const batchIntervalMs = batchIntervalMinutes * 60 * 1000;
+  const groups: BatchGroup[] = [];
+  
+  // 按时间排序
+  const sortedItems = [...items].sort((a, b) => a.inboundTime - b.inboundTime);
+  
+  let currentGroup: BatchGroup = {
+    startTime: sortedItems[0].inboundTime,
+    endTime: sortedItems[0].inboundTime,
+    items: [sortedItems[0]],
+    isSameBatch: true,
+  };
+  
+  for (let i = 1; i < sortedItems.length; i++) {
+    const item = sortedItems[i];
+    const timeDiff = item.inboundTime - currentGroup.endTime;
+    
+    if (timeDiff <= batchIntervalMs) {
+      // 属于同一批次
+      currentGroup.items.push(item);
+      currentGroup.endTime = item.inboundTime;
+    } else {
+      // 新批次
+      groups.push(currentGroup);
+      currentGroup = {
+        startTime: item.inboundTime,
+        endTime: item.inboundTime,
+        items: [item],
+        isSameBatch: true,
+      };
+    }
+  }
+  
+  // 添加最后一组
+  groups.push(currentGroup);
+  
+  // 标记只有一个商品的批次
+  for (const group of groups) {
+    group.isSameBatch = group.items.length > 1;
+  }
+  
+  return groups;
+}
+
+/**
+ * 生成 NIIMBOT APP 可导入的 Excel 文件
+ * @param items 要导出的商品列表
+ * @returns Excel 文件的 Blob
+ */
+export function generateNiimbotExcel(items: LabelItem[]): Blob {
+  // 创建工作表数据
+  // 第一行：列标题
+  const data: (string | number)[][] = [
+    ['系统SKU', '公司SKU'],
+  ];
+  
+  // 添加数据行
+  for (const item of items) {
+    // 每个商品可能需要打印多张标签（根据数量）
+    for (let i = 0; i < item.quantity; i++) {
+      data.push([item.systemSku, item.userSku]);
+    }
+  }
+  
+  // 创建工作簿
+  const wb = XLSX.utils.book_new();
+  const ws = XLSX.utils.aoa_to_sheet(data);
+  
+  // 设置列宽
+  ws['!cols'] = [
+    { wch: 20 }, // 系统SKU
+    { wch: 20 }, // 公司SKU
+  ];
+  
+  XLSX.utils.book_append_sheet(wb, ws, '标签数据');
+  
+  // 生成 Excel 文件
+  const excelBuffer = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+  return new Blob([excelBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+}
+
+/**
+ * 下载 Excel 文件（Web 端）
+ * @param blob Excel 文件的 Blob
+ * @param filename 文件名
+ */
+export function downloadExcelWeb(blob: Blob, filename: string = 'niimbot_labels.xlsx'): void {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+/**
+ * 一键导出最近入库商品的标签 Excel
+ * @param items 选中的商品列表
+ */
+export function exportLabelsToExcel(items: LabelItem[]): void {
+  if (items.length === 0) {
+    throw new Error('没有选中任何商品');
+  }
+  
+  const blob = generateNiimbotExcel(items);
+  const timestamp = new Date().toISOString().slice(0, 10);
+  const filename = `niimbot_labels_${timestamp}.xlsx`;
+  downloadExcelWeb(blob, filename);
+}
+
+/**
+ * 格式化时间显示
+ */
+export function formatLabelTime(timestamp: number): string {
+  return new Date(timestamp).toLocaleString('zh-CN', {
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
+/**
+ * 格式化批次时间范围
+ */
+export function formatBatchTimeRange(group: BatchGroup): string {
+  const start = formatLabelTime(group.startTime);
+  const end = formatLabelTime(group.endTime);
+  
+  if (start === end) {
+    return start;
+  }
+  
+  return `${start} - ${end}`;
+}

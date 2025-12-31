@@ -8,31 +8,46 @@ import {
   StyleSheet,
   TextInput,
   View,
+  ActivityIndicator,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
 import { useColorScheme } from "@/hooks/use-color-scheme";
-import { UserStorage } from "@/lib/user-storage";
+import { OperatorSyncService } from "@/lib/operator-sync";
 import { APP_VERSION, APP_AUTHOR } from "@/lib/version";
+import { trpc } from "@/lib/trpc";
 import type { User } from "@/types/user";
 
+// 操作员类型
+interface Operator {
+  id: number;
+  name: string;
+  isAdmin: number;
+  isActive: number;
+  createdAt: string;
+  lastLoginAt: string | null;
+}
+
 /**
- * PIN 码登录页面
+ * PIN 码登录页面（云端账户版本）
  */
 export default function LoginScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const colorScheme = useColorScheme();
+  const trpcClient = trpc.useUtils().client;
 
   const [pin, setPin] = useState("");
   const [name, setName] = useState("");
   const [isFirstUser, setIsFirstUser] = useState<boolean | null>(null); // null = 加载中
   const [isCreateMode, setIsCreateMode] = useState(false); // 是否是创建账号模式
   const [loading, setLoading] = useState(false);
-  const [users, setUsers] = useState<User[]>([]); // 所有用户列表
-  const [selectedUser, setSelectedUser] = useState<User | null>(null); // 选中的用户
+  const [operators, setOperators] = useState<Operator[]>([]); // 操作员列表
+  const [selectedOperator, setSelectedOperator] = useState<Operator | null>(null); // 选中的操作员
+  const [isOffline, setIsOffline] = useState(false); // 是否离线模式
+  const [offlineDaysRemaining, setOfflineDaysRemaining] = useState(0); // 离线有效期剩余天数
 
   // 跨平台的 alert 函数
   const showAlert = (title: string, message: string, onOk?: () => void) => {
@@ -44,25 +59,56 @@ export default function LoginScreen() {
     }
   };
 
-  // 检查是否是首次使用，并加载用户列表
+  // 检查是否是首次使用，并加载操作员列表
   useEffect(() => {
-    const checkFirstUser = async () => {
-      const hasUsers = await UserStorage.hasUsers();
-      setIsFirstUser(!hasUsers);
-      setIsCreateMode(!hasUsers); // 如果没有用户，默认进入创建模式
-
-      if (hasUsers) {
-        // 加载所有用户
-        const allUsers = await UserStorage.getAll();
-        setUsers(allUsers);
+    const checkAndLoad = async () => {
+      try {
+        // 获取操作员列表
+        const { operators: ops, isOffline: offline } = await OperatorSyncService.getOperators(trpcClient);
+        
+        setIsOffline(offline);
+        setOperators(ops);
+        
+        // 如果没有操作员，说明是首次使用
+        const hasOperators = ops.length > 0;
+        setIsFirstUser(!hasOperators);
+        setIsCreateMode(!hasOperators);
+        
+        // 如果离线，获取剩余有效期
+        if (offline) {
+          const days = await OperatorSyncService.getOfflineValidityDaysRemaining();
+          setOfflineDaysRemaining(days);
+        }
+      } catch (error) {
+        console.error("Failed to load operators:", error);
+        // 尝试使用缓存
+        const cached = await OperatorSyncService.getCachedOperators();
+        if (cached.length > 0) {
+          setOperators(cached.map(op => ({
+            id: op.id,
+            name: op.name,
+            isAdmin: op.isAdmin ? 1 : 0,
+            isActive: 1,
+            createdAt: op.cachedAt,
+            lastLoginAt: null,
+          })));
+          setIsOffline(true);
+          setIsFirstUser(false);
+          const days = await OperatorSyncService.getOfflineValidityDaysRemaining();
+          setOfflineDaysRemaining(days);
+        } else {
+          setIsFirstUser(true);
+          setIsCreateMode(true);
+        }
       }
     };
-    checkFirstUser();
+    
+    checkAndLoad();
   }, []);
 
   // 处理登录
   const handleLogin = async () => {
-    if (!selectedUser) {
+    if (!selectedOperator) {
       showAlert("提示", "请先选择要登录的账号");
       return;
     }
@@ -85,18 +131,24 @@ export default function LoginScreen() {
     setLoading(true);
 
     try {
-      // 验证 PIN 码是否匹配选中的用户
-      if (selectedUser.pin !== pin) {
-        showAlert("登录失败", "PIN 码不正确");
+      // 使用云端登录（自动处理离线情况）
+      const result = await OperatorSyncService.cloudLogin(trpcClient, selectedOperator.name, pin);
+      
+      if (!result.success) {
+        showAlert("登录失败", result.error || "请重试");
         setLoading(false);
         return;
       }
 
-      // 设置当前用户
-      await UserStorage.setCurrentUser(selectedUser);
-
-      // 跳转到首页
-      router.replace("/");
+      // 显示离线提示
+      if (result.isOffline) {
+        showAlert("离线登录", `您当前处于离线模式，剩余有效期 ${offlineDaysRemaining} 天`, () => {
+          router.replace("/");
+        });
+      } else {
+        // 跳转到首页
+        router.replace("/");
+      }
     } catch (error: any) {
       console.error("Login error:", error);
       showAlert("登录失败", error.message || "请重试");
@@ -105,8 +157,8 @@ export default function LoginScreen() {
     }
   };
 
-  // 处理创建用户
-  const handleCreateUser = async () => {
+  // 处理创建管理员账户
+  const handleCreateAdmin = async () => {
     if (!name.trim()) {
       showAlert("提示", "请输入姓名");
       return;
@@ -130,37 +182,36 @@ export default function LoginScreen() {
     setLoading(true);
 
     try {
-      // 创建用户
-      const newUser = await UserStorage.create(name, pin);
+      // 创建管理员账户
+      const result = await OperatorSyncService.initAdminAccount(trpcClient, name, pin);
+      
+      if (!result.success) {
+        showAlert("创建失败", result.error || "请重试");
+        setLoading(false);
+        return;
+      }
 
-      // 设置当前用户
-      await UserStorage.setCurrentUser(newUser);
-
-      const isAdmin = isFirstUser;
-
-      if (isAdmin) {
-        // 管理员账号创建成功，直接进入首页
-        showAlert("欢迎", `${name}，您已成功创建管理员账号！`, () =>
-          router.replace("/")
-        );
+      // 登录
+      const loginResult = await OperatorSyncService.cloudLogin(trpcClient, name, pin);
+      
+      if (loginResult.success) {
+        showAlert("欢迎", `${name}，您已成功创建管理员账号！`, () => {
+          router.replace("/");
+        });
       } else {
-        // 普通用户注册成功，提示并切换到登录界面
-        showAlert(
-          "注册成功",
-          `${name}，您已注册成功！请使用 PIN 码登录。`,
-          async () => {
-            setIsCreateMode(false);
-            setName("");
-            setPin("");
-            setSelectedUser(null);
-            // 重新加载用户列表
-            const allUsers = await UserStorage.getAll();
-            setUsers(allUsers);
-          }
-        );
+        // 创建成功但登录失败，切换到登录界面
+        showAlert("创建成功", "请使用 PIN 码登录", async () => {
+          setIsCreateMode(false);
+          setName("");
+          setPin("");
+          // 重新加载操作员列表
+          const { operators: ops } = await OperatorSyncService.getOperators(trpcClient);
+          setOperators(ops);
+          setIsFirstUser(false);
+        });
       }
     } catch (error: any) {
-      console.error("Create user error:", error);
+      console.error("Create admin error:", error);
       showAlert("创建失败", error.message || "请重试");
     } finally {
       setLoading(false);
@@ -172,18 +223,18 @@ export default function LoginScreen() {
     setIsCreateMode(!isCreateMode);
     setPin("");
     setName("");
-    setSelectedUser(null);
+    setSelectedOperator(null);
   };
 
-  // 选择用户
-  const handleSelectUser = (user: User) => {
-    setSelectedUser(user);
+  // 选择操作员
+  const handleSelectOperator = (operator: Operator) => {
+    setSelectedOperator(operator);
     setPin(""); // 清空 PIN 码
   };
 
-  // 取消选择用户
+  // 取消选择操作员
   const handleCancelSelect = () => {
-    setSelectedUser(null);
+    setSelectedOperator(null);
     setPin("");
   };
 
@@ -192,7 +243,8 @@ export default function LoginScreen() {
     return (
       <ThemedView style={styles.container}>
         <View style={styles.loadingContainer}>
-          <ThemedText>加载中...</ThemedText>
+          <ActivityIndicator size="large" color="#007AFF" />
+          <ThemedText style={styles.loadingText}>正在连接服务器...</ThemedText>
         </View>
       </ThemedView>
     );
@@ -201,8 +253,8 @@ export default function LoginScreen() {
   // 显示创建账号界面
   const showCreateMode = isCreateMode;
 
-  // 渲染用户选择项
-  const renderUserItem = ({ item }: { item: User }) => (
+  // 渲染操作员选择项
+  const renderOperatorItem = ({ item }: { item: Operator }) => (
     <Pressable
       style={[
         styles.userItem,
@@ -213,7 +265,7 @@ export default function LoginScreen() {
               : "rgba(0, 0, 0, 0.05)",
         },
       ]}
-      onPress={() => handleSelectUser(item)}
+      onPress={() => handleSelectOperator(item)}
     >
       <View style={styles.userAvatar}>
         <ThemedText style={styles.userAvatarText}>
@@ -222,7 +274,7 @@ export default function LoginScreen() {
       </View>
       <View style={styles.userInfo}>
         <ThemedText style={styles.userName}>{item.name}</ThemedText>
-        {item.isAdmin && (
+        {item.isAdmin === 1 && (
           <ThemedText style={styles.adminBadge}>管理员</ThemedText>
         )}
       </View>
@@ -240,25 +292,30 @@ export default function LoginScreen() {
           },
         ]}
       >
+        {/* 离线提示 */}
+        {isOffline && (
+          <View style={styles.offlineBanner}>
+            <ThemedText style={styles.offlineBannerText}>
+              📡 离线模式 · 剩余 {offlineDaysRemaining} 天
+            </ThemedText>
+          </View>
+        )}
+
         <View style={styles.header}>
           <ThemedText type="title" style={styles.appTitle}>
             Ladybuty饰品库存管理系统
           </ThemedText>
           <ThemedText type="subtitle" style={styles.title}>
             {showCreateMode
-              ? isFirstUser
-                ? "创建管理员账号"
-                : "创建新账号"
-              : selectedUser
-              ? `${selectedUser.name} 登录`
+              ? "创建管理员账号"
+              : selectedOperator
+              ? `${selectedOperator.name} 登录`
               : "操作员登录"}
           </ThemedText>
           <ThemedText style={styles.subtitle}>
             {showCreateMode
-              ? isFirstUser
-                ? "首次使用，请创建管理员账号"
-                : "请填写您的信息"
-              : selectedUser
+              ? "首次使用，请创建管理员账号"
+              : selectedOperator
               ? "请输入您的 PIN 码"
               : "请选择您的账号"}
           </ThemedText>
@@ -266,7 +323,7 @@ export default function LoginScreen() {
 
         <View style={styles.form}>
           {showCreateMode ? (
-            // 创建账号模式
+            // 创建管理员账号模式
             <>
               <ThemedText style={styles.label}>姓名</ThemedText>
               <TextInput
@@ -317,7 +374,7 @@ export default function LoginScreen() {
                 maxLength={6}
                 secureTextEntry
                 returnKeyType="done"
-                onSubmitEditing={handleCreateUser}
+                onSubmitEditing={handleCreateAdmin}
               />
 
               <ThemedText style={styles.hint}>
@@ -326,22 +383,24 @@ export default function LoginScreen() {
 
               <Pressable
                 style={[styles.button, loading && styles.buttonDisabled]}
-                onPress={handleCreateUser}
+                onPress={handleCreateAdmin}
                 disabled={loading}
               >
                 <ThemedText style={styles.buttonText}>
-                  {loading
-                    ? "处理中..."
-                    : isFirstUser
-                    ? "创建账号"
-                    : "注册"}
+                  {loading ? "处理中..." : "创建账号"}
                 </ThemedText>
               </Pressable>
+
+              {isOffline && (
+                <ThemedText style={styles.offlineHint}>
+                  ⚠️ 首次使用需要联网创建账户
+                </ThemedText>
+              )}
             </>
-          ) : selectedUser ? (
-            // 已选择用户，显示 PIN 码输入
+          ) : selectedOperator ? (
+            // 已选择操作员，显示 PIN 码输入
             <>
-              {/* 显示选中的用户信息 */}
+              {/* 显示选中的操作员信息 */}
               <View
                 style={[
                   styles.selectedUserCard,
@@ -355,14 +414,14 @@ export default function LoginScreen() {
               >
                 <View style={styles.selectedUserAvatar}>
                   <ThemedText style={styles.selectedUserAvatarText}>
-                    {selectedUser.name.charAt(0).toUpperCase()}
+                    {selectedOperator.name.charAt(0).toUpperCase()}
                   </ThemedText>
                 </View>
                 <View style={styles.selectedUserInfo}>
                   <ThemedText style={styles.selectedUserName}>
-                    {selectedUser.name}
+                    {selectedOperator.name}
                   </ThemedText>
-                  {selectedUser.isAdmin && (
+                  {selectedOperator.isAdmin === 1 && (
                     <ThemedText style={styles.adminBadge}>管理员</ThemedText>
                   )}
                 </View>
@@ -370,7 +429,9 @@ export default function LoginScreen() {
                   style={styles.changeUserButton}
                   onPress={handleCancelSelect}
                 >
-                  <ThemedText style={styles.changeUserText}>更换</ThemedText>
+                  <ThemedText style={styles.changeUserButtonText}>
+                    更换
+                  </ThemedText>
                 </Pressable>
               </View>
 
@@ -389,7 +450,7 @@ export default function LoginScreen() {
                 ]}
                 value={pin}
                 onChangeText={setPin}
-                placeholder="4-6 位数字"
+                placeholder="请输入 PIN 码"
                 placeholderTextColor={
                   colorScheme === "dark"
                     ? "rgba(255, 255, 255, 0.4)"
@@ -403,53 +464,59 @@ export default function LoginScreen() {
                 onSubmitEditing={handleLogin}
               />
 
-              <ThemedText style={styles.hint}>
-                忘记 PIN 码？请联系管理员
-              </ThemedText>
-
               <Pressable
                 style={[styles.button, loading && styles.buttonDisabled]}
                 onPress={handleLogin}
                 disabled={loading}
               >
                 <ThemedText style={styles.buttonText}>
-                  {loading ? "处理中..." : "登录"}
+                  {loading ? "登录中..." : "登录"}
                 </ThemedText>
               </Pressable>
             </>
           ) : (
-            // 未选择用户，显示用户列表
+            // 显示操作员列表
             <>
-              <ThemedText style={styles.label}>选择账号</ThemedText>
               <FlatList
-                data={users}
-                renderItem={renderUserItem}
+                data={operators}
+                renderItem={renderOperatorItem}
                 keyExtractor={(item) => item.id.toString()}
                 style={styles.userList}
-                showsVerticalScrollIndicator={false}
+                contentContainerStyle={styles.userListContent}
                 ListEmptyComponent={
-                  <ThemedText style={styles.emptyText}>
-                    暂无用户，请先创建账号
-                  </ThemedText>
+                  <View style={styles.emptyList}>
+                    <ThemedText style={styles.emptyListText}>
+                      暂无操作员账号
+                    </ThemedText>
+                  </View>
                 }
               />
+
+              {/* 如果没有操作员，显示创建按钮 */}
+              {operators.length === 0 && (
+                <Pressable
+                  style={styles.button}
+                  onPress={() => setIsCreateMode(true)}
+                >
+                  <ThemedText style={styles.buttonText}>
+                    创建管理员账号
+                  </ThemedText>
+                </Pressable>
+              )}
             </>
           )}
-
-          {/* 切换按钮 */}
-          <Pressable style={styles.switchButton} onPress={toggleMode}>
-            <ThemedText style={styles.switchButtonText}>
-              {showCreateMode
-                ? "已有账号？点击登录"
-                : "没有账号？点击创建"}
-            </ThemedText>
-          </Pressable>
         </View>
 
-        {/* 底部信息：作者和版本号 */}
+        {/* 底部信息 */}
         <View style={styles.footer}>
-          <ThemedText style={styles.footerText}>作者：{APP_AUTHOR}</ThemedText>
-          <ThemedText style={styles.footerText}>版本：{APP_VERSION}</ThemedText>
+          <ThemedText style={styles.footerText}>
+            {APP_VERSION} · {APP_AUTHOR}
+          </ThemedText>
+          {isOffline && (
+            <ThemedText style={styles.footerOfflineText}>
+              离线模式
+            </ThemedText>
+          )}
         </View>
       </View>
     </ThemedView>
@@ -460,29 +527,46 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
+  content: {
+    flex: 1,
+    paddingHorizontal: 24,
+  },
   loadingContainer: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
   },
-  content: {
-    flex: 1,
-    paddingHorizontal: 24,
-    justifyContent: "center",
+  loadingText: {
+    marginTop: 16,
+    fontSize: 16,
+    opacity: 0.7,
+  },
+  offlineBanner: {
+    backgroundColor: "#FF9500",
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    marginBottom: 16,
+    alignItems: "center",
+  },
+  offlineBannerText: {
+    color: "#fff",
+    fontSize: 14,
+    fontWeight: "600",
   },
   header: {
     marginBottom: 32,
-    alignItems: "center",
   },
   appTitle: {
-    fontSize: 24,
-    marginBottom: 8,
+    fontSize: 22,
+    fontWeight: "bold",
+    marginBottom: 16,
     textAlign: "center",
-    color: "#007AFF",
   },
   title: {
-    fontSize: 20,
-    marginBottom: 12,
+    fontSize: 24,
+    fontWeight: "bold",
+    marginBottom: 8,
     textAlign: "center",
   },
   subtitle: {
@@ -491,76 +575,59 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   form: {
-    width: "100%",
     flex: 1,
-    maxHeight: 500,
   },
   label: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: "600",
     marginBottom: 8,
   },
   input: {
-    height: 56,
+    height: 48,
     borderRadius: 12,
     paddingHorizontal: 16,
     fontSize: 16,
-    marginBottom: 24,
+    marginBottom: 16,
   },
   pinInput: {
-    fontSize: 24,
     letterSpacing: 8,
     textAlign: "center",
+    fontSize: 24,
   },
   hint: {
-    fontSize: 14,
+    fontSize: 12,
     opacity: 0.6,
-    marginBottom: 32,
+    marginBottom: 24,
+    textAlign: "center",
+  },
+  offlineHint: {
+    fontSize: 14,
+    color: "#FF9500",
+    marginTop: 16,
     textAlign: "center",
   },
   button: {
-    height: 56,
+    height: 48,
     backgroundColor: "#007AFF",
     borderRadius: 12,
     justifyContent: "center",
     alignItems: "center",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    marginTop: 8,
   },
   buttonDisabled: {
     opacity: 0.6,
   },
   buttonText: {
     color: "#fff",
-    fontSize: 18,
-    fontWeight: "700",
-  },
-  switchButton: {
-    marginTop: 24,
-    paddingVertical: 12,
-    alignItems: "center",
-  },
-  switchButtonText: {
     fontSize: 16,
-    color: "#007AFF",
-    fontWeight: "500",
+    fontWeight: "600",
   },
-  footer: {
-    marginTop: 24,
-    alignItems: "center",
-  },
-  footerText: {
-    fontSize: 12,
-    opacity: 0.5,
-    marginBottom: 4,
-  },
-  // 用户列表样式
   userList: {
-    maxHeight: 240,
+    flex: 1,
     marginBottom: 16,
+  },
+  userListContent: {
+    paddingBottom: 16,
   },
   userItem: {
     flexDirection: "row",
@@ -581,7 +648,7 @@ const styles = StyleSheet.create({
   userAvatarText: {
     color: "#fff",
     fontSize: 20,
-    fontWeight: "700",
+    fontWeight: "bold",
   },
   userInfo: {
     flex: 1,
@@ -595,12 +662,6 @@ const styles = StyleSheet.create({
     color: "#FF9500",
     marginTop: 4,
   },
-  emptyText: {
-    textAlign: "center",
-    opacity: 0.6,
-    marginTop: 24,
-  },
-  // 选中用户卡片样式
   selectedUserCard: {
     flexDirection: "row",
     alignItems: "center",
@@ -620,7 +681,7 @@ const styles = StyleSheet.create({
   selectedUserAvatarText: {
     color: "#fff",
     fontSize: 24,
-    fontWeight: "700",
+    fontWeight: "bold",
   },
   selectedUserInfo: {
     flex: 1,
@@ -632,12 +693,33 @@ const styles = StyleSheet.create({
   changeUserButton: {
     paddingHorizontal: 16,
     paddingVertical: 8,
-    borderRadius: 8,
     backgroundColor: "rgba(0, 122, 255, 0.1)",
+    borderRadius: 8,
   },
-  changeUserText: {
+  changeUserButtonText: {
     color: "#007AFF",
     fontSize: 14,
     fontWeight: "600",
+  },
+  emptyList: {
+    padding: 32,
+    alignItems: "center",
+  },
+  emptyListText: {
+    fontSize: 16,
+    opacity: 0.6,
+  },
+  footer: {
+    paddingVertical: 16,
+    alignItems: "center",
+  },
+  footerText: {
+    fontSize: 12,
+    opacity: 0.5,
+  },
+  footerOfflineText: {
+    fontSize: 12,
+    color: "#FF9500",
+    marginTop: 4,
   },
 });

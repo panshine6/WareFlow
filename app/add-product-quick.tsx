@@ -25,6 +25,7 @@ import { UserStorage } from "@/lib/user-storage";
 import { SettingsStorage, ProductStorage } from "@/lib/storage";
 import { calculateAndSaveProductHash, imageToBase64, performDuplicateCheck, DuplicateCheckResult } from "@/lib/deduplication";
 import { generateSystemSKU, generateLabelForNiimbotD110, shareBarcodeImage } from "@/lib/barcode";
+import { generateLabelForNiimbotB1 } from "@/lib/niimbot-printer";
 import { countProductsInImage } from "@/lib/ai-vision";
 import { compressImage, base64ToDataUrl } from "@/lib/image-utils";
 import type { Product, InventoryHistoryEntry } from "@/types/product";
@@ -76,6 +77,9 @@ export default function AddProductQuickScreen() {
 
   // 保存状态
   const [saving, setSaving] = useState(false);
+  
+  // 打印机类型（默认使用 B1）
+  const [printerType, setPrinterType] = useState<'b1' | 'd110'>('b1');
 
   // 加载默认设置
   useEffect(() => {
@@ -386,7 +390,10 @@ export default function AddProductQuickScreen() {
       // 打印条形码
       if (printBarcode && savedProduct?.systemSku) {
         try {
-          const barcodeDataUrl = await generateLabelForNiimbotD110(savedProduct.systemSku, savedProduct.sku);
+          // 根据打印机类型生成不同尺寸的标签
+          const barcodeDataUrl = printerType === 'b1'
+            ? await generateLabelForNiimbotB1(savedProduct.systemSku, savedProduct.sku)
+            : await generateLabelForNiimbotD110(savedProduct.systemSku, savedProduct.sku);
           await shareBarcodeImage(barcodeDataUrl, savedProduct.systemSku);
         } catch (error) {
           console.error("[QuickAdd] Failed to generate barcode:", error);

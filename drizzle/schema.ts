@@ -63,3 +63,37 @@ export type Product = typeof products.$inferSelect;
 export type InsertProduct = typeof products.$inferInsert;
 export type InventoryHistory = typeof inventoryHistory.$inferSelect;
 export type InsertInventoryHistory = typeof inventoryHistory.$inferInsert;
+
+/**
+ * 操作员账户表 - 存储系统操作员信息
+ * PIN 码使用 SHA-256 哈希存储
+ */
+export const operators = mysqlTable("operators", {
+  id: int("id").autoincrement().primaryKey(),
+  name: varchar("name", { length: 255 }).notNull(),
+  pinHash: varchar("pinHash", { length: 64 }).notNull(), // SHA-256 哈希值
+  isAdmin: int("isAdmin").notNull().default(0), // 0: 普通操作员, 1: 管理员
+  isActive: int("isActive").notNull().default(1), // 0: 禁用, 1: 启用
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  lastLoginAt: timestamp("lastLoginAt"),
+});
+
+/**
+ * 出库记录表 - 存储出库操作历史
+ */
+export const outboundRecords = mysqlTable("outboundRecords", {
+  id: varchar("id", { length: 64 }).primaryKey(),
+  productId: varchar("productId", { length: 64 }).notNull(),
+  sku: varchar("sku", { length: 255 }).notNull(),
+  quantity: int("quantity").notNull(),
+  operatorId: int("operatorId").notNull(),
+  operatorName: varchar("operatorName", { length: 255 }).notNull(),
+  notes: text("notes"),
+  timestamp: timestamp("timestamp").defaultNow().notNull(),
+});
+
+export type Operator = typeof operators.$inferSelect;
+export type InsertOperator = typeof operators.$inferInsert;
+export type OutboundRecord = typeof outboundRecords.$inferSelect;
+export type InsertOutboundRecord = typeof outboundRecords.$inferInsert;

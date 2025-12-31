@@ -23,6 +23,16 @@ import { AutoSync } from "@/lib/auto-sync";
 import { trpc } from "@/lib/trpc";
 import type { Product } from "@/types/product";
 import { generateLabelForNiimbotD110, generateSystemSKU, shareBarcodeImage, checkPrintAgentStatus, printLabelViaPrintAgent } from "@/lib/barcode";
+import { 
+  getPrinterStatus, 
+  connectViaSerial, 
+  connectViaBluetooth, 
+  disconnectPrinter,
+  printImage,
+  generateLabelForNiimbotB1,
+  isWebSerialSupported,
+  isWebBluetoothSupported,
+} from "@/lib/niimbot-printer";
 
 /**
  * 产品详情页面
@@ -42,6 +52,9 @@ export default function ProductDetailScreen() {
   const [barcodePreview, setBarcodePreview] = useState<string | null>(null);
   const [printAgentConnected, setPrintAgentConnected] = useState<boolean | null>(null);
   const [isPrinting, setIsPrinting] = useState(false);
+  const [printerConnected, setPrinterConnected] = useState(false);
+  const [isConnecting, setIsConnecting] = useState(false);
+  const [printerType, setPrinterType] = useState<'b1' | 'd110'>('b1'); // 默认使用 B1
 
   // 使用 tRPC 同步
   const uploadMutation = trpc.sync.upload.useMutation();
@@ -363,12 +376,33 @@ export default function ProductDetailScreen() {
               🏷️ 打印标签
             </ThemedText>
             
+            {/* 打印机类型选择 */}
+            <View style={styles.printerTypeContainer}>
+              <ThemedText style={styles.printerTypeLabel}>打印机型号：</ThemedText>
+              <Pressable
+                onPress={() => setPrinterType('b1')}
+                style={[styles.printerTypeButton, printerType === 'b1' && styles.printerTypeButtonActive]}
+              >
+                <ThemedText style={[styles.printerTypeButtonText, printerType === 'b1' && styles.printerTypeButtonTextActive]}>
+                  B1 (50×30mm)
+                </ThemedText>
+              </Pressable>
+              <Pressable
+                onPress={() => setPrinterType('d110')}
+                style={[styles.printerTypeButton, printerType === 'd110' && styles.printerTypeButtonActive]}
+              >
+                <ThemedText style={[styles.printerTypeButtonText, printerType === 'd110' && styles.printerTypeButtonTextActive]}>
+                  D110 (38×12mm)
+                </ThemedText>
+              </Pressable>
+            </View>
+            
             {/* 条形码预览 */}
             {barcodePreview && (
               <View style={styles.barcodePreviewContainer}>
                 <Image 
                   source={{ uri: barcodePreview }} 
-                  style={styles.barcodePreview}
+                  style={printerType === 'b1' ? styles.barcodePreviewB1 : styles.barcodePreview}
                   contentFit="contain"
                 />
               </View>
@@ -388,8 +422,10 @@ export default function ProductDetailScreen() {
                       setProduct({ ...product, systemSku: skuToUse });
                       setEditedProduct({ ...editedProduct, systemSku: skuToUse });
                     }
-                    // 生成条形码图片（传入系统SKU和用户SKU）
-                    const dataUrl = await generateLabelForNiimbotD110(skuToUse, product.sku);
+                    // 根据打印机类型生成不同尺寸的条形码图片
+                    const dataUrl = printerType === 'b1'
+                      ? await generateLabelForNiimbotB1(skuToUse, product.sku)
+                      : await generateLabelForNiimbotD110(skuToUse, product.sku);
                     setBarcodePreview(dataUrl);
                   } catch (error) {
                     console.error('生成条形码失败:', error);
@@ -419,22 +455,100 @@ export default function ProductDetailScreen() {
                       保存/分享标签
                     </ThemedText>
                   </Pressable>
-                  
-                  {/* 一键打印按钮 */}
+                </>
+              )}
+            </View>
+            
+            {/* Web Serial/Bluetooth 打印按钮 */}
+            {barcodePreview && (isWebSerialSupported() || isWebBluetoothSupported()) && (
+              <View style={styles.directPrintSection}>
+                <ThemedText style={styles.directPrintTitle}>🖨️ 直接打印</ThemedText>
+                
+                {/* 打印机连接状态 */}
+                <View style={styles.printerStatusRow}>
+                  <ThemedText style={styles.printerStatusText}>
+                    {printerConnected ? '✅ 打印机已连接' : '⚪ 打印机未连接'}
+                  </ThemedText>
+                  {printerConnected && (
+                    <Pressable
+                      onPress={async () => {
+                        await disconnectPrinter();
+                        setPrinterConnected(false);
+                      }}
+                      style={styles.disconnectButton}
+                    >
+                      <ThemedText style={styles.disconnectButtonText}>断开</ThemedText>
+                    </Pressable>
+                  )}
+                </View>
+                
+                {/* 连接按钮 */}
+                {!printerConnected && (
+                  <View style={styles.connectButtonsRow}>
+                    {isWebSerialSupported() && (
+                      <Pressable
+                        onPress={async () => {
+                          setIsConnecting(true);
+                          try {
+                            const result = await connectViaSerial();
+                            if (result.success) {
+                              setPrinterConnected(true);
+                              window.alert('✅ ' + result.message);
+                            } else {
+                              window.alert('❌ ' + result.message);
+                            }
+                          } catch (error: any) {
+                            window.alert('连接失败: ' + (error.message || '未知错误'));
+                          } finally {
+                            setIsConnecting(false);
+                          }
+                        }}
+                        disabled={isConnecting}
+                        style={[styles.button, styles.connectButton, isConnecting && styles.buttonDisabled]}
+                      >
+                        <ThemedText style={styles.buttonText}>
+                          {isConnecting ? '连接中...' : '🔌 USB 连接'}
+                        </ThemedText>
+                      </Pressable>
+                    )}
+                    {isWebBluetoothSupported() && (
+                      <Pressable
+                        onPress={async () => {
+                          setIsConnecting(true);
+                          try {
+                            const result = await connectViaBluetooth();
+                            if (result.success) {
+                              setPrinterConnected(true);
+                              window.alert('✅ ' + result.message);
+                            } else {
+                              window.alert('❌ ' + result.message);
+                            }
+                          } catch (error: any) {
+                            window.alert('连接失败: ' + (error.message || '未知错误'));
+                          } finally {
+                            setIsConnecting(false);
+                          }
+                        }}
+                        disabled={isConnecting}
+                        style={[styles.button, styles.bluetoothButton, isConnecting && styles.buttonDisabled]}
+                      >
+                        <ThemedText style={styles.buttonText}>
+                          {isConnecting ? '连接中...' : '📶 蓝牙连接'}
+                        </ThemedText>
+                      </Pressable>
+                    )}
+                  </View>
+                )}
+                
+                {/* 打印按钮 */}
+                {printerConnected && (
                   <Pressable
                     onPress={async () => {
                       if (!barcodePreview) return;
                       
-                      // 先检查 Print Agent 状态
-                      const status = await checkPrintAgentStatus();
-                      if (!status.connected) {
-                        window.alert('无法连接到 WareFlow Print Agent\n\n请确保：\n1. 已下载并运行 WareFlow Print Agent\n2. 打印机已通过蓝牙连接\n\n下载地址：https://github.com/user/wareflow-print-agent');
-                        return;
-                      }
-                      
                       setIsPrinting(true);
                       try {
-                        const result = await printLabelViaPrintAgent(barcodePreview);
+                        const result = await printImage(barcodePreview);
                         if (result.success) {
                           window.alert('✅ ' + result.message);
                         } else {
@@ -450,29 +564,20 @@ export default function ProductDetailScreen() {
                     style={[styles.button, styles.printButton, isPrinting && styles.buttonDisabled]}
                   >
                     <ThemedText style={styles.buttonText}>
-                      {isPrinting ? '打印中...' : '🖨️ 一键打印'}
+                      {isPrinting ? '打印中...' : '🖨️ 立即打印'}
                     </ThemedText>
                   </Pressable>
-                </>
-              )}
-            </View>
+                )}
+              </View>
+            )}
             
-            {/* Print Agent 状态提示 */}
-            {printAgentConnected === true && (
-              <ThemedText style={[styles.printHint, styles.printHintSuccess]}>
-                ✅ 已连接 WareFlow Print Agent，可以一键打印
-              </ThemedText>
-            )}
-            {printAgentConnected === false && (
-              <ThemedText style={[styles.printHint, styles.printHintWarning]}>
-                ⚠️ 未连接 Print Agent，请下载并运行 WareFlow Print Agent 客户端
-              </ThemedText>
-            )}
-            {printAgentConnected === null && (
-              <ThemedText style={styles.printHint}>
-                点击"保存/分享标签"后，打开 Niimbot App 导入图片进行打印（12mm × 38mm 标签）
-              </ThemedText>
-            )}
+            {/* 提示信息 */}
+            <ThemedText style={styles.printHint}>
+              {printerType === 'b1' 
+                ? '标签尺寸：50mm × 30mm（适用于 NIIMBOT B1）'
+                : '标签尺寸：38mm × 12mm（适用于 NIIMBOT D110）'
+              }
+            </ThemedText>
           </View>
         )}
 
@@ -886,9 +991,6 @@ const styles = StyleSheet.create({
   printButton: {
     backgroundColor: "#007AFF",
   },
-  saveButton: {
-    backgroundColor: "#34C759",
-  },
   buttonDisabled: {
     opacity: 0.6,
   },
@@ -906,6 +1008,81 @@ const styles = StyleSheet.create({
   printHintWarning: {
     color: "#FF9500",
     opacity: 1,
+  },
+  // 打印机类型选择
+  printerTypeContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 12,
+  },
+  printerTypeLabel: {
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  printerTypeButton: {
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: "#8E8E93",
+    backgroundColor: "transparent",
+  },
+  printerTypeButtonActive: {
+    backgroundColor: "#007AFF",
+    borderColor: "#007AFF",
+  },
+  printerTypeButtonText: {
+    fontSize: 12,
+    color: "#8E8E93",
+  },
+  printerTypeButtonTextActive: {
+    color: "#fff",
+  },
+  barcodePreviewB1: {
+    width: 400,
+    height: 240,
+  },
+  // 直接打印区域
+  directPrintSection: {
+    marginTop: 16,
+    padding: 16,
+    backgroundColor: "rgba(0, 122, 255, 0.05)",
+    borderRadius: 12,
+    gap: 12,
+  },
+  directPrintTitle: {
+    fontSize: 14,
+    fontWeight: "600",
+    marginBottom: 4,
+  },
+  printerStatusRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  printerStatusText: {
+    fontSize: 14,
+  },
+  disconnectButton: {
+    paddingVertical: 4,
+    paddingHorizontal: 12,
+    borderRadius: 4,
+    backgroundColor: "#FF3B30",
+  },
+  disconnectButtonText: {
+    fontSize: 12,
+    color: "#fff",
+  },
+  connectButtonsRow: {
+    flexDirection: "row",
+    gap: 12,
+  },
+  connectButton: {
+    backgroundColor: "#5856D6",
+  },
+  bluetoothButton: {
+    backgroundColor: "#007AFF",
   },
   // 确认对话框样式
   confirmOverlay: {

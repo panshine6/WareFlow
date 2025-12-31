@@ -78,11 +78,135 @@ export const appRouter = router({
       .query(async () => {
         const cloudCount = await db.getProductsCount();
         const lastSyncTime = await db.getLastSyncTime();
+        const outboundCount = await db.getOutboundRecordsCount();
         return {
           cloudCount,
           lastSyncTime,
+          outboundCount,
         };
       }),
+    
+    // 上传出库记录到云端
+    uploadOutbound: publicProcedure
+      .input(z.object({
+        records: z.array(z.object({
+          id: z.string(),
+          productId: z.string(),
+          sku: z.string(),
+          quantity: z.number(),
+          operatorId: z.number(),
+          operatorName: z.string(),
+          notes: z.string().nullable().optional(),
+          timestamp: z.date(),
+        })),
+      }))
+      .mutation(async ({ input }) => {
+        // 清空云端出库记录
+        await db.clearAllOutboundRecords();
+        // 批量插入本地数据
+        await db.batchInsertOutboundRecords(input.records);
+        return { success: true, count: input.records.length };
+      }),
+    
+    // 从云端下载出库记录
+    downloadOutbound: publicProcedure
+      .query(async () => {
+        const records = await db.getAllOutboundRecords();
+        return { records };
+      }),
+  }),
+
+  // 操作员账户管理 API
+  operators: router({
+    // 获取所有操作员
+    getAll: publicProcedure.query(async () => await db.getAllOperators()),
+    
+    // 获取操作员数量
+    count: publicProcedure.query(async () => {
+      const count = await db.getOperatorsCount();
+      return { count };
+    }),
+    
+    // 登录验证
+    login: publicProcedure
+      .input(z.object({
+        name: z.string(),
+        pin: z.string(),
+      }))
+      .mutation(async ({ input }) => {
+        const operator = await db.verifyOperatorLogin(input.name, input.pin);
+        if (!operator) {
+          return { success: false, error: "用户名或 PIN 码错误" };
+        }
+        return { success: true, operator };
+      }),
+    
+    // 创建操作员
+    create: publicProcedure
+      .input(z.object({
+        name: z.string(),
+        pin: z.string(),
+        isAdmin: z.number().optional().default(0),
+      }))
+      .mutation(async ({ input }) => {
+        try {
+          await db.createOperator(input.name, input.pin, input.isAdmin);
+          return { success: true };
+        } catch (error: any) {
+          return { success: false, error: error.message };
+        }
+      }),
+    
+    // 更新操作员
+    update: publicProcedure
+      .input(z.object({
+        id: z.number(),
+        name: z.string().optional(),
+        pin: z.string().optional(),
+        isAdmin: z.number().optional(),
+        isActive: z.number().optional(),
+      }))
+      .mutation(async ({ input }) => {
+        const { id, ...data } = input;
+        await db.updateOperator(id, data);
+        return { success: true };
+      }),
+    
+    // 删除操作员
+    delete: publicProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ input }) => {
+        await db.deleteOperator(input.id);
+        return { success: true };
+      }),
+  }),
+
+  // 出库记录管理 API
+  outbound: router({
+    // 获取所有出库记录
+    getAll: publicProcedure.query(async () => await db.getAllOutboundRecords()),
+    
+    // 创建出库记录
+    create: publicProcedure
+      .input(z.object({
+        id: z.string(),
+        productId: z.string(),
+        sku: z.string(),
+        quantity: z.number(),
+        operatorId: z.number(),
+        operatorName: z.string(),
+        notes: z.string().optional(),
+      }))
+      .mutation(async ({ input }) => {
+        await db.createOutboundRecord({ ...input, timestamp: new Date() });
+        return { success: true };
+      }),
+    
+    // 获取出库记录数量
+    count: publicProcedure.query(async () => {
+      const count = await db.getOutboundRecordsCount();
+      return { count };
+    }),
   }),
 
   // AI 视觉识别 API
