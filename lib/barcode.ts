@@ -1,6 +1,6 @@
 /**
  * SKU 生成和条形码工具库
- * 适配 Niimbot D110 (40mm × 12mm 标签，横向)
+ * 适配 Niimbot D110 (38mm × 12mm 标签，横向)
  * 
  * 标签布局（横向）：
  * ┌─────────────────────────────────────────────┐  ↑
@@ -8,7 +8,7 @@
  * │          条形码 (Code 128)                   │  12mm
  * │      系统SKU       用户SKU(加粗加大)          │  ↓
  * └─────────────────────────────────────────────┘
- *                    ← 40mm →
+ *                    ← 38mm →
  */
 
 // Luhn Mod 36 校验位计算
@@ -144,13 +144,15 @@ export async function generateBarcodeDataURL(
 }
 
 /**
- * 生成适合 Niimbot D110 的标签图片
- * 标签尺寸: 40mm（宽）× 12mm（高）- 横向布局
- * 打印精度: 203dpi
+ * 生成适合 Niimbot D110 的标签图片（高清版本）
+ * 标签尺寸: 38mm（宽）× 12mm（高）- 横向布局
+ * 打印精度: 208dpi
  * 
- * 像素计算:
- * - 40mm @ 203dpi ≈ 319px (宽度)
- * - 12mm @ 203dpi ≈ 96px (高度)
+ * 使用 2x 分辨率生成高清图片，解决打印模糊问题
+ * 
+ * 像素计算 (2x 高清):
+ * - 38mm @ 208dpi × 2 = 622px (宽度)
+ * - 12mm @ 208dpi × 2 = 196px (高度)
  * 
  * 布局：
  * - 上方：条形码（Code 128）
@@ -162,9 +164,12 @@ export async function generateLabelForNiimbotD110(
 ): Promise<string> {
   const JsBarcode = (await import('jsbarcode')).default;
   
-  // 标签尺寸（像素 @ 203dpi）- 横向
-  const LABEL_WIDTH = 303;  // 38mm (从40mm减少2mm)
-  const LABEL_HEIGHT = 96;  // 12mm
+  // 2x 高清分辨率系数
+  const SCALE = 2;
+  
+  // 标签尺寸（像素 @ 208dpi × 2）- 横向高清
+  const LABEL_WIDTH = 311 * SCALE;   // 38mm @ 208dpi = 311px, × 2 = 622px
+  const LABEL_HEIGHT = 98 * SCALE;   // 12mm @ 208dpi = 98px, × 2 = 196px
   
   // 创建主 canvas
   const canvas = document.createElement('canvas');
@@ -179,16 +184,16 @@ export async function generateLabelForNiimbotD110(
   // 设置文字样式
   ctx.fillStyle = '#000000';
   
-  // 边距
-  const MARGIN = 4;
-  const TEXT_HEIGHT = 16;  // 底部文字区域高度（增加一点以容纳更大字体）
+  // 边距（按比例放大）
+  const MARGIN = 8 * SCALE;
+  const TEXT_HEIGHT = 16 * SCALE;  // 底部文字区域高度
   
-  // 1. 生成条形码
+  // 1. 生成条形码（高分辨率）
   const barcodeCanvas = document.createElement('canvas');
   JsBarcode(barcodeCanvas, systemSku, {
     format: 'CODE128',
-    width: 1.5,              // 条形码线条宽度
-    height: 60,              // 条形码高度
+    width: 3,                // 条形码线条宽度（放大）
+    height: 120,             // 条形码高度（放大）
     displayValue: false,     // 不显示文字（我们单独绘制）
     margin: 0,
     background: '#ffffff',
@@ -222,12 +227,12 @@ export async function generateLabelForNiimbotD110(
   );
   
   // 2. 绘制底部文字：系统SKU + 用户SKU（分开绘制，不同样式）
-  const textY = LABEL_HEIGHT - 3;  // 底部位置
+  const textY = LABEL_HEIGHT - 6 * SCALE;  // 底部位置
   
-  // 字体大小设置
-  const systemSkuFontSize = 9;      // 系统SKU字体大小
-  const userSkuFontSize = 11;       // 用户SKU字体大小（加大约20%）
-  const SKU_GAP = 15;               // 两个SKU之间的间距（像素）
+  // 字体大小设置（按比例放大）
+  const systemSkuFontSize = 9 * SCALE;      // 系统SKU字体大小
+  const userSkuFontSize = 11 * SCALE;       // 用户SKU字体大小（加大约20%）
+  const SKU_GAP = 15 * SCALE;               // 两个SKU之间的间距（像素）
   
   if (userSku) {
     // 有用户SKU时，分开绘制两个SKU
