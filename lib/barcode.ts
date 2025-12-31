@@ -6,7 +6,7 @@
  * ┌─────────────────────────────────────────────┐  ↑
  * │      |||||||||||||||||||||||||||||||        │  
  * │          条形码 (Code 128)                   │  12mm
- * │      系统SKU  用户SKU                        │  ↓
+ * │      系统SKU       用户SKU(加粗加大)          │  ↓
  * └─────────────────────────────────────────────┘
  *                    ← 40mm →
  */
@@ -154,7 +154,7 @@ export async function generateBarcodeDataURL(
  * 
  * 布局：
  * - 上方：条形码（Code 128）
- * - 下方：系统SKU + 用户SKU（一行显示）
+ * - 下方：系统SKU（小字）+ 用户SKU（加粗加大20%）
  */
 export async function generateLabelForNiimbotD110(
   systemSku: string,
@@ -181,7 +181,7 @@ export async function generateLabelForNiimbotD110(
   
   // 边距
   const MARGIN = 4;
-  const TEXT_HEIGHT = 14;  // 底部文字区域高度
+  const TEXT_HEIGHT = 16;  // 底部文字区域高度（增加一点以容纳更大字体）
   
   // 1. 生成条形码
   const barcodeCanvas = document.createElement('canvas');
@@ -221,33 +221,45 @@ export async function generateLabelForNiimbotD110(
     scaledBarcodeHeight
   );
   
-  // 2. 绘制底部文字：系统SKU + 用户SKU
-  const textY = LABEL_HEIGHT - 4;  // 底部位置
+  // 2. 绘制底部文字：系统SKU + 用户SKU（分开绘制，不同样式）
+  const textY = LABEL_HEIGHT - 3;  // 底部位置
   
-  // 组合显示文字
-  let displayText = systemSku;
+  // 字体大小设置
+  const systemSkuFontSize = 9;      // 系统SKU字体大小
+  const userSkuFontSize = 11;       // 用户SKU字体大小（加大约20%）
+  const SKU_GAP = 15;               // 两个SKU之间的间距（像素）
+  
   if (userSku) {
-    displayText = `${systemSku} ${userSku}`;
+    // 有用户SKU时，分开绘制两个SKU
+    
+    // 先计算两个文字的宽度
+    ctx.font = `${systemSkuFontSize}px Arial, sans-serif`;
+    const systemSkuWidth = ctx.measureText(systemSku).width;
+    
+    ctx.font = `bold ${userSkuFontSize}px Arial, sans-serif`;
+    const userSkuWidth = ctx.measureText(userSku).width;
+    
+    // 计算总宽度和起始位置（居中）
+    const totalWidth = systemSkuWidth + SKU_GAP + userSkuWidth;
+    const startX = (LABEL_WIDTH - totalWidth) / 2;
+    
+    // 绘制系统SKU（普通字体，较小）
+    ctx.font = `${systemSkuFontSize}px Arial, sans-serif`;
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'bottom';
+    ctx.fillText(systemSku, startX, textY);
+    
+    // 绘制用户SKU（加粗加大）
+    ctx.font = `bold ${userSkuFontSize}px Arial, sans-serif`;
+    ctx.fillText(userSku, startX + systemSkuWidth + SKU_GAP, textY);
+    
+  } else {
+    // 只有系统SKU时，居中显示
+    ctx.font = `bold ${systemSkuFontSize}px Arial, sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'bottom';
+    ctx.fillText(systemSku, LABEL_WIDTH / 2, textY);
   }
-  
-  // 设置字体并计算文字宽度
-  ctx.font = 'bold 11px Arial, sans-serif';
-  let textWidth = ctx.measureText(displayText).width;
-  
-  // 如果文字太长，尝试缩小字体
-  if (textWidth > LABEL_WIDTH - MARGIN * 2) {
-    ctx.font = 'bold 10px Arial, sans-serif';
-    textWidth = ctx.measureText(displayText).width;
-  }
-  if (textWidth > LABEL_WIDTH - MARGIN * 2) {
-    ctx.font = 'bold 9px Arial, sans-serif';
-    textWidth = ctx.measureText(displayText).width;
-  }
-  
-  // 文字水平居中
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'bottom';
-  ctx.fillText(displayText, LABEL_WIDTH / 2, textY);
   
   return canvas.toDataURL('image/png');
 }
