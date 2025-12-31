@@ -1,19 +1,13 @@
 /**
  * SKU 生成和条形码工具库
- * 适配 Niimbot D110 (12mm × 40mm 标签)
+ * 适配 Niimbot D110 (40mm × 12mm 标签，横向)
  * 
- * 标签布局（纵向）：
- * ┌─────────────┐  ↑
- * │   用户SKU   │  │
- * │  (人工阅读)  │  │
- * │             │  │
- * │  ┃┃┃┃┃┃┃┃  │  40mm
- * │  条形码     │  │
- * │  ┃┃┃┃┃┃┃┃  │  │
- * │             │  │
- * │  系统SKU   │  │
- * └─────────────┘  ↓
- *    ← 12mm →
+ * 标签布局（横向）：
+ * ┌─────────────────────────────────────────────┐  ↑
+ * │  用户SKU   |||||||||||||||||||  系统SKU     │  12mm
+ * │  (人工阅读)    条形码                        │  ↓
+ * └─────────────────────────────────────────────┘
+ *                    ← 40mm →
  */
 
 // Luhn Mod 36 校验位计算
@@ -150,17 +144,17 @@ export async function generateBarcodeDataURL(
 
 /**
  * 生成适合 Niimbot D110 的标签图片
- * 标签尺寸: 12mm（宽）× 40mm（长）
+ * 标签尺寸: 40mm（宽）× 12mm（高）- 横向布局
  * 打印精度: 203dpi
  * 
  * 像素计算:
- * - 12mm @ 203dpi ≈ 96px (宽度)
- * - 40mm @ 203dpi ≈ 319px (长度/高度)
+ * - 40mm @ 203dpi ≈ 319px (宽度)
+ * - 12mm @ 203dpi ≈ 96px (高度)
  * 
- * 布局（从上到下）:
- * 1. 用户SKU（人工阅读）
- * 2. 条形码（Code 128，旋转90度，纵向显示）
- * 3. 系统SKU
+ * 布局（从左到右）:
+ * 1. 用户SKU（左侧，人工阅读）
+ * 2. 条形码（中间，Code 128）
+ * 3. 系统SKU（条形码下方）
  */
 export async function generateLabelForNiimbotD110(
   systemSku: string,
@@ -168,9 +162,9 @@ export async function generateLabelForNiimbotD110(
 ): Promise<string> {
   const JsBarcode = (await import('jsbarcode')).default;
   
-  // 标签尺寸（像素 @ 203dpi）
-  const LABEL_WIDTH = 96;   // 12mm
-  const LABEL_HEIGHT = 319; // 40mm
+  // 标签尺寸（像素 @ 203dpi）- 横向
+  const LABEL_WIDTH = 319;  // 40mm
+  const LABEL_HEIGHT = 96;  // 12mm
   
   // 创建主 canvas
   const canvas = document.createElement('canvas');
@@ -184,91 +178,99 @@ export async function generateLabelForNiimbotD110(
   
   // 设置文字样式
   ctx.fillStyle = '#000000';
-  ctx.textAlign = 'center';
   
   // 边距
   const MARGIN = 4;
-  const centerX = LABEL_WIDTH / 2;
   
-  // 1. 绘制用户SKU（顶部，人工阅读）
-  if (userSku) {
-    ctx.font = 'bold 11px Arial, sans-serif';
-    // 如果 SKU 太长，需要缩小字体或换行
-    const maxWidth = LABEL_WIDTH - MARGIN * 2;
-    let displaySku = userSku;
-    let fontSize = 11;
-    
-    // 自动调整字体大小
-    while (ctx.measureText(displaySku).width > maxWidth && fontSize > 6) {
-      fontSize--;
-      ctx.font = `bold ${fontSize}px Arial, sans-serif`;
-    }
-    
-    // 如果还是太长，截断并添加省略号
-    if (ctx.measureText(displaySku).width > maxWidth) {
-      while (ctx.measureText(displaySku + '...').width > maxWidth && displaySku.length > 3) {
-        displaySku = displaySku.slice(0, -1);
-      }
-      displaySku += '...';
-    }
-    
-    ctx.fillText(displaySku, centerX, MARGIN + 12);
-  }
-  
-  // 2. 生成条形码（中间部分）
-  // 先生成横向条形码
+  // 1. 生成条形码（中间主体部分）
   const barcodeCanvas = document.createElement('canvas');
   JsBarcode(barcodeCanvas, systemSku, {
     format: 'CODE128',
-    width: 1,              // 条形码线条宽度（较窄以适应小标签）
-    height: 70,            // 条形码高度（旋转后变成宽度）
-    displayValue: false,   // 不显示文字（我们单独绘制）
+    width: 1.2,              // 条形码线条宽度
+    height: 50,              // 条形码高度
+    displayValue: false,     // 不显示文字（我们单独绘制）
     margin: 0,
     background: '#ffffff',
     lineColor: '#000000',
   });
   
-  // 计算条形码区域
-  const barcodeStartY = userSku ? 30 : 15;
-  const barcodeEndY = LABEL_HEIGHT - 45;
-  const barcodeAreaHeight = barcodeEndY - barcodeStartY;
+  // 计算布局
+  // 用户SKU区域宽度（如果有的话）
+  let userSkuWidth = 0;
+  if (userSku) {
+    ctx.font = 'bold 10px Arial, sans-serif';
+    userSkuWidth = Math.min(ctx.measureText(userSku).width + 8, 80);
+  }
   
-  // 旋转条形码 90 度并绘制
-  ctx.save();
-  ctx.translate(centerX, barcodeStartY + barcodeAreaHeight / 2);
-  ctx.rotate(-Math.PI / 2); // 逆时针旋转90度
+  // 条形码区域
+  const barcodeAreaStart = userSku ? userSkuWidth : MARGIN;
+  const barcodeAreaWidth = LABEL_WIDTH - barcodeAreaStart - MARGIN;
   
-  // 计算缩放比例，使条形码适应可用空间
-  const scale = Math.min(
-    barcodeAreaHeight / barcodeCanvas.width,
-    (LABEL_WIDTH - MARGIN * 2) / barcodeCanvas.height
+  // 缩放条形码以适应可用空间
+  const barcodeScale = Math.min(
+    barcodeAreaWidth / barcodeCanvas.width,
+    (LABEL_HEIGHT - 20) / barcodeCanvas.height  // 留出空间给系统SKU文字
   );
   
-  const scaledWidth = barcodeCanvas.width * scale;
-  const scaledHeight = barcodeCanvas.height * scale;
+  const scaledBarcodeWidth = barcodeCanvas.width * barcodeScale;
+  const scaledBarcodeHeight = barcodeCanvas.height * barcodeScale;
   
+  // 条形码水平居中在其区域内
+  const barcodeX = barcodeAreaStart + (barcodeAreaWidth - scaledBarcodeWidth) / 2;
+  const barcodeY = MARGIN;
+  
+  // 绘制条形码
   ctx.drawImage(
     barcodeCanvas,
-    -scaledWidth / 2,
-    -scaledHeight / 2,
-    scaledWidth,
-    scaledHeight
+    barcodeX,
+    barcodeY,
+    scaledBarcodeWidth,
+    scaledBarcodeHeight
   );
-  ctx.restore();
   
-  // 3. 绘制系统SKU（底部）
+  // 2. 绘制系统SKU（条形码下方）
   ctx.font = '9px monospace';
-  ctx.fillText(systemSku, centerX, LABEL_HEIGHT - MARGIN - 3);
+  ctx.textAlign = 'center';
+  const systemSkuX = barcodeX + scaledBarcodeWidth / 2;
+  const systemSkuY = barcodeY + scaledBarcodeHeight + 10;
+  ctx.fillText(systemSku, systemSkuX, systemSkuY);
+  
+  // 3. 绘制用户SKU（左侧，垂直居中，旋转90度）
+  if (userSku) {
+    ctx.save();
+    ctx.font = 'bold 10px Arial, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    
+    // 移动到左侧区域中心，旋转文字
+    const userSkuCenterX = userSkuWidth / 2;
+    const userSkuCenterY = LABEL_HEIGHT / 2;
+    
+    ctx.translate(userSkuCenterX, userSkuCenterY);
+    ctx.rotate(-Math.PI / 2);  // 逆时针旋转90度
+    
+    // 截断过长的SKU
+    let displaySku = userSku;
+    const maxTextWidth = LABEL_HEIGHT - MARGIN * 2;
+    while (ctx.measureText(displaySku).width > maxTextWidth && displaySku.length > 3) {
+      displaySku = displaySku.slice(0, -1);
+    }
+    if (displaySku !== userSku) {
+      displaySku = displaySku.slice(0, -2) + '..';
+    }
+    
+    ctx.fillText(displaySku, 0, 0);
+    ctx.restore();
+  }
   
   return canvas.toDataURL('image/png');
 }
 
 /**
  * 生成适合 PT-P300BT 的标签图片（保留兼容性）
- * 12mm 宽度，只包含条形码和 SKU
+ * 使用新的 D110 格式
  */
 export async function generateLabelForPTP300BT(sku: string): Promise<string> {
-  // 使用新的 D110 格式，不传用户SKU
   return generateLabelForNiimbotD110(sku);
 }
 
