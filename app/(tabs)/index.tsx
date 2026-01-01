@@ -10,6 +10,7 @@ import {
   Pressable,
   RefreshControl,
   StyleSheet,
+  TouchableWithoutFeedback,
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -358,11 +359,10 @@ export default function HomeScreen() {
         animationType="slide"
         onRequestClose={() => setShowDataModal(false)}
       >
-        <Pressable 
-          style={[styles.modalOverlay, { backgroundColor: overlayBg }]}
-          onPress={() => setShowDataModal(false)}
-        >
-          <Pressable style={[styles.bottomSheet, { backgroundColor: modalBg }]} onPress={(e) => e.stopPropagation()}>
+        <TouchableWithoutFeedback onPress={() => setShowDataModal(false)}>
+          <View style={[styles.modalOverlay, { backgroundColor: overlayBg }]}>
+            <TouchableWithoutFeedback>
+              <View style={[styles.bottomSheet, { backgroundColor: modalBg }]}>
             <View style={styles.bottomSheetHandle} />
             <ThemedText style={styles.bottomSheetTitle}>数据安全</ThemedText>
 
@@ -516,8 +516,10 @@ export default function HomeScreen() {
               <ThemedText style={styles.bottomSheetItemText}>数据备份</ThemedText>
               <ThemedText style={styles.bottomSheetItemArrow}>›</ThemedText>
             </Pressable>
-          </Pressable>
-        </Pressable>
+              </View>
+            </TouchableWithoutFeedback>
+          </View>
+        </TouchableWithoutFeedback>
       </Modal>
     </ThemedView>
   );
