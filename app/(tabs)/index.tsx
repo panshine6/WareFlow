@@ -2,6 +2,7 @@ import { useRouter, useFocusEffect } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
   FlatList,
   Image,
   Modal,
@@ -22,6 +23,7 @@ import { UserStorage } from "@/lib/user-storage";
 import { ProductAPI } from "@/lib/api-client";
 import { ProductStorage } from "@/lib/storage";
 import { AutoSync } from "@/lib/auto-sync";
+import { SyncService } from "@/lib/sync";
 import { trpc } from "@/lib/trpc";
 import { APP_VERSION, APP_BUILD, APP_AUTHOR } from "@/lib/version";
 import type { Product } from "@/types/product";
@@ -43,6 +45,10 @@ export default function HomeScreen() {
   const downloadQuery = trpc.sync.download.useQuery(undefined, {
     enabled: false, // 手动触发
   });
+  const uploadMutation = trpc.sync.upload.useMutation();
+  
+  // 上传状态
+  const [uploading, setUploading] = useState(false);
 
   // 加载产品列表（Web 使用 AsyncStorage，原生使用 SQLite）
   const loadProducts = async () => {
@@ -373,26 +379,69 @@ export default function HomeScreen() {
             </Pressable>
 
             <Pressable 
-              style={styles.bottomSheetItem}
-              onPress={() => {
+              style={[styles.bottomSheetItem, uploading && styles.bottomSheetItemDisabled]}
+              disabled={uploading}
+              onPress={async () => {
                 setShowDataModal(false);
-                router.push("/(tabs)/inventory" as any);
+                setUploading(true);
+                try {
+                  // 使用 SyncService 上传数据
+                  const trpcClient = {
+                    sync: {
+                      upload: {
+                        mutate: async (data: any) => uploadMutation.mutateAsync(data),
+                      },
+                    },
+                  };
+                  const result = await SyncService.uploadToCloud(trpcClient);
+                  if (result.success) {
+                    Alert.alert("上传成功", `已上传 ${result.count} 个产品到云端`);
+                  } else {
+                    Alert.alert("上传失败", result.error || "未知错误");
+                  }
+                } catch (error: any) {
+                  Alert.alert("上传失败", error.message || "网络错误");
+                } finally {
+                  setUploading(false);
+                }
               }}
             >
-              <ThemedText style={styles.bottomSheetItemIcon}>⬆️</ThemedText>
-              <ThemedText style={styles.bottomSheetItemText}>上传到云端</ThemedText>
+              <ThemedText style={styles.bottomSheetItemIcon}>{uploading ? "⏳" : "⬆️"}</ThemedText>
+              <ThemedText style={styles.bottomSheetItemText}>{uploading ? "上传中..." : "上传到云端"}</ThemedText>
               <ThemedText style={styles.bottomSheetItemArrow}>›</ThemedText>
             </Pressable>
 
             <Pressable 
-              style={styles.bottomSheetItem}
-              onPress={() => {
+              style={[styles.bottomSheetItem, refreshing && styles.bottomSheetItemDisabled]}
+              disabled={refreshing}
+              onPress={async () => {
                 setShowDataModal(false);
-                router.push("/(tabs)/inventory" as any);
+                setRefreshing(true);
+                try {
+                  // 使用 SyncService 下载数据
+                  const trpcClient = {
+                    sync: {
+                      download: {
+                        query: async () => (await downloadQuery.refetch()).data,
+                      },
+                    },
+                  };
+                  const result = await SyncService.downloadFromCloud(trpcClient);
+                  if (result.success) {
+                    await loadProducts();
+                    Alert.alert("下载成功", `已下载 ${result.count} 个产品到本地`);
+                  } else {
+                    Alert.alert("下载失败", result.error || "未知错误");
+                  }
+                } catch (error: any) {
+                  Alert.alert("下载失败", error.message || "网络错误");
+                } finally {
+                  setRefreshing(false);
+                }
               }}
             >
-              <ThemedText style={styles.bottomSheetItemIcon}>⬇️</ThemedText>
-              <ThemedText style={styles.bottomSheetItemText}>从云端下载</ThemedText>
+              <ThemedText style={styles.bottomSheetItemIcon}>{refreshing ? "⏳" : "⬇️"}</ThemedText>
+              <ThemedText style={styles.bottomSheetItemText}>{refreshing ? "下载中..." : "从云端下载"}</ThemedText>
               <ThemedText style={styles.bottomSheetItemArrow}>›</ThemedText>
             </Pressable>
 
@@ -670,6 +719,9 @@ const styles = StyleSheet.create({
   bottomSheetItemArrow: {
     fontSize: 20,
     opacity: 0.4,
+  },
+  bottomSheetItemDisabled: {
+    opacity: 0.5,
   },
   logoutItem: {
     borderBottomWidth: 0,
