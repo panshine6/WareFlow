@@ -382,25 +382,49 @@ export default function HomeScreen() {
               style={[styles.bottomSheetItem, uploading && styles.bottomSheetItemDisabled]}
               disabled={uploading}
               onPress={async () => {
+                console.log("[Upload] Button clicked");
                 setShowDataModal(false);
                 setUploading(true);
                 try {
+                  console.log("[Upload] Starting upload...");
                   // 使用 SyncService 上传数据
                   const trpcClient = {
                     sync: {
                       upload: {
-                        mutate: async (data: any) => uploadMutation.mutateAsync(data),
+                        mutate: async (data: any) => {
+                          console.log("[Upload] Calling uploadMutation.mutateAsync");
+                          return uploadMutation.mutateAsync(data);
+                        },
                       },
                     },
                   };
                   const result = await SyncService.uploadToCloud(trpcClient);
+                  console.log("[Upload] Result:", result);
                   if (result.success) {
-                    Alert.alert("上传成功", `已上传 ${result.count} 个产品到云端`);
+                    const msg = `已上传 ${result.count} 个产品到云端`;
+                    console.log("[Upload] Success:", msg);
+                    if (Platform.OS === 'web') {
+                      window.alert(`上传成功\n${msg}`);
+                    } else {
+                      Alert.alert("上传成功", msg);
+                    }
                   } else {
-                    Alert.alert("上传失败", result.error || "未知错误");
+                    const errMsg = result.error || "未知错误";
+                    console.log("[Upload] Failed:", errMsg);
+                    if (Platform.OS === 'web') {
+                      window.alert(`上传失败\n${errMsg}`);
+                    } else {
+                      Alert.alert("上传失败", errMsg);
+                    }
                   }
                 } catch (error: any) {
-                  Alert.alert("上传失败", error.message || "网络错误");
+                  console.error("[Upload] Error:", error);
+                  const errMsg = error.message || "网络错误";
+                  if (Platform.OS === 'web') {
+                    window.alert(`上传失败\n${errMsg}`);
+                  } else {
+                    Alert.alert("上传失败", errMsg);
+                  }
                 } finally {
                   setUploading(false);
                 }
@@ -415,26 +439,50 @@ export default function HomeScreen() {
               style={[styles.bottomSheetItem, refreshing && styles.bottomSheetItemDisabled]}
               disabled={refreshing}
               onPress={async () => {
+                console.log("[Download] Button clicked");
                 setShowDataModal(false);
                 setRefreshing(true);
                 try {
+                  console.log("[Download] Starting download...");
                   // 使用 SyncService 下载数据
                   const trpcClient = {
                     sync: {
                       download: {
-                        query: async () => (await downloadQuery.refetch()).data,
+                        query: async () => {
+                          console.log("[Download] Calling downloadQuery.refetch");
+                          return (await downloadQuery.refetch()).data;
+                        },
                       },
                     },
                   };
                   const result = await SyncService.downloadFromCloud(trpcClient);
+                  console.log("[Download] Result:", result);
                   if (result.success) {
                     await loadProducts();
-                    Alert.alert("下载成功", `已下载 ${result.count} 个产品到本地`);
+                    const msg = `已下载 ${result.count} 个产品到本地`;
+                    console.log("[Download] Success:", msg);
+                    if (Platform.OS === 'web') {
+                      window.alert(`下载成功\n${msg}`);
+                    } else {
+                      Alert.alert("下载成功", msg);
+                    }
                   } else {
-                    Alert.alert("下载失败", result.error || "未知错误");
+                    const errMsg = result.error || "未知错误";
+                    console.log("[Download] Failed:", errMsg);
+                    if (Platform.OS === 'web') {
+                      window.alert(`下载失败\n${errMsg}`);
+                    } else {
+                      Alert.alert("下载失败", errMsg);
+                    }
                   }
                 } catch (error: any) {
-                  Alert.alert("下载失败", error.message || "网络错误");
+                  console.error("[Download] Error:", error);
+                  const errMsg = error.message || "网络错误";
+                  if (Platform.OS === 'web') {
+                    window.alert(`下载失败\n${errMsg}`);
+                  } else {
+                    Alert.alert("下载失败", errMsg);
+                  }
                 } finally {
                   setRefreshing(false);
                 }
