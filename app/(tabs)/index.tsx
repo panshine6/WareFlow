@@ -361,7 +361,7 @@ export default function HomeScreen() {
       >
         <TouchableWithoutFeedback onPress={() => setShowDataModal(false)}>
           <View style={[styles.modalOverlay, { backgroundColor: overlayBg }]}>
-            <TouchableWithoutFeedback>
+            <TouchableWithoutFeedback onPress={() => {}}>
               <View style={[styles.bottomSheet, { backgroundColor: modalBg }]}>
             <View style={styles.bottomSheetHandle} />
             <ThemedText style={styles.bottomSheetTitle}>数据安全</ThemedText>
@@ -381,53 +381,57 @@ export default function HomeScreen() {
             <Pressable 
               style={[styles.bottomSheetItem, uploading && styles.bottomSheetItemDisabled]}
               disabled={uploading}
-              onPress={async () => {
-                console.log("[Upload] Button clicked");
+              onPress={() => {
+                console.log("[Upload] Button clicked - sync version");
                 setShowDataModal(false);
-                setUploading(true);
-                try {
-                  console.log("[Upload] Starting upload...");
-                  // 使用 SyncService 上传数据
-                  const trpcClient = {
-                    sync: {
-                      upload: {
-                        mutate: async (data: any) => {
-                          console.log("[Upload] Calling uploadMutation.mutateAsync");
-                          return uploadMutation.mutateAsync(data);
+                
+                // 使用 setTimeout 来延迟执行异步操作
+                setTimeout(async () => {
+                  setUploading(true);
+                  try {
+                    console.log("[Upload] Starting upload...");
+                    // 使用 SyncService 上传数据
+                    const trpcClient = {
+                      sync: {
+                        upload: {
+                          mutate: async (data: any) => {
+                            console.log("[Upload] Calling uploadMutation.mutateAsync");
+                            return uploadMutation.mutateAsync(data);
+                          },
                         },
                       },
-                    },
-                  };
-                  const result = await SyncService.uploadToCloud(trpcClient);
-                  console.log("[Upload] Result:", result);
-                  if (result.success) {
-                    const msg = `已上传 ${result.count} 个产品到云端`;
-                    console.log("[Upload] Success:", msg);
-                    if (Platform.OS === 'web') {
-                      window.alert(`上传成功\n${msg}`);
+                    };
+                    const result = await SyncService.uploadToCloud(trpcClient);
+                    console.log("[Upload] Result:", result);
+                    if (result.success) {
+                      const msg = `已上传 ${result.count} 个产品到云端`;
+                      console.log("[Upload] Success:", msg);
+                      if (Platform.OS === 'web') {
+                        window.alert(`上传成功\n${msg}`);
+                      } else {
+                        Alert.alert("上传成功", msg);
+                      }
                     } else {
-                      Alert.alert("上传成功", msg);
+                      const errMsg = result.error || "未知错误";
+                      console.log("[Upload] Failed:", errMsg);
+                      if (Platform.OS === 'web') {
+                        window.alert(`上传失败\n${errMsg}`);
+                      } else {
+                        Alert.alert("上传失败", errMsg);
+                      }
                     }
-                  } else {
-                    const errMsg = result.error || "未知错误";
-                    console.log("[Upload] Failed:", errMsg);
+                  } catch (error: any) {
+                    console.error("[Upload] Error:", error);
+                    const errMsg = error.message || "网络错误";
                     if (Platform.OS === 'web') {
                       window.alert(`上传失败\n${errMsg}`);
                     } else {
                       Alert.alert("上传失败", errMsg);
                     }
+                  } finally {
+                    setUploading(false);
                   }
-                } catch (error: any) {
-                  console.error("[Upload] Error:", error);
-                  const errMsg = error.message || "网络错误";
-                  if (Platform.OS === 'web') {
-                    window.alert(`上传失败\n${errMsg}`);
-                  } else {
-                    Alert.alert("上传失败", errMsg);
-                  }
-                } finally {
-                  setUploading(false);
-                }
+                }, 100);
               }}
             >
               <ThemedText style={styles.bottomSheetItemIcon}>{uploading ? "⏳" : "⬆️"}</ThemedText>
@@ -438,54 +442,58 @@ export default function HomeScreen() {
             <Pressable 
               style={[styles.bottomSheetItem, refreshing && styles.bottomSheetItemDisabled]}
               disabled={refreshing}
-              onPress={async () => {
-                console.log("[Download] Button clicked");
+              onPress={() => {
+                console.log("[Download] Button clicked - sync version");
                 setShowDataModal(false);
-                setRefreshing(true);
-                try {
-                  console.log("[Download] Starting download...");
-                  // 使用 SyncService 下载数据
-                  const trpcClient = {
-                    sync: {
-                      download: {
-                        query: async () => {
-                          console.log("[Download] Calling downloadQuery.refetch");
-                          return (await downloadQuery.refetch()).data;
+                
+                // 使用 setTimeout 来延迟执行异步操作
+                setTimeout(async () => {
+                  setRefreshing(true);
+                  try {
+                    console.log("[Download] Starting download...");
+                    // 使用 SyncService 下载数据
+                    const trpcClient = {
+                      sync: {
+                        download: {
+                          query: async () => {
+                            console.log("[Download] Calling downloadQuery.refetch");
+                            return (await downloadQuery.refetch()).data;
+                          },
                         },
                       },
-                    },
-                  };
-                  const result = await SyncService.downloadFromCloud(trpcClient);
-                  console.log("[Download] Result:", result);
-                  if (result.success) {
-                    await loadProducts();
-                    const msg = `已下载 ${result.count} 个产品到本地`;
-                    console.log("[Download] Success:", msg);
-                    if (Platform.OS === 'web') {
-                      window.alert(`下载成功\n${msg}`);
+                    };
+                    const result = await SyncService.downloadFromCloud(trpcClient);
+                    console.log("[Download] Result:", result);
+                    if (result.success) {
+                      await loadProducts();
+                      const msg = `已下载 ${result.count} 个产品到本地`;
+                      console.log("[Download] Success:", msg);
+                      if (Platform.OS === 'web') {
+                        window.alert(`下载成功\n${msg}`);
+                      } else {
+                        Alert.alert("下载成功", msg);
+                      }
                     } else {
-                      Alert.alert("下载成功", msg);
+                      const errMsg = result.error || "未知错误";
+                      console.log("[Download] Failed:", errMsg);
+                      if (Platform.OS === 'web') {
+                        window.alert(`下载失败\n${errMsg}`);
+                      } else {
+                        Alert.alert("下载失败", errMsg);
+                      }
                     }
-                  } else {
-                    const errMsg = result.error || "未知错误";
-                    console.log("[Download] Failed:", errMsg);
+                  } catch (error: any) {
+                    console.error("[Download] Error:", error);
+                    const errMsg = error.message || "网络错误";
                     if (Platform.OS === 'web') {
                       window.alert(`下载失败\n${errMsg}`);
                     } else {
                       Alert.alert("下载失败", errMsg);
                     }
+                  } finally {
+                    setRefreshing(false);
                   }
-                } catch (error: any) {
-                  console.error("[Download] Error:", error);
-                  const errMsg = error.message || "网络错误";
-                  if (Platform.OS === 'web') {
-                    window.alert(`下载失败\n${errMsg}`);
-                  } else {
-                    Alert.alert("下载失败", errMsg);
-                  }
-                } finally {
-                  setRefreshing(false);
-                }
+                }, 100);
               }}
             >
               <ThemedText style={styles.bottomSheetItemIcon}>{refreshing ? "⏳" : "⬇️"}</ThemedText>
