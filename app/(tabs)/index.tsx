@@ -362,7 +362,7 @@ export default function HomeScreen() {
           style={[styles.modalOverlay, { backgroundColor: overlayBg }]}
           onPress={() => setShowDataModal(false)}
         >
-          <View style={[styles.bottomSheet, { backgroundColor: modalBg }]}>
+          <Pressable style={[styles.bottomSheet, { backgroundColor: modalBg }]} onPress={(e) => e.stopPropagation()}>
             <View style={styles.bottomSheetHandle} />
             <ThemedText style={styles.bottomSheetTitle}>数据安全</ThemedText>
 
@@ -516,7 +516,7 @@ export default function HomeScreen() {
               <ThemedText style={styles.bottomSheetItemText}>数据备份</ThemedText>
               <ThemedText style={styles.bottomSheetItemArrow}>›</ThemedText>
             </Pressable>
-          </View>
+          </Pressable>
         </Pressable>
       </Modal>
     </ThemedView>
