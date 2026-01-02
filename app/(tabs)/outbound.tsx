@@ -121,8 +121,8 @@ export default function OutboundScreen() {
   const loadLabelItems = async () => {
     setLoadingLabels(true);
     try {
-      // 获取最近 24 小时内入库的商品
-      const items = await getRecentInboundProducts(24);
+      // 获取最近 7 天内入库的商品（168 小时）
+      const items = await getRecentInboundProducts(168);
       setLabelItems(items);
       
       // 按批次分组（30 分钟内算同一批次）
@@ -435,7 +435,7 @@ export default function OutboundScreen() {
             </View>
           ) : labelItems.length === 0 ? (
             <View style={styles.emptyContainer}>
-              <ThemedText style={styles.emptyText}>最近 24 小时内没有入库记录</ThemedText>
+              <ThemedText style={styles.emptyText}>最近 7 天内没有入库记录</ThemedText>
               <ThemedText style={[styles.emptyText, { marginTop: 8, opacity: 0.6 }]}>
                 入库后的商品会显示在这里，方便批量导出打印标签
               </ThemedText>

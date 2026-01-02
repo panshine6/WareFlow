@@ -182,31 +182,62 @@ export interface BatchGroup {
 /**
  * 获取最近入库的商品列表
  * @param hours 最近多少小时内的入库记录，默认 24 小时
+ * 
+ * 优化逻辑：
+ * 1. 优先使用 history 中的入库记录
+ * 2. 如果没有入库历史，则使用产品的 createdAt 时间作为入库时间
+ * 3. 支持没有 systemSku 的产品（使用 sku 作为 systemSku）
  */
 export async function getRecentInboundProducts(hours: number = 24): Promise<LabelItem[]> {
   const allProducts = await ProductStorage.getAll();
   const cutoffTime = Date.now() - hours * 60 * 60 * 1000;
   
   const recentItems: LabelItem[] = [];
+  const processedProductIds = new Set<string>(); // 避免重复添加
   
   for (const product of allProducts) {
-    // 检查是否有系统 SKU
-    if (!product.systemSku) continue;
+    // 跳过已删除的产品
+    if (product.isDeleted) continue;
+    
+    // 获取系统 SKU（如果没有则使用普通 SKU）
+    const systemSku = product.systemSku || product.sku;
+    if (!systemSku) continue;
     
     // 获取最近的入库记录
     const inboundHistory = (product.history || []).filter(
       h => h.type === 'inbound' && new Date(h.timestamp).getTime() >= cutoffTime
     );
     
-    for (const entry of inboundHistory) {
-      recentItems.push({
-        id: product.id,
-        systemSku: product.systemSku,
-        userSku: product.sku || '',
-        productName: product.sku, // 使用 sku 作为名称
-        quantity: entry.quantity,
-        inboundTime: new Date(entry.timestamp).getTime(),
-      });
+    if (inboundHistory.length > 0) {
+      // 有入库历史记录，使用历史记录
+      for (const entry of inboundHistory) {
+        const itemKey = `${product.id}-${entry.timestamp}`;
+        if (!processedProductIds.has(itemKey)) {
+          processedProductIds.add(itemKey);
+          recentItems.push({
+            id: product.id,
+            systemSku: systemSku,
+            userSku: product.sku || '',
+            productName: product.sku,
+            quantity: entry.quantity,
+            inboundTime: new Date(entry.timestamp).getTime(),
+          });
+        }
+      }
+    } else {
+      // 没有入库历史，检查 createdAt 是否在时间范围内
+      const createdTime = new Date(product.createdAt).getTime();
+      if (createdTime >= cutoffTime && !processedProductIds.has(product.id)) {
+        processedProductIds.add(product.id);
+        recentItems.push({
+          id: product.id,
+          systemSku: systemSku,
+          userSku: product.sku || '',
+          productName: product.sku,
+          quantity: product.quantity,
+          inboundTime: createdTime,
+        });
+      }
     }
   }
   
