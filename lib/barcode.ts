@@ -148,17 +148,19 @@ export async function generateBarcodeDataURL(
 }
 
 /**
- * 生成适合 Niimbot D110 的标签图片（像素精确版本）
+ * 生成适合 Niimbot D110 的标签图片（双条形码版本）
  * 
- * 关键优化：
- * 1. 禁用抗锯齿 (imageSmoothingEnabled = false)
- * 2. 所有坐标和尺寸使用整数像素
- * 3. 条形码线条宽度使用整数像素
- * 4. 图片尺寸精确匹配打印机物理像素 (1:1)
+ * 新布局：
+ * ┌─────────────────────────────────────────────┐
+ * │      |||||||||||||||||||||||||||||||        │  系统SKU条形码
+ * │              BL260101EKBAM                  │  系统SKU文字
+ * │      |||||||||||||||||||||||||||||||        │  内部SKU条形码
+ * │              LB-ER-ME-0006                  │  内部SKU文字
+ * └─────────────────────────────────────────────┘
  * 
  * 打印机规格:
  * - Niimbot D110: 203 DPI
- * - 38mm × 12mm = 304px × 96px (精确计算: 38 × 8 = 304, 12 × 8 = 96)
+ * - 40mm × 30mm 标签 = 320px × 240px
  */
 export async function generateLabelForNiimbotD110(
   systemSku: string,
@@ -166,9 +168,10 @@ export async function generateLabelForNiimbotD110(
 ): Promise<string> {
   const JsBarcode = (await import('jsbarcode')).default;
   
-  // 精确像素尺寸 @ 203 DPI (1mm ≈ 8px)
-  const LABEL_WIDTH = 304;   // 38mm × 8 = 304px
-  const LABEL_HEIGHT = 96;   // 12mm × 8 = 96px
+  // 标签尺寸 @ 203 DPI (1mm ≈ 8px)
+  // 使用 40mm × 30mm 标签以容纳两个条形码
+  const LABEL_WIDTH = 320;   // 40mm × 8 = 320px
+  const LABEL_HEIGHT = 240;  // 30mm × 8 = 240px
   
   // 创建主 canvas
   const canvas = document.createElement('canvas');
@@ -186,73 +189,67 @@ export async function generateLabelForNiimbotD110(
   // 设置文字样式
   ctx.fillStyle = '#000000';
   
-  // 边距（整数像素）
-  const MARGIN = 4;
-  const TEXT_HEIGHT = 18;  // 底部文字区域高度
+  // 布局参数
+  const MARGIN = 8;
+  const BARCODE_HEIGHT = 60;  // 每个条形码高度
+  const TEXT_HEIGHT = 20;     // 每个文字高度
+  const GAP = 8;              // 条形码和文字之间的间距
   
-  // 1. 生成条形码（直接绘制，不缩放，避免锯齿）
-  // 计算可用的条形码区域
-  const barcodeAreaHeight = LABEL_HEIGHT - TEXT_HEIGHT - MARGIN * 2;
+  // 字体设置
+  const FONT_SIZE = 16;
+  const FONT_STYLE = `bold ${FONT_SIZE}px Arial, sans-serif`;
   
-  // 直接生成条形码到主 canvas，不缩放
-  const barcodeCanvas = document.createElement('canvas');
-  JsBarcode(barcodeCanvas, systemSku, {
+  // === 第一个条形码：系统SKU ===
+  const barcode1Canvas = document.createElement('canvas');
+  JsBarcode(barcode1Canvas, systemSku, {
     format: 'CODE128',
-    width: 1,                // 最小模块宽度 = 1像素（整数）
-    height: barcodeAreaHeight,  // 直接使用目标高度
-    displayValue: false,     // 不显示文字（我们单独绘制）
+    width: 1.5,
+    height: BARCODE_HEIGHT,
+    displayValue: false,
     margin: 0,
     background: '#ffffff',
     lineColor: '#000000',
   });
   
-  // 条形码水平居中（整数像素）
-  const barcodeX = Math.floor((LABEL_WIDTH - barcodeCanvas.width) / 2);
-  const barcodeY = MARGIN;
+  // 第一个条形码位置（居中）
+  const barcode1X = Math.floor((LABEL_WIDTH - barcode1Canvas.width) / 2);
+  const barcode1Y = MARGIN;
   
-  // *** 关键：绘制前再次确保禁用平滑 ***
   ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(barcode1Canvas, barcode1X, barcode1Y);
   
-  // 绘制条形码（1:1 不缩放）
-  ctx.drawImage(barcodeCanvas, barcodeX, barcodeY);
+  // 第一个条形码下方的文字
+  const text1Y = barcode1Y + BARCODE_HEIGHT + TEXT_HEIGHT - 2;
+  ctx.font = FONT_STYLE;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'bottom';
+  ctx.fillText(systemSku, Math.floor(LABEL_WIDTH / 2), text1Y);
   
-  // 2. 绘制底部文字：系统SKU + 用户SKU（统一字体样式）
-  const textY = LABEL_HEIGHT - 2;  // 底部位置（整数）
+  // === 第二个条形码：内部SKU ===
+  // 如果有内部SKU，显示内部SKU；否则显示系统SKU
+  const secondSku = userSku || systemSku;
   
-  // 字体设置（放大约1.5倍，从9px到14px）
-  const FONT_SIZE = 14;             // 1.5倍字体大小
-  const FONT_STYLE = `${FONT_SIZE}px Arial, sans-serif`;  // 统一字体样式
-  const SKU_GAP = 16;               // 两个SKU之间的间距（像素）
+  const barcode2Canvas = document.createElement('canvas');
+  JsBarcode(barcode2Canvas, secondSku, {
+    format: 'CODE128',
+    width: 1.5,
+    height: BARCODE_HEIGHT,
+    displayValue: false,
+    margin: 0,
+    background: '#ffffff',
+    lineColor: '#000000',
+  });
   
-  if (userSku) {
-    // 有用户SKU时，分开绘制两个SKU
-    
-    // 设置统一字体
-    ctx.font = FONT_STYLE;
-    
-    // 计算两个文字的宽度
-    const systemSkuWidth = Math.ceil(ctx.measureText(systemSku).width);
-    const userSkuWidth = Math.ceil(ctx.measureText(userSku).width);
-    
-    // 计算总宽度和起始位置（居中，整数像素）
-    const totalWidth = systemSkuWidth + SKU_GAP + userSkuWidth;
-    const startX = Math.floor((LABEL_WIDTH - totalWidth) / 2);
-    
-    // 绘制系统SKU
-    ctx.textAlign = 'left';
-    ctx.textBaseline = 'bottom';
-    ctx.fillText(systemSku, startX, textY);
-    
-    // 绘制用户SKU（统一字体）
-    ctx.fillText(userSku, startX + systemSkuWidth + SKU_GAP, textY);
-    
-  } else {
-    // 只有系统SKU时，居中显示
-    ctx.font = FONT_STYLE;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'bottom';
-    ctx.fillText(systemSku, Math.floor(LABEL_WIDTH / 2), textY);
-  }
+  // 第二个条形码位置（居中）
+  const barcode2X = Math.floor((LABEL_WIDTH - barcode2Canvas.width) / 2);
+  const barcode2Y = text1Y + GAP;
+  
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(barcode2Canvas, barcode2X, barcode2Y);
+  
+  // 第二个条形码下方的文字
+  const text2Y = barcode2Y + BARCODE_HEIGHT + TEXT_HEIGHT - 2;
+  ctx.fillText(secondSku, Math.floor(LABEL_WIDTH / 2), text2Y);
   
   return canvas.toDataURL('image/png');
 }
