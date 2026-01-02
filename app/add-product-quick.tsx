@@ -1,7 +1,7 @@
 /**
  * 快速添加产品页面
- * 简化流程：拍细节图 → 拍全景图 → 确认信息 → 保存
- * 用户操作：5 次（原来 11 次）
+ * 优化流程：直接打开相机拍细节图 → 直接打开相机拍全景图 → 确认信息（后台完成查重和计数）
+ * 用户操作：3 次（原来 5 次）
  */
 import { useRouter } from "expo-router";
 import { useEffect, useRef, useState } from "react";
@@ -56,13 +56,15 @@ export default function AddProductQuickScreen() {
   const [detailImageBase64, setDetailImageBase64] = useState("");
   const [overviewImageUri, setOverviewImageUri] = useState("");
 
-  // 查重结果
+  // 查重结果和状态
   const [duplicateResult, setDuplicateResult] = useState<DuplicateCheckResult | null>(null);
   const [showDuplicateModal, setShowDuplicateModal] = useState(false);
+  const [duplicateCheckStatus, setDuplicateCheckStatus] = useState<"pending" | "running" | "done">("pending");
 
-  // AI 计数结果
+  // AI 计数结果和状态
   const [aiCount, setAiCount] = useState<number>(0);
   const [showCountModal, setShowCountModal] = useState(false);
+  const [countStatus, setCountStatus] = useState<"pending" | "running" | "done">("pending");
 
   // 表单数据
   const [sku, setSku] = useState("");
@@ -111,6 +113,48 @@ export default function AddProductQuickScreen() {
     loadDefaults();
   }, []);
 
+  // 进入页面时自动打开相机
+  useEffect(() => {
+    // 延迟一点点确保组件已挂载
+    const timer = setTimeout(() => {
+      if (stage === "detail_photo" && fileInputRef.current) {
+        fileInputRef.current.click();
+      }
+    }, 300);
+    return () => clearTimeout(timer);
+  }, []);
+
+  // 后台查重（在细节图拍摄后触发）
+  const runDuplicateCheckInBackground = async (dataUrl: string, base64: string) => {
+    setDuplicateCheckStatus("running");
+    try {
+      const dupResult = await performDuplicateCheck(dataUrl, base64);
+      setDuplicateResult(dupResult);
+      console.log("[QuickAdd] Duplicate check result:", dupResult);
+    } catch (error) {
+      console.error("[QuickAdd] Duplicate check failed:", error);
+    } finally {
+      setDuplicateCheckStatus("done");
+    }
+  };
+
+  // 后台计数（在全景图拍摄后触发）
+  const runCountInBackground = async (base64: string) => {
+    setCountStatus("running");
+    try {
+      const count = await countProductsInImage(base64);
+      setAiCount(count);
+      setQuantity(count);
+      console.log("[QuickAdd] AI count:", count);
+    } catch (error) {
+      console.error("[QuickAdd] AI count failed:", error);
+      setAiCount(1);
+      setQuantity(1);
+    } finally {
+      setCountStatus("done");
+    }
+  };
+
   // 处理拍照
   const handleFileChange = async (event: Event) => {
     const target = event.target as HTMLInputElement;
@@ -119,12 +163,7 @@ export default function AddProductQuickScreen() {
 
     try {
       setProcessing(true);
-      
-      if (stage === "detail_photo") {
-        setProcessingText("正在处理细节图...");
-      } else {
-        setProcessingText("正在处理全景图...");
-      }
+      setProcessingText("正在处理图片...");
 
       // 读取文件为 base64
       const reader = new FileReader();
@@ -145,32 +184,26 @@ export default function AddProductQuickScreen() {
         setDetailImageUri(dataUrl);
         setDetailImageBase64(compressedBase64);
 
-        // 后台查重（静默）
-        setProcessingText("正在后台查重...");
-        const dupResult = await performDuplicateCheck(dataUrl, compressedBase64);
-        setDuplicateResult(dupResult);
-        console.log("[QuickAdd] Duplicate check result:", dupResult);
+        // 后台查重（不等待）
+        runDuplicateCheckInBackground(dataUrl, compressedBase64);
 
-        // 切换到全景图阶段
+        // 直接切换到全景图阶段
         setStage("overview_photo");
+        
+        // 自动打开相机拍全景图
+        setTimeout(() => {
+          if (fileInputRef.current) {
+            fileInputRef.current.click();
+          }
+        }, 100);
       } else if (stage === "overview_photo") {
         // 保存全景图
         setOverviewImageUri(dataUrl);
 
-        // AI 计数（静默）
-        setProcessingText("AI 正在计数...");
-        try {
-          const count = await countProductsInImage(compressedBase64);
-          setAiCount(count);
-          setQuantity(count);
-          console.log("[QuickAdd] AI count:", count);
-        } catch (error) {
-          console.error("[QuickAdd] AI count failed:", error);
-          setAiCount(1);
-          setQuantity(1);
-        }
+        // 后台计数（不等待）
+        runCountInBackground(compressedBase64);
 
-        // 切换到确认信息阶段
+        // 直接切换到确认信息阶段
         setStage("confirm_info");
       }
     } catch (error) {
@@ -417,7 +450,7 @@ export default function AddProductQuickScreen() {
     switch (stage) {
       case "detail_photo":
         return {
-          title: "📸 拍摄细节图",
+          title: "📷 拍摄细节图",
           hint: "请切换到微距模式",
           subHint: "💡 自然光下，充足光线，保持稳定",
         };
@@ -459,6 +492,13 @@ export default function AddProductQuickScreen() {
             <ThemedText style={styles.backButtonText}>← 返回</ThemedText>
           </Pressable>
 
+          {/* 半透明提示浮层 */}
+          <View style={styles.floatingHint}>
+            <ThemedText style={styles.floatingHintTitle}>{stageHint.title}</ThemedText>
+            <ThemedText style={styles.floatingHintText}>{stageHint.hint}</ThemedText>
+            <ThemedText style={styles.floatingHintSubText}>{stageHint.subHint}</ThemedText>
+          </View>
+
           {/* 加载遮罩 */}
           {processing && (
             <View style={styles.loadingOverlay}>
@@ -468,13 +508,6 @@ export default function AddProductQuickScreen() {
               </View>
             </View>
           )}
-
-          {/* 提示区域 */}
-          <View style={styles.hintArea}>
-            <ThemedText style={styles.stageTitle}>{stageHint.title}</ThemedText>
-            <ThemedText style={styles.stageHint}>{stageHint.hint}</ThemedText>
-            <ThemedText style={styles.stageSubHint}>{stageHint.subHint}</ThemedText>
-          </View>
 
           {/* 已拍摄的细节图预览（仅在全景图阶段显示） */}
           {stage === "overview_photo" && detailImageUri && (
@@ -551,27 +584,61 @@ export default function AddProductQuickScreen() {
             </View>
           </View>
 
-          {/* 表单区域 */}
+          {/* 后台任务状态提示 */}
+          <View style={styles.statusRow}>
+            <View style={[
+              styles.statusBadge,
+              duplicateCheckStatus === "done" ? styles.statusBadgeDone : 
+              duplicateCheckStatus === "running" ? styles.statusBadgeRunning : styles.statusBadgePending
+            ]}>
+              {duplicateCheckStatus === "running" && <ActivityIndicator size="small" color="#007AFF" style={styles.statusSpinner} />}
+              <ThemedText style={styles.statusText}>
+                {duplicateCheckStatus === "pending" ? "⏳ 查重待开始" :
+                 duplicateCheckStatus === "running" ? "查重中..." : "✓ 查重已完成"}
+              </ThemedText>
+            </View>
+            <View style={[
+              styles.statusBadge,
+              countStatus === "done" ? styles.statusBadgeDone : 
+              countStatus === "running" ? styles.statusBadgeRunning : styles.statusBadgePending
+            ]}>
+              {countStatus === "running" && <ActivityIndicator size="small" color="#007AFF" style={styles.statusSpinner} />}
+              <ThemedText style={styles.statusText}>
+                {countStatus === "pending" ? "⏳ 计数待开始" :
+                 countStatus === "running" ? "计数中..." : "✓ 计数已完成"}
+              </ThemedText>
+            </View>
+          </View>
+
+          {/* 表单 */}
           <View style={styles.formSection}>
             {/* SKU */}
-            <Pressable style={styles.formRow} onPress={handleSkuPress}>
+            <View style={styles.formRow}>
               <ThemedText style={styles.formLabel}>SKU</ThemedText>
-              <View style={[styles.formInput, { backgroundColor: inputBg }]}>
-                <ThemedText style={[styles.formValue, !sku && styles.placeholder]}>
-                  {sku || "点击查看查重结果并填写"}
+              <Pressable
+                style={[styles.formInput, { backgroundColor: inputBg }]}
+                onPress={handleSkuPress}
+              >
+                <ThemedText style={[styles.formValue, !sku && styles.placeholder, { color: inputColor }]}>
+                  {sku || "点击选择或输入 SKU"}
                 </ThemedText>
                 <ThemedText style={styles.formArrow}>›</ThemedText>
-              </View>
-            </Pressable>
+              </Pressable>
+            </View>
 
             {/* 数量 */}
-            <Pressable style={styles.formRow} onPress={handleQuantityPress}>
+            <View style={styles.formRow}>
               <ThemedText style={styles.formLabel}>数量</ThemedText>
-              <View style={[styles.formInput, { backgroundColor: inputBg }]}>
-                <ThemedText style={styles.formValue}>{quantity}</ThemedText>
+              <Pressable
+                style={[styles.formInput, { backgroundColor: inputBg }]}
+                onPress={handleQuantityPress}
+              >
+                <ThemedText style={[styles.formValue, { color: inputColor }]}>
+                  {quantity}
+                </ThemedText>
                 <ThemedText style={styles.formArrow}>›</ThemedText>
-              </View>
-            </Pressable>
+              </Pressable>
+            </View>
 
             {/* 位置 */}
             <View style={styles.formRow}>
@@ -580,7 +647,7 @@ export default function AddProductQuickScreen() {
                 style={[styles.textInput, { backgroundColor: inputBg, color: inputColor }]}
                 value={location}
                 onChangeText={setLocation}
-                placeholder="存储位置（自动填充）"
+                placeholder="输入存储位置"
                 placeholderTextColor={placeholderColor}
               />
             </View>
@@ -589,23 +656,15 @@ export default function AddProductQuickScreen() {
             <View style={styles.formRow}>
               <ThemedText style={styles.formLabel}>价格</ThemedText>
               <View style={[styles.priceInputContainer, { backgroundColor: inputBg }]}>
-                <ThemedText style={styles.currencySymbol}>$</ThemedText>
+                <ThemedText style={[styles.currencySymbol, { color: inputColor }]}>¥</ThemedText>
                 <TextInput
                   style={[styles.priceInput, { color: inputColor }]}
                   value={price.toString()}
                   onChangeText={(text) => setPrice(parseFloat(text) || 0)}
                   keyboardType="decimal-pad"
-                  placeholder="9.9"
+                  placeholder="0.00"
                   placeholderTextColor={placeholderColor}
                 />
-              </View>
-            </View>
-
-            {/* 操作员 */}
-            <View style={styles.formRow}>
-              <ThemedText style={styles.formLabel}>操作员</ThemedText>
-              <View style={[styles.formInput, { backgroundColor: inputBg }]}>
-                <ThemedText style={styles.formValue}>{operatorName}</ThemedText>
               </View>
             </View>
           </View>
@@ -614,7 +673,7 @@ export default function AddProductQuickScreen() {
         {/* 底部按钮 */}
         <View style={[styles.bottomButtons, { paddingBottom: Math.max(insets.bottom, 20) }]}>
           <Pressable
-            style={[styles.saveButton, styles.saveOnlyButton, { opacity: saving ? 0.7 : 1 }]}
+            style={[styles.saveButton, { opacity: saving ? 0.7 : 1 }]}
             onPress={() => handleSave(false)}
             disabled={saving}
           >
@@ -622,7 +681,6 @@ export default function AddProductQuickScreen() {
               {saving ? "保存中..." : "保存"}
             </ThemedText>
           </Pressable>
-
           <Pressable
             style={[styles.saveButton, styles.savePrintButton, { opacity: saving ? 0.7 : 1 }]}
             onPress={() => handleSave(true)}
@@ -645,57 +703,50 @@ export default function AddProductQuickScreen() {
             {duplicateResult?.stats && (
               <View style={styles.debugInfo}>
                 <ThemedText style={styles.debugText}>
-                  📊 查重统计: 总产品 {duplicateResult.stats.totalProducts} | 
-                  pHash筛选 {duplicateResult.stats.pHashFiltered} | 
-                  AI对比 {duplicateResult.stats.aiCompared} | 
-                  耗时 {duplicateResult.stats.durationMs}ms
+                  已检查 {duplicateResult.stats.totalChecked} 个产品，
+                  相似度阈值: {duplicateResult.stats.threshold}
                 </ThemedText>
-                {duplicateResult.error && (
-                  <ThemedText style={styles.debugError}>
-                    ❌ 错误: {duplicateResult.error}
-                  </ThemedText>
-                )}
               </View>
             )}
 
-            {duplicateResult?.hasDuplicates && duplicateResult.duplicates.length > 0 ? (
-              <>
-                <ThemedText style={styles.modalHint}>
-                  发现 {duplicateResult.duplicates.length} 个相似产品
+            {/* 相似产品列表 */}
+            {duplicateResult?.matches && duplicateResult.matches.length > 0 ? (
+              <ScrollView style={styles.matchList}>
+                <ThemedText style={styles.matchListTitle}>
+                  发现 {duplicateResult.matches.length} 个相似产品：
                 </ThemedText>
-
-                <ScrollView style={styles.duplicateList}>
-                  {duplicateResult.duplicates.map((dup, index) => (
-                    <Pressable
-                      key={dup.product.id}
-                      style={styles.duplicateItem}
-                      onPress={() => handleMergeToProduct(dup.product)}
-                    >
-                      <Image
-                        source={{ uri: dup.product.detailImageUri }}
-                        style={styles.duplicateImage}
-                      />
-                      <View style={styles.duplicateInfo}>
-                        <ThemedText style={styles.duplicateSku}>{dup.product.sku}</ThemedText>
-                        <ThemedText style={styles.duplicateScore}>
-                          相似度: {dup.similarityScore}%
-                        </ThemedText>
-                        <ThemedText style={styles.duplicateNote} numberOfLines={2}>
-                          {dup.analysisNote}
-                        </ThemedText>
-                      </View>
-                      <ThemedText style={styles.mergeLabel}>合并</ThemedText>
-                    </Pressable>
-                  ))}
-                </ScrollView>
-              </>
+                {duplicateResult.matches.map((match, index) => (
+                  <Pressable
+                    key={match.product.id}
+                    style={styles.matchItem}
+                    onPress={() => handleMergeToProduct(match.product)}
+                  >
+                    <Image
+                      source={{ uri: match.product.detailImageUri }}
+                      style={styles.matchImage}
+                    />
+                    <View style={styles.matchInfo}>
+                      <ThemedText style={styles.matchSku}>{match.product.sku}</ThemedText>
+                      <ThemedText style={styles.matchSimilarity}>
+                        相似度: {(match.similarity * 100).toFixed(0)}%
+                      </ThemedText>
+                      <ThemedText style={styles.matchQuantity}>
+                        当前库存: {match.product.quantity}
+                      </ThemedText>
+                    </View>
+                    <ThemedText style={styles.matchArrow}>›</ThemedText>
+                  </Pressable>
+                ))}
+              </ScrollView>
             ) : (
-              <ThemedText style={styles.modalHint}>未发现重复产品</ThemedText>
+              <ThemedText style={styles.noMatchText}>
+                {duplicateCheckStatus === "done" ? "未发现相似产品，这是一个新款式" : "正在查重..."}
+              </ThemedText>
             )}
 
             {/* SKU 输入 */}
             <View style={styles.skuInputContainer}>
-              <ThemedText style={styles.skuInputLabel}>输入新 SKU:</ThemedText>
+              <ThemedText style={styles.skuInputLabel}>新建 SKU：</ThemedText>
               <TextInput
                 style={[styles.skuInput, { backgroundColor: inputBg, color: inputColor }]}
                 value={sku}
@@ -732,7 +783,7 @@ export default function AddProductQuickScreen() {
             <ThemedText type="title" style={styles.modalTitle}>AI 计数结果</ThemedText>
 
             <ThemedText style={styles.modalHint}>
-              AI 识别到的数量: {aiCount}
+              {countStatus === "done" ? `AI 识别到的数量: ${aiCount}` : "AI 正在计数..."}
             </ThemedText>
 
             <View style={styles.countInputContainer}>
@@ -806,6 +857,35 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "500",
   },
+  // 半透明浮层提示
+  floatingHint: {
+    position: "absolute",
+    top: 120,
+    left: 20,
+    right: 20,
+    backgroundColor: "rgba(0, 0, 0, 0.6)",
+    borderRadius: 12,
+    padding: 16,
+    alignItems: "center",
+    zIndex: 5,
+  },
+  floatingHintTitle: {
+    color: "#fff",
+    fontSize: 20,
+    fontWeight: "bold",
+    marginBottom: 8,
+  },
+  floatingHintText: {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "600",
+    marginBottom: 4,
+  },
+  floatingHintSubText: {
+    color: "rgba(255,255,255,0.8)",
+    fontSize: 14,
+    textAlign: "center",
+  },
   loadingOverlay: {
     position: "absolute",
     top: 0,
@@ -830,34 +910,12 @@ const styles = StyleSheet.create({
     fontWeight: "500",
     color: "#000",
   },
-  hintArea: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    paddingHorizontal: 40,
-  },
-  stageTitle: {
-    color: "#fff",
-    fontSize: 24,
-    fontWeight: "bold",
-    marginBottom: 16,
-  },
-  stageHint: {
-    color: "#fff",
-    fontSize: 18,
-    fontWeight: "600",
-    marginBottom: 8,
-  },
-  stageSubHint: {
-    color: "rgba(255,255,255,0.8)",
-    fontSize: 15,
-    textAlign: "center",
-  },
   thumbnailContainer: {
     position: "absolute",
-    top: 100,
+    top: 120,
     right: 20,
     alignItems: "center",
+    zIndex: 5,
   },
   thumbnailLabel: {
     color: "#4CD964",
@@ -872,8 +930,11 @@ const styles = StyleSheet.create({
     borderColor: "#4CD964",
   },
   captureArea: {
+    position: "absolute",
+    bottom: 50,
+    left: 0,
+    right: 0,
     alignItems: "center",
-    paddingBottom: 50,
   },
   captureButton: {
     width: 80,
@@ -909,7 +970,7 @@ const styles = StyleSheet.create({
   imagePreviewRow: {
     flexDirection: "row",
     gap: 12,
-    marginBottom: 24,
+    marginBottom: 16,
   },
   imagePreviewItem: {
     flex: 1,
@@ -933,6 +994,38 @@ const styles = StyleSheet.create({
   placeholderText: {
     color: "#999",
     fontSize: 14,
+  },
+
+  // 状态提示行
+  statusRow: {
+    flexDirection: "row",
+    gap: 8,
+    marginBottom: 20,
+  },
+  statusBadge: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+  },
+  statusBadgePending: {
+    backgroundColor: "rgba(0, 0, 0, 0.05)",
+  },
+  statusBadgeRunning: {
+    backgroundColor: "rgba(0, 122, 255, 0.1)",
+  },
+  statusBadgeDone: {
+    backgroundColor: "rgba(76, 217, 100, 0.15)",
+  },
+  statusSpinner: {
+    marginRight: 6,
+  },
+  statusText: {
+    fontSize: 13,
+    fontWeight: "500",
   },
 
   // 表单样式
@@ -999,31 +1092,27 @@ const styles = StyleSheet.create({
     gap: 12,
     paddingHorizontal: 20,
     paddingTop: 16,
-    backgroundColor: "rgba(255,255,255,0.95)",
-    borderTopWidth: 1,
-    borderTopColor: "rgba(0,0,0,0.1)",
+    backgroundColor: "transparent",
   },
   saveButton: {
     flex: 1,
     height: 50,
-    borderRadius: 10,
+    borderRadius: 12,
+    backgroundColor: "rgba(0, 0, 0, 0.1)",
     justifyContent: "center",
     alignItems: "center",
-  },
-  saveOnlyButton: {
-    backgroundColor: "rgba(0,0,0,0.1)",
-  },
-  savePrintButton: {
-    backgroundColor: "#34C759",
   },
   saveButtonText: {
     fontSize: 16,
     fontWeight: "600",
   },
+  savePrintButton: {
+    backgroundColor: "#34C759",
+  },
   savePrintButtonText: {
-    color: "#fff",
     fontSize: 16,
     fontWeight: "600",
+    color: "#fff",
   },
 
   // 弹窗样式
@@ -1033,18 +1122,18 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: "rgba(0,0,0,0.5)",
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
     justifyContent: "center",
     alignItems: "center",
-    padding: 20,
+    zIndex: 100,
   },
   modalContent: {
-    backgroundColor: "#fff",
-    borderRadius: 16,
-    padding: 24,
-    width: "100%",
+    width: "90%",
     maxWidth: 400,
     maxHeight: "80%",
+    backgroundColor: "#fff",
+    borderRadius: 16,
+    padding: 20,
   },
   modalTitle: {
     fontSize: 20,
@@ -1054,34 +1143,26 @@ const styles = StyleSheet.create({
     color: "#000",
   },
   debugInfo: {
-    backgroundColor: "#f0f0f0",
-    padding: 10,
+    backgroundColor: "#f5f5f5",
     borderRadius: 8,
+    padding: 10,
     marginBottom: 12,
   },
   debugText: {
-    fontSize: 11,
+    fontSize: 12,
     color: "#666",
-    textAlign: "center",
   },
-  debugError: {
-    fontSize: 11,
-    color: "#ff3b30",
-    textAlign: "center",
-    marginTop: 4,
-  },
-  modalHint: {
-    fontSize: 14,
-    textAlign: "center",
-    opacity: 0.7,
+  matchList: {
+    maxHeight: 250,
     marginBottom: 16,
+  },
+  matchListTitle: {
+    fontSize: 14,
+    fontWeight: "600",
+    marginBottom: 12,
     color: "#000",
   },
-  duplicateList: {
-    maxHeight: 300,
-    marginBottom: 16,
-  },
-  duplicateItem: {
+  matchItem: {
     flexDirection: "row",
     alignItems: "center",
     padding: 12,
@@ -1089,32 +1170,38 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     marginBottom: 8,
   },
-  duplicateImage: {
+  matchImage: {
     width: 50,
     height: 50,
-    borderRadius: 6,
+    borderRadius: 8,
+    marginRight: 12,
   },
-  duplicateInfo: {
+  matchInfo: {
     flex: 1,
-    marginLeft: 12,
   },
-  duplicateSku: {
+  matchSku: {
     fontSize: 14,
     fontWeight: "600",
     color: "#000",
   },
-  duplicateScore: {
+  matchSimilarity: {
     fontSize: 12,
     color: "#007AFF",
+    marginTop: 2,
   },
-  duplicateNote: {
-    fontSize: 11,
+  matchQuantity: {
+    fontSize: 12,
     color: "#666",
+    marginTop: 2,
   },
-  mergeLabel: {
-    fontSize: 14,
-    color: "#007AFF",
-    fontWeight: "600",
+  matchArrow: {
+    fontSize: 20,
+    color: "#999",
+  },
+  noMatchText: {
+    textAlign: "center",
+    color: "#666",
+    marginVertical: 20,
   },
   skuInputContainer: {
     marginBottom: 16,
@@ -1138,7 +1225,7 @@ const styles = StyleSheet.create({
   modalButton: {
     flex: 1,
     height: 50,
-    borderRadius: 10,
+    borderRadius: 12,
     justifyContent: "center",
     alignItems: "center",
   },
@@ -1148,7 +1235,7 @@ const styles = StyleSheet.create({
   cancelButtonText: {
     fontSize: 16,
     fontWeight: "600",
-    color: "#000",
+    color: "#666",
   },
   confirmButton: {
     backgroundColor: "#007AFF",
@@ -1158,34 +1245,37 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: "#fff",
   },
-
-  // 计数弹窗
+  modalHint: {
+    textAlign: "center",
+    color: "#666",
+    marginBottom: 20,
+  },
   countInputContainer: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: 16,
-    marginBottom: 24,
+    marginBottom: 20,
   },
   countButton: {
     width: 50,
     height: 50,
     borderRadius: 25,
-    backgroundColor: "#007AFF",
+    backgroundColor: "#f0f0f0",
     justifyContent: "center",
     alignItems: "center",
   },
   countButtonText: {
     fontSize: 24,
     fontWeight: "bold",
-    color: "#fff",
+    color: "#000",
   },
   countInput: {
     width: 80,
     height: 50,
     borderRadius: 10,
     textAlign: "center",
-    fontSize: 24,
+    fontSize: 20,
     fontWeight: "bold",
   },
 });
