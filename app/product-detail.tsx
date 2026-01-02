@@ -354,6 +354,49 @@ export default function ProductDetailScreen() {
               🏷️ 打印标签
             </ThemedText>
             
+            {/* SKU 复制区域 */}
+            <View style={styles.skuCopySection}>
+              {/* 内部 SKU */}
+              <View style={styles.skuCopyRow}>
+                <ThemedText style={styles.skuCopyLabel}>内部 SKU：</ThemedText>
+                <ThemedText style={styles.skuCopyValue}>{product.sku}</ThemedText>
+                <Pressable
+                  onPress={async () => {
+                    try {
+                      await navigator.clipboard.writeText(product.sku);
+                      Alert.alert('复制成功', `已复制内部 SKU: ${product.sku}`);
+                    } catch (error) {
+                      Alert.alert('复制失败', '请手动复制');
+                    }
+                  }}
+                  style={styles.copyButton}
+                >
+                  <ThemedText style={styles.copyButtonText}>📋 复制</ThemedText>
+                </Pressable>
+              </View>
+              
+              {/* 系统 SKU */}
+              <View style={styles.skuCopyRow}>
+                <ThemedText style={styles.skuCopyLabel}>系统 SKU：</ThemedText>
+                <ThemedText style={styles.skuCopyValue}>{product.systemSku || '未生成'}</ThemedText>
+                {product.systemSku && (
+                  <Pressable
+                    onPress={async () => {
+                      try {
+                        await navigator.clipboard.writeText(product.systemSku!);
+                        Alert.alert('复制成功', `已复制系统 SKU: ${product.systemSku}`);
+                      } catch (error) {
+                        Alert.alert('复制失败', '请手动复制');
+                      }
+                    }}
+                    style={styles.copyButton}
+                  >
+                    <ThemedText style={styles.copyButtonText}>📋 复制</ThemedText>
+                  </Pressable>
+                )}
+              </View>
+            </View>
+            
             {/* 打印机类型选择 */}
             <View style={styles.printerTypeContainer}>
               <ThemedText style={styles.printerTypeLabel}>打印机型号：</ThemedText>
@@ -834,6 +877,41 @@ const styles = StyleSheet.create({
   },
   printTitle: {
     marginBottom: 4,
+  },
+  // SKU 复制区域样式
+  skuCopySection: {
+    backgroundColor: "rgba(0, 122, 255, 0.08)",
+    padding: 12,
+    borderRadius: 8,
+    gap: 8,
+    marginBottom: 8,
+  },
+  skuCopyRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  skuCopyLabel: {
+    fontSize: 13,
+    fontWeight: "600",
+    opacity: 0.7,
+    minWidth: 70,
+  },
+  skuCopyValue: {
+    fontSize: 14,
+    fontWeight: "500",
+    flex: 1,
+  },
+  copyButton: {
+    backgroundColor: "#007AFF",
+    paddingVertical: 4,
+    paddingHorizontal: 10,
+    borderRadius: 4,
+  },
+  copyButtonText: {
+    fontSize: 12,
+    color: "#fff",
+    fontWeight: "500",
   },
   barcodePreviewContainer: {
     backgroundColor: "#fff",
