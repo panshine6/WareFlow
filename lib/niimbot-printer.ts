@@ -39,6 +39,156 @@ export interface PrintResult {
 let printerClient: NiimbotBluetoothClient | NiimbotSerialClient | null = null;
 let currentTransport: 'serial' | 'ble' | null = null;
 
+// =====================================================
+// PNG DPI 元数据嵌入函数 (pHYs chunk)
+// =====================================================
+
+/**
+ * 在 PNG 图片中嵌入 DPI 元数据 (pHYs chunk)
+ * 这让 Niimbot 软件能正确识别图片的物理尺寸，自动填满标签纸。
+ */
+function addDpiToPng(dataURL: string, dpi: number): string {
+  // 解码 base64 数据
+  const base64Data = dataURL.split(',')[1];
+  const binaryString = atob(base64Data);
+  const bytes = new Uint8Array(binaryString.length);
+  for (let i = 0; i < binaryString.length; i++) {
+    bytes[i] = binaryString.charCodeAt(i);
+  }
+  
+  // PNG signature (8 bytes) + IHDR chunk (25 bytes) = 33 bytes
+  // pHYs chunk 应该插入在 IHDR 之后
+  const PNG_SIGNATURE_LENGTH = 8;
+  const IHDR_CHUNK_LENGTH = 25;
+  const INSERT_POSITION = PNG_SIGNATURE_LENGTH + IHDR_CHUNK_LENGTH;
+  
+  // 创建 pHYs chunk
+  const phys = createPhysChunk(dpi);
+  
+  // 检查是否已经有 pHYs chunk
+  const existingPhysIndex = findChunk(bytes, 'pHYs');
+  
+  let newBytes: Uint8Array;
+  
+  if (existingPhysIndex !== -1) {
+    // 已有 pHYs chunk，替换它
+    const before = bytes.slice(0, existingPhysIndex);
+    const after = bytes.slice(existingPhysIndex + 25);
+    newBytes = new Uint8Array(before.length + phys.length + after.length);
+    newBytes.set(before, 0);
+    newBytes.set(phys, before.length);
+    newBytes.set(after, before.length + phys.length);
+  } else {
+    // 没有 pHYs chunk，插入新的
+    const before = bytes.slice(0, INSERT_POSITION);
+    const after = bytes.slice(INSERT_POSITION);
+    newBytes = new Uint8Array(before.length + phys.length + after.length);
+    newBytes.set(before, 0);
+    newBytes.set(phys, before.length);
+    newBytes.set(after, before.length + phys.length);
+  }
+  
+  // 编码回 base64
+  let binary = '';
+  for (let i = 0; i < newBytes.length; i++) {
+    binary += String.fromCharCode(newBytes[i]);
+  }
+  return 'data:image/png;base64,' + btoa(binary);
+}
+
+/**
+ * 创建 pHYs chunk (25 bytes)
+ */
+function createPhysChunk(dpi: number): Uint8Array {
+  // DPI 转换为每米像素数
+  const INCHES_PER_METER = 39.3701;
+  const pixelsPerMeter = Math.round(dpi * INCHES_PER_METER);
+  
+  // pHYs chunk 数据 (9 bytes)
+  const data = new Uint8Array(9);
+  // X pixels per meter (big-endian)
+  data[0] = (pixelsPerMeter >> 24) & 0xFF;
+  data[1] = (pixelsPerMeter >> 16) & 0xFF;
+  data[2] = (pixelsPerMeter >> 8) & 0xFF;
+  data[3] = pixelsPerMeter & 0xFF;
+  // Y pixels per meter (big-endian)
+  data[4] = (pixelsPerMeter >> 24) & 0xFF;
+  data[5] = (pixelsPerMeter >> 16) & 0xFF;
+  data[6] = (pixelsPerMeter >> 8) & 0xFF;
+  data[7] = pixelsPerMeter & 0xFF;
+  // Unit specifier: 1 = meter
+  data[8] = 1;
+  
+  // Type field: "pHYs"
+  const type = new Uint8Array([0x70, 0x48, 0x59, 0x73]);
+  
+  // 计算 CRC32 (type + data)
+  const typeAndData = new Uint8Array(type.length + data.length);
+  typeAndData.set(type, 0);
+  typeAndData.set(data, type.length);
+  const crc = crc32(typeAndData);
+  
+  // 组装完整的 chunk (25 bytes)
+  const chunk = new Uint8Array(25);
+  // Length field: 9 (big-endian)
+  chunk[0] = 0x00;
+  chunk[1] = 0x00;
+  chunk[2] = 0x00;
+  chunk[3] = 0x09;
+  // Type field
+  chunk.set(type, 4);
+  // Data field
+  chunk.set(data, 8);
+  // CRC32 field (big-endian)
+  chunk[17] = (crc >> 24) & 0xFF;
+  chunk[18] = (crc >> 16) & 0xFF;
+  chunk[19] = (crc >> 8) & 0xFF;
+  chunk[20] = crc & 0xFF;
+  
+  return chunk;
+}
+
+/**
+ * 在 PNG 数据中查找指定类型的 chunk
+ */
+function findChunk(bytes: Uint8Array, chunkType: string): number {
+  const typeBytes = new TextEncoder().encode(chunkType);
+  let pos = 8; // 跳过 PNG signature
+  
+  while (pos < bytes.length - 12) {
+    if (bytes[pos + 4] === typeBytes[0] &&
+        bytes[pos + 5] === typeBytes[1] &&
+        bytes[pos + 6] === typeBytes[2] &&
+        bytes[pos + 7] === typeBytes[3]) {
+      return pos;
+    }
+    const length = (bytes[pos] << 24) | (bytes[pos + 1] << 16) | (bytes[pos + 2] << 8) | bytes[pos + 3];
+    pos += 12 + length;
+  }
+  
+  return -1;
+}
+
+/**
+ * CRC32 计算 (PNG 标准)
+ */
+function crc32(data: Uint8Array): number {
+  const crcTable: number[] = [];
+  for (let n = 0; n < 256; n++) {
+    let c = n;
+    for (let k = 0; k < 8; k++) {
+      c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+    }
+    crcTable[n] = c;
+  }
+  
+  let crc = 0xFFFFFFFF;
+  for (let i = 0; i < data.length; i++) {
+    crc = crcTable[(crc ^ data[i]) & 0xFF] ^ (crc >>> 8);
+  }
+  return (crc ^ 0xFFFFFFFF) >>> 0;
+}
+
 /**
  * 检查浏览器是否支持 Web Serial API
  */
@@ -383,7 +533,11 @@ export async function generateLabelForNiimbotB1(
   ctx.textBaseline = 'bottom';
   ctx.fillText(displayText, Math.floor(LABEL_WIDTH / 2), textY);
   
-  return canvas.toDataURL('image/png');
+  // 获取原始 PNG 数据
+  const rawDataURL = canvas.toDataURL('image/png');
+  
+  // *** 关键：嵌入 203 DPI 元数据，让 Niimbot 软件正确识别图片尺寸 ***
+  return addDpiToPng(rawDataURL, 203);
 }
 
 /**
