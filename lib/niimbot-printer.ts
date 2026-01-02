@@ -436,15 +436,23 @@ export async function printCanvas(
 }
 
 /**
- * 生成适合 NIIMBOT B1 的标签图片
+ * 生成适合 Niimbot B1 的标签图片（双条形码版本）
  * 
  * B1 规格:
  * - 分辨率: 203 DPI (1mm ≈ 8px)
  * - 标签尺寸: 40mm × 30mm = 320px × 240px
  * 
+ * 布局（双条形码）：
+ * ┌─────────────────────────────────────────────┐
+ * │      |||||||||||||||||||||||||||||||        │  系统SKU条形码
+ * │              BL260101EKBAM                  │  系统SKU文字
+ * │      |||||||||||||||||||||||||||||||        │  内部SKU条形码
+ * │              LB-ER-ME-0006                  │  内部SKU文字
+ * └─────────────────────────────────────────────┘
+ * 
  * 关键优化：
  * 1. 图片尺寸精确匹配打印机物理像素，1:1 输出，避免缩放产生锯齿
- * 2. 条形码模块宽度使用整数像素（width: 2）
+ * 2. 条形码模块宽度使用整数像素
  * 3. 禁用抗锯齿
  * 4. 最大化利用纸张空间，最小化边距
  * 5. 文字自动缩放以适应标签宽度
@@ -476,61 +484,68 @@ export async function generateLabelForNiimbotB1(
   // 设置文字样式
   ctx.fillStyle = '#000000';
   
-  // *** 最小化边距，最大化利用纸张空间 ***
-  const MARGIN_TOP = 4;       // 顶部边距
-  const MARGIN_BOTTOM = 4;    // 底部边距
-  const TEXT_HEIGHT = 28;     // 底部文字区域高度
+  // *** 双条形码布局参数 ***
+  const MARGIN_TOP = 6;        // 顶部边距
+  const MARGIN_BOTTOM = 4;     // 底部边距
+  const BARCODE_HEIGHT = 70;   // 每个条形码高度
+  const TEXT_HEIGHT = 18;      // 每个文字高度
+  const GAP = 4;               // 条形码组之间的间距
   
-  // 1. 生成条形码 - 最大化高度
-  const barcodeAreaHeight = LABEL_HEIGHT - TEXT_HEIGHT - MARGIN_TOP - MARGIN_BOTTOM;
+  // 字体设置
+  const FONT_SIZE = 14;
+  const FONT_STYLE = `bold ${FONT_SIZE}px Arial, sans-serif`;
+  ctx.font = FONT_STYLE;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'bottom';
   
-  // 创建条形码 canvas
-  const barcodeCanvas = document.createElement('canvas');
-  JsBarcode(barcodeCanvas, systemSku, {
+  // === 第一个条形码：系统SKU ===
+  const barcode1Canvas = document.createElement('canvas');
+  JsBarcode(barcode1Canvas, systemSku, {
     format: 'CODE128',
-    width: 2,                // 模块宽度 = 2像素，让条形码更宽更清晰
-    height: barcodeAreaHeight,
+    width: 1.5,              // 模块宽度
+    height: BARCODE_HEIGHT,
     displayValue: false,     // 不显示文字（我们单独绘制）
     margin: 0,
     background: '#ffffff',
     lineColor: '#000000',
   });
   
-  // 条形码水平居中（整数像素）
-  const barcodeX = Math.floor((LABEL_WIDTH - barcodeCanvas.width) / 2);
-  const barcodeY = MARGIN_TOP;
+  // 第一个条形码位置（居中）
+  const barcode1X = Math.floor((LABEL_WIDTH - barcode1Canvas.width) / 2);
+  const barcode1Y = MARGIN_TOP;
   
-  // *** 关键：绘制前再次确保禁用平滑 ***
   ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(barcode1Canvas, barcode1X, barcode1Y);
   
-  // 绘制条形码（1:1 不缩放）
-  ctx.drawImage(barcodeCanvas, barcodeX, barcodeY);
+  // 第一个条形码下方的文字
+  const text1Y = barcode1Y + BARCODE_HEIGHT + TEXT_HEIGHT - 2;
+  ctx.fillText(systemSku, Math.floor(LABEL_WIDTH / 2), text1Y);
   
-  // 2. 绘制底部文字 - 紧贴底部
-  const textY = LABEL_HEIGHT - MARGIN_BOTTOM;
-  const MAX_TEXT_WIDTH = LABEL_WIDTH - 8;  // 最大文字宽度（左右各留4px）
+  // === 第二个条形码：内部SKU ===
+  // 如果有内部SKU，显示内部SKU；否则显示系统SKU
+  const secondSku = userSku || systemSku;
   
-  // 动态计算字体大小，确保文字不超出边界
-  let fontSize = 22;  // 起始字体大小（增大）
-  const MIN_FONT_SIZE = 12;
+  const barcode2Canvas = document.createElement('canvas');
+  JsBarcode(barcode2Canvas, secondSku, {
+    format: 'CODE128',
+    width: 1.5,
+    height: BARCODE_HEIGHT,
+    displayValue: false,
+    margin: 0,
+    background: '#ffffff',
+    lineColor: '#000000',
+  });
   
-  // 组合显示文本
-  const displayText = userSku ? `${systemSku}    ${userSku}` : systemSku;
+  // 第二个条形码位置（居中）
+  const barcode2X = Math.floor((LABEL_WIDTH - barcode2Canvas.width) / 2);
+  const barcode2Y = text1Y + GAP;
   
-  // 动态调整字体大小直到文字适合宽度
-  ctx.font = `bold ${fontSize}px Arial, sans-serif`;
-  let textWidth = ctx.measureText(displayText).width;
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(barcode2Canvas, barcode2X, barcode2Y);
   
-  while (textWidth > MAX_TEXT_WIDTH && fontSize > MIN_FONT_SIZE) {
-    fontSize -= 1;
-    ctx.font = `bold ${fontSize}px Arial, sans-serif`;
-    textWidth = ctx.measureText(displayText).width;
-  }
-  
-  // 居中绘制文字
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'bottom';
-  ctx.fillText(displayText, Math.floor(LABEL_WIDTH / 2), textY);
+  // 第二个条形码下方的文字
+  const text2Y = barcode2Y + BARCODE_HEIGHT + TEXT_HEIGHT - 2;
+  ctx.fillText(secondSku, Math.floor(LABEL_WIDTH / 2), text2Y);
   
   // 获取原始 PNG 数据
   const rawDataURL = canvas.toDataURL('image/png');
