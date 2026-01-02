@@ -404,12 +404,20 @@ export default function HomeScreen() {
                     const result = await SyncService.uploadToCloud(trpcClient);
                     console.log("[Upload] Result:", result);
                     if (result.success) {
-                      const msg = `已上传 ${result.count} 个产品到云端`;
+                      // 根据同步数量显示不同的提示
+                      let msg: string;
+                      if (result.count === 0) {
+                        msg = `本地数据无变化，无需同步\n共 ${result.totalCount || 0} 个产品`;
+                      } else if (result.totalCount && result.count < result.totalCount) {
+                        msg = `已同步 ${result.count} 个变更\n共 ${result.totalCount} 个产品`;
+                      } else {
+                        msg = `已上传 ${result.count} 个产品到云端`;
+                      }
                       console.log("[Upload] Success:", msg);
                       if (Platform.OS === 'web') {
-                        window.alert(`上传成功\n${msg}`);
+                        window.alert(`同步成功\n${msg}`);
                       } else {
-                        Alert.alert("上传成功", msg);
+                        Alert.alert("同步成功", msg);
                       }
                     } else {
                       const errMsg = result.error || "未知错误";

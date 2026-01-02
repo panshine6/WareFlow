@@ -1,6 +1,5 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { ProductStorage } from "./storage";
-import { generateThumbnailDataUrl, dataUrlToBase64 } from "./image-utils";
 import type { Product } from "@/types/product";
 
 const LAST_SYNC_TIME_KEY = "lastSyncTime";
@@ -16,111 +15,110 @@ export interface SyncResult {
   success: boolean;
   direction: "upload" | "download";
   count: number;
+  totalCount?: number; // 总产品数（用于增量同步时显示）
   error?: string;
 }
 
 /**
  * 数据同步服务
  * 
- * 优化策略：
+ * 同步策略：
+ * - 增量同步：只上传自上次同步后有变化的产品
  * - 不上传全景图（overviewImageUri 设为空）
- * - 细节图压缩为 512×512 缩略图再上传
- * - 大幅减少云端存储空间占用
+ * - 细节图直接上传本地 2K 版本，不再二次压缩
  */
 export const SyncService = {
   /**
-   * 将图片压缩为缩略图
-   * @param imageUri 原始图片 URI（Data URL 或 Base64）
-   * @returns 压缩后的 Data URL
-   */
-  async compressForCloud(imageUri: string): Promise<string> {
-    try {
-      // 如果是空字符串，直接返回
-      if (!imageUri || imageUri.trim() === "") {
-        return "";
-      }
-
-      // 确保是 Data URL 格式
-      let dataUrl = imageUri;
-      if (!imageUri.startsWith("data:")) {
-        dataUrl = `data:image/jpeg;base64,${imageUri}`;
-      }
-
-      // 生成 512×512 缩略图
-      const thumbnailDataUrl = await generateThumbnailDataUrl(dataUrl, 512, 0.6);
-      return thumbnailDataUrl;
-    } catch (error) {
-      console.error("[Sync] Failed to compress image:", error);
-      // 压缩失败时返回原图
-      return imageUri;
-    }
-  },
-
-  /**
-   * 上传本地数据到云端（覆盖云端数据）
+   * 上传本地数据到云端（增量同步）
    * 
-   * 优化：
+   * 策略：
+   * - 只上传自上次同步后有变化的产品（根据 updatedAt 判断）
    * - 不上传全景图
-   * - 细节图压缩为缩略图
+   * - 细节图直接上传本地 2K 版本
    */
   async uploadToCloud(trpcClient: any): Promise<SyncResult> {
     try {
-      console.log("[Sync] Starting upload to cloud...");
+      console.log("[Sync] Starting incremental upload to cloud...");
       
       // 1. 获取本地所有数据
-      const localProducts = await ProductStorage.getAll();
-      console.log(`[Sync] Found ${localProducts.length} local products`);
+      const allProducts = await ProductStorage.getAll();
+      console.log(`[Sync] Found ${allProducts.length} local products`);
       
-      if (localProducts.length === 0) {
+      if (allProducts.length === 0) {
         return {
           success: true,
           direction: "upload",
           count: 0,
+          totalCount: 0,
         };
       }
       
-      // 2. 转换数据格式并压缩图片
-      console.log("[Sync] Compressing images for cloud storage...");
-      const productsToUpload = await Promise.all(
-        localProducts.map(async (p) => {
-          // 压缩细节图为缩略图
-          const compressedDetailImage = await this.compressForCloud(p.detailImageUri);
-          
-          return {
-            id: p.id,
-            detailImageUri: compressedDetailImage, // 压缩后的缩略图
-            overviewImageUri: "", // 不上传全景图
-            sku: p.sku,
-            quantity: p.quantity,
-            storageLocation: p.storageLocation,
-            operatorId: p.operatorId || 0,
-            operatorName: p.operatorName || "",
-            isDeleted: p.isDeleted ? 1 : 0,
-            deletedAt: p.deletedAt ? new Date(p.deletedAt) : null,
-            createdAt: new Date(p.createdAt),
-            updatedAt: new Date(p.updatedAt || p.createdAt),
-          };
-        })
-      );
+      // 2. 获取上次同步时间
+      const lastSyncTime = await AsyncStorage.getItem(LAST_SYNC_TIME_KEY);
+      const lastSyncDate = lastSyncTime ? new Date(lastSyncTime) : null;
       
-      console.log("[Sync] Image compression completed");
+      // 3. 筛选需要上传的产品（增量同步）
+      let productsToSync = allProducts;
       
-      // 3. 上传到云端
-      console.log("[Sync] Uploading to cloud...");
+      if (lastSyncDate) {
+        // 只上传 updatedAt 大于上次同步时间的产品
+        productsToSync = allProducts.filter((p) => {
+          const productUpdatedAt = new Date(p.updatedAt || p.createdAt);
+          return productUpdatedAt > lastSyncDate;
+        });
+        console.log(`[Sync] Incremental sync: ${productsToSync.length} changed out of ${allProducts.length} total`);
+      } else {
+        console.log(`[Sync] Full sync: uploading all ${allProducts.length} products`);
+      }
+      
+      // 4. 如果没有需要同步的产品，直接返回
+      if (productsToSync.length === 0) {
+        console.log("[Sync] No changes to sync");
+        // 更新同步时间
+        const now = new Date().toISOString();
+        await AsyncStorage.setItem(LAST_SYNC_TIME_KEY, now);
+        
+        return {
+          success: true,
+          direction: "upload",
+          count: 0,
+          totalCount: allProducts.length,
+        };
+      }
+      
+      // 5. 转换数据格式（直接使用本地 2K 图片，不再压缩）
+      const productsToUpload = productsToSync.map((p) => ({
+        id: p.id,
+        detailImageUri: p.detailImageUri, // 直接上传本地 2K 版本
+        overviewImageUri: "", // 不上传全景图
+        sku: p.sku,
+        quantity: p.quantity,
+        storageLocation: p.storageLocation,
+        operatorId: p.operatorId || 0,
+        operatorName: p.operatorName || "",
+        isDeleted: p.isDeleted ? 1 : 0,
+        deletedAt: p.deletedAt ? new Date(p.deletedAt) : null,
+        createdAt: new Date(p.createdAt),
+        updatedAt: new Date(p.updatedAt || p.createdAt),
+      }));
+      
+      // 6. 上传到云端（服务端使用 upsert 增量更新）
+      console.log(`[Sync] Uploading ${productsToUpload.length} products...`);
       const result = await trpcClient.sync.upload.mutate({
         products: productsToUpload,
       });
       
-      // 4. 更新最后同步时间
+      // 7. 更新最后同步时间
       const now = new Date().toISOString();
       await AsyncStorage.setItem(LAST_SYNC_TIME_KEY, now);
       
-      console.log(`[Sync] Upload completed: ${result.count} products`);
+      console.log(`[Sync] Upload completed: ${result.count} products synced`);
       
       return {
         success: true,
         direction: "upload",
         count: result.count,
+        totalCount: allProducts.length,
       };
     } catch (error: any) {
       console.error("[Sync] Upload failed:", error);
@@ -136,7 +134,7 @@ export const SyncService = {
   /**
    * 从云端下载数据到本地（覆盖本地数据）
    * 
-   * 注意：云端存储的是缩略图，下载后本地也是缩略图
+   * 注意：云端存储的是本地 2K 版本的细节图
    */
   async downloadFromCloud(trpcClient: any): Promise<SyncResult> {
     try {
@@ -149,7 +147,7 @@ export const SyncService = {
       // 2. 转换数据格式
       const localProducts: Product[] = products.map((p: any) => ({
         id: p.id,
-        detailImageUri: p.detailImageUri, // 云端存储的是缩略图
+        detailImageUri: p.detailImageUri, // 云端存储的是 2K 版本
         overviewImageUri: p.overviewImageUri || "", // 云端不存全景图
         sku: p.sku,
         quantity: p.quantity,
