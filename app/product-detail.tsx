@@ -22,7 +22,7 @@ import { Platform } from "react-native";
 import { AutoSync } from "@/lib/auto-sync";
 import { trpc } from "@/lib/trpc";
 import type { Product } from "@/types/product";
-import { generateLabelForNiimbotD110, generateSystemSKU, saveBarcodeImage } from "@/lib/barcode";
+import { generateLabelForNiimbotD110, generateSystemSKU, saveBarcodeImage, saveToPhotoAlbum } from "@/lib/barcode";
 import { generateLabelForNiimbotB1 } from "@/lib/niimbot-printer";
 
 /**
@@ -429,56 +429,68 @@ export default function ProductDetailScreen() {
               </View>
             )}
             
-            <View style={styles.printButtonsContainer}>
-              <Pressable
-                onPress={async () => {
-                  try {
-                    setPrintingLabel(true);
-                    // 如果没有 systemSku，先生成一个并保存
-                    let skuToUse = product.systemSku;
-                    if (!skuToUse) {
-                      skuToUse = generateSystemSKU();
-                      // 保存到产品
-                      await ProductStorage.update(product.id, { systemSku: skuToUse });
-                      setProduct({ ...product, systemSku: skuToUse });
-                      setEditedProduct({ ...editedProduct, systemSku: skuToUse });
-                    }
-                    // 根据打印机类型生成不同尺寸的条形码图片
-                    const dataUrl = printerType === 'b1'
-                      ? await generateLabelForNiimbotB1(skuToUse, product.sku)
-                      : await generateLabelForNiimbotD110(skuToUse, product.sku);
-                    setBarcodePreview(dataUrl);
-                  } catch (error) {
-                    console.error('生成条形码失败:', error);
-                    Alert.alert('错误', '生成条形码失败');
-                  } finally {
-                    setPrintingLabel(false);
+            {/* 生成条形码按钮 */}
+            <Pressable
+              onPress={async () => {
+                try {
+                  setPrintingLabel(true);
+                  // 如果没有 systemSku，先生成一个并保存
+                  let skuToUse = product.systemSku;
+                  if (!skuToUse) {
+                    skuToUse = generateSystemSKU();
+                    // 保存到产品
+                    await ProductStorage.update(product.id, { systemSku: skuToUse });
+                    setProduct({ ...product, systemSku: skuToUse });
+                    setEditedProduct({ ...editedProduct, systemSku: skuToUse });
                   }
-                }}
-                disabled={printingLabel}
-                style={[styles.button, styles.previewButton]}
-              >
-                <ThemedText style={styles.buttonText}>
-                  {printingLabel ? '生成中...' : '生成条形码'}
-                </ThemedText>
-              </Pressable>
-              
-              {barcodePreview && (
-                <>
-                  <Pressable
-                    onPress={async () => {
-                      const skuToUse = product.systemSku || 'unknown';
-                      await saveBarcodeImage(barcodePreview, skuToUse);
-                    }}
-                    style={[styles.button, styles.saveButton]}
-                  >
-                    <ThemedText style={styles.buttonText}>
-                      下载标签
-                    </ThemedText>
-                  </Pressable>
-                </>
-              )}
-            </View>
+                  // 根据打印机类型生成不同尺寸的条形码图片
+                  const dataUrl = printerType === 'b1'
+                    ? await generateLabelForNiimbotB1(skuToUse, product.sku)
+                    : await generateLabelForNiimbotD110(skuToUse, product.sku);
+                  setBarcodePreview(dataUrl);
+                } catch (error) {
+                  console.error('生成条形码失败:', error);
+                  Alert.alert('错误', '生成条形码失败');
+                } finally {
+                  setPrintingLabel(false);
+                }
+              }}
+              disabled={printingLabel}
+              style={[styles.button, styles.previewButton, { marginBottom: 12 }]}
+            >
+              <ThemedText style={styles.buttonText}>
+                {printingLabel ? '生成中...' : '生成条形码'}
+              </ThemedText>
+            </Pressable>
+            
+            {/* 保存按钮组 */}
+            {barcodePreview && (
+              <View style={styles.printButtonsContainer}>
+                <Pressable
+                  onPress={async () => {
+                    const skuToUse = product.systemSku || 'unknown';
+                    await saveToPhotoAlbum(barcodePreview, skuToUse);
+                  }}
+                  style={[styles.button, styles.previewButton]}
+                >
+                  <ThemedText style={styles.buttonText}>
+                    📱 保存到相册
+                  </ThemedText>
+                </Pressable>
+                
+                <Pressable
+                  onPress={async () => {
+                    const skuToUse = product.systemSku || 'unknown';
+                    await saveBarcodeImage(barcodePreview, skuToUse);
+                  }}
+                  style={[styles.button, styles.saveButton]}
+                >
+                  <ThemedText style={styles.buttonText}>
+                    📁 下载到文件
+                  </ThemedText>
+                </Pressable>
+              </View>
+            )}
             
             {/* 提示信息 */}
             <ThemedText style={styles.printHint}>

@@ -441,7 +441,7 @@ export function downloadBarcodeImage(dataURL: string, filename: string): void {
  * 分享条形码图片（移动端）
  */
 /**
- * 保存条形码图片（替换分享功能）
+ * 下载条形码图片到文件（电脑或手机文件）
  */
 export async function saveBarcodeImage(
   dataURL: string,
@@ -451,8 +451,49 @@ export async function saveBarcodeImage(
     downloadBarcodeImage(dataURL, `label-${sku}.png`);
     return true;
   } catch (error) {
-    console.error('保存失败:', error);
+    console.error('下载失败:', error);
     return false;
+  }
+}
+
+/**
+ * 保存条形码图片到相册（手机 Photo）
+ * 使用 Web Share API 的文件分享功能，在 iOS 上可以选择保存到相册
+ */
+export async function saveToPhotoAlbum(
+  dataURL: string,
+  sku: string
+): Promise<boolean> {
+  try {
+    // 将 dataURL 转换为 Blob
+    const response = await fetch(dataURL);
+    const blob = await response.blob();
+    
+    // 创建 File 对象
+    const file = new File([blob], `label-${sku}.png`, { type: 'image/png' });
+    
+    // 检查是否支持 Web Share API 的文件分享
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      await navigator.share({
+        files: [file],
+        title: `标签-${sku}`,
+      });
+      return true;
+    } else {
+      // 不支持文件分享，回退到下载
+      console.log('不支持文件分享，回退到下载');
+      downloadBarcodeImage(dataURL, `label-${sku}.png`);
+      return true;
+    }
+  } catch (error) {
+    // 用户取消分享不算错误
+    if (error instanceof Error && error.name === 'AbortError') {
+      return true;
+    }
+    console.error('保存到相册失败:', error);
+    // 失败时回退到下载
+    downloadBarcodeImage(dataURL, `label-${sku}.png`);
+    return true;
   }
 }
 
