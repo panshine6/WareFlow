@@ -303,6 +303,9 @@ export function groupByBatch(items: LabelItem[], batchIntervalMinutes: number = 
  * 生成 NIIMBOT APP 可导入的 Excel 文件
  * @param items 要导出的商品列表
  * @returns Excel 文件的 Blob
+ * 
+ * 注意：每个公司 SKU 只导出一条记录，不按数量重复
+ * 因为同一产品只需要一个标签
  */
 export function generateNiimbotExcel(items: LabelItem[]): Blob {
   // 创建工作表数据
@@ -311,12 +314,22 @@ export function generateNiimbotExcel(items: LabelItem[]): Blob {
     ['系统SKU', '公司SKU'],
   ];
   
+  // 使用 Set 去重，每个公司 SKU 只导出一条记录
+  const processedSkus = new Set<string>();
+  
   // 添加数据行
   for (const item of items) {
-    // 每个商品可能需要打印多张标签（根据数量）
-    for (let i = 0; i < item.quantity; i++) {
-      data.push([item.systemSku, item.userSku]);
+    // 使用公司 SKU 作为去重键，如果没有公司 SKU 则使用系统 SKU
+    const dedupeKey = item.userSku || item.systemSku;
+    
+    // 跳过已处理过的 SKU
+    if (processedSkus.has(dedupeKey)) {
+      continue;
     }
+    processedSkus.add(dedupeKey);
+    
+    // 每个 SKU 只添加一条记录
+    data.push([item.systemSku, item.userSku]);
   }
   
   // 创建工作簿
