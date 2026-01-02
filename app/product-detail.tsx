@@ -41,7 +41,6 @@ export default function ProductDetailScreen() {
   const [saving, setSaving] = useState(false);
   const [printingLabel, setPrintingLabel] = useState(false);
   const [barcodePreview, setBarcodePreview] = useState<string | null>(null);
-  const [printerType, setPrinterType] = useState<'b1' | 'd110'>('b1'); // 默认使用 B1
 
   // 使用 tRPC 同步
   const uploadMutation = trpc.sync.upload.useMutation();
@@ -354,27 +353,8 @@ export default function ProductDetailScreen() {
               🏷️ 打印标签
             </ThemedText>
             
-            {/* SKU 复制区域 */}
+            {/* SKU 复制区域 - 系统 SKU 在上，内部 SKU 在下，与标签打印顺序一致 */}
             <View style={styles.skuCopySection}>
-              {/* 内部 SKU */}
-              <View style={styles.skuCopyRow}>
-                <ThemedText style={styles.skuCopyLabel}>内部 SKU：</ThemedText>
-                <ThemedText style={styles.skuCopyValue}>{product.sku}</ThemedText>
-                <Pressable
-                  onPress={async () => {
-                    try {
-                      await navigator.clipboard.writeText(product.sku);
-                      Alert.alert('复制成功', `已复制内部 SKU: ${product.sku}`);
-                    } catch (error) {
-                      Alert.alert('复制失败', '请手动复制');
-                    }
-                  }}
-                  style={styles.copyButton}
-                >
-                  <ThemedText style={styles.copyButtonText}>📋 复制</ThemedText>
-                </Pressable>
-              </View>
-              
               {/* 系统 SKU */}
               <View style={styles.skuCopyRow}>
                 <ThemedText style={styles.skuCopyLabel}>系统 SKU：</ThemedText>
@@ -395,27 +375,25 @@ export default function ProductDetailScreen() {
                   </Pressable>
                 )}
               </View>
-            </View>
-            
-            {/* 打印机类型选择 */}
-            <View style={styles.printerTypeContainer}>
-              <ThemedText style={styles.printerTypeLabel}>打印机型号：</ThemedText>
-              <Pressable
-                onPress={() => setPrinterType('b1')}
-                style={[styles.printerTypeButton, printerType === 'b1' && styles.printerTypeButtonActive]}
-              >
-                <ThemedText style={[styles.printerTypeButtonText, printerType === 'b1' && styles.printerTypeButtonTextActive]}>
-                  B1 (50×30mm)
-                </ThemedText>
-              </Pressable>
-              <Pressable
-                onPress={() => setPrinterType('d110')}
-                style={[styles.printerTypeButton, printerType === 'd110' && styles.printerTypeButtonActive]}
-              >
-                <ThemedText style={[styles.printerTypeButtonText, printerType === 'd110' && styles.printerTypeButtonTextActive]}>
-                  D110 (38×12mm)
-                </ThemedText>
-              </Pressable>
+              
+              {/* 内部 SKU */}
+              <View style={styles.skuCopyRow}>
+                <ThemedText style={styles.skuCopyLabel}>内部 SKU：</ThemedText>
+                <ThemedText style={styles.skuCopyValue}>{product.sku}</ThemedText>
+                <Pressable
+                  onPress={async () => {
+                    try {
+                      await navigator.clipboard.writeText(product.sku);
+                      Alert.alert('复制成功', `已复制内部 SKU: ${product.sku}`);
+                    } catch (error) {
+                      Alert.alert('复制失败', '请手动复制');
+                    }
+                  }}
+                  style={styles.copyButton}
+                >
+                  <ThemedText style={styles.copyButtonText}>📋 复制</ThemedText>
+                </Pressable>
+              </View>
             </View>
             
             {/* 条形码预览 */}
@@ -423,15 +401,21 @@ export default function ProductDetailScreen() {
               <View style={styles.barcodePreviewContainer}>
                 <Image 
                   source={{ uri: barcodePreview }} 
-                  style={printerType === 'b1' ? styles.barcodePreviewB1 : styles.barcodePreview}
+                  style={styles.barcodePreviewB1}
                   contentFit="contain"
                 />
               </View>
             )}
             
-            {/* 生成条形码按钮 */}
+            {/* 生成条形码按钮 - 点击可展开/收起条形码 */}
             <Pressable
               onPress={async () => {
+                // 如果已有条形码预览，点击收起
+                if (barcodePreview) {
+                  setBarcodePreview(null);
+                  return;
+                }
+                
                 try {
                   setPrintingLabel(true);
                   // 如果没有 systemSku，先生成一个并保存
@@ -443,10 +427,8 @@ export default function ProductDetailScreen() {
                     setProduct({ ...product, systemSku: skuToUse });
                     setEditedProduct({ ...editedProduct, systemSku: skuToUse });
                   }
-                  // 根据打印机类型生成不同尺寸的条形码图片
-                  const dataUrl = printerType === 'b1'
-                    ? await generateLabelForNiimbotB1(skuToUse, product.sku)
-                    : await generateLabelForNiimbotD110(skuToUse, product.sku);
+                  // 生成 B1 打印机标签
+                  const dataUrl = await generateLabelForNiimbotB1(skuToUse, product.sku);
                   setBarcodePreview(dataUrl);
                 } catch (error) {
                   console.error('生成条形码失败:', error);
@@ -459,7 +441,7 @@ export default function ProductDetailScreen() {
               style={[styles.button, styles.previewButton, { marginBottom: 12 }]}
             >
               <ThemedText style={styles.buttonText}>
-                {printingLabel ? '生成中...' : '生成条形码'}
+                {printingLabel ? '生成中...' : (barcodePreview ? '收起条形码' : '生成条形码')}
               </ThemedText>
             </Pressable>
             
@@ -494,10 +476,7 @@ export default function ProductDetailScreen() {
             
             {/* 提示信息 */}
             <ThemedText style={styles.printHint}>
-              {printerType === 'b1' 
-                ? '标签尺寸：40mm × 30mm（适用于 NIIMBOT B1）'
-                : '标签尺寸：38mm × 12mm（适用于 NIIMBOT D110）'
-              }
+              标签尺寸：40mm × 30mm（适用于 NIIMBOT B1）
             </ThemedText>
           </View>
         )}
