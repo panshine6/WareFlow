@@ -1,4 +1,4 @@
-import { int, mysqlEnum, mysqlTable, text, timestamp, varchar } from "drizzle-orm/mysql-core";
+import { int, mysqlEnum, mysqlTable, text, mediumtext, timestamp, varchar } from "drizzle-orm/mysql-core";
 
 /**
  * Core user table backing auth flow.
@@ -27,11 +27,12 @@ export type InsertUser = typeof users.$inferInsert;
 
 /**
  * 产品表 - 存储时尚饰品库存信息
+ * 注意：detailImageUri 使用 mediumtext 以支持 base64 图片数据（最大 16MB）
  */
 export const products = mysqlTable("products", {
   id: varchar("id", { length: 64 }).primaryKey(),
-  detailImageUri: text("detailImageUri").notNull(),
-  overviewImageUri: text("overviewImageUri").notNull(),
+  detailImageUri: mediumtext("detailImageUri").notNull(),
+  overviewImageUri: mediumtext("overviewImageUri").notNull(),
   sku: varchar("sku", { length: 255 }).notNull(),
   quantity: int("quantity").notNull().default(0),
   storageLocation: varchar("storageLocation", { length: 255 }).notNull(),
@@ -54,8 +55,8 @@ export const inventoryHistory = mysqlTable("inventoryHistory", {
   operatorName: varchar("operatorName", { length: 255 }).notNull(),
   quantity: int("quantity").notNull(),
   location: varchar("location", { length: 255 }).notNull(),
-  detailImageUri: text("detailImageUri").notNull(),
-  overviewImageUri: text("overviewImageUri").notNull(),
+  detailImageUri: mediumtext("detailImageUri").notNull(),
+  overviewImageUri: mediumtext("overviewImageUri").notNull(),
   notes: text("notes"),
 });
 
