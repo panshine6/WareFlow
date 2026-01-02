@@ -1,6 +1,5 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { ProductStorage } from "./storage";
-import { generateThumbnailDataUrl } from "./image-utils";
 
 const LAST_SYNC_TIME_KEY = "lastSyncTime";
 const SYNC_INTERVAL = 300000; // 5 分钟
@@ -8,10 +7,9 @@ const SYNC_INTERVAL = 300000; // 5 分钟
 /**
  * 自动同步工具 - Web 版本（不使用 SQLite）
  * 
- * 优化策略：
+ * 同步策略：
  * - 不上传全景图（overviewImageUri 设为空）
- * - 细节图压缩为 512×512 缩略图再上传
- * - 大幅减少云端存储空间占用
+ * - 细节图直接上传本地 2K 版本，不再二次压缩
  */
 export const AutoSync = {
   /**
@@ -94,39 +92,11 @@ export const AutoSync = {
   },
 
   /**
-   * 将图片压缩为缩略图用于云端存储
-   * @param imageUri 原始图片 URI（Data URL 或 Base64）
-   * @returns 压缩后的 Data URL
-   */
-  async compressForCloud(imageUri: string): Promise<string> {
-    try {
-      // 如果是空字符串，直接返回
-      if (!imageUri || imageUri.trim() === "") {
-        return "";
-      }
-
-      // 确保是 Data URL 格式
-      let dataUrl = imageUri;
-      if (!imageUri.startsWith("data:")) {
-        dataUrl = `data:image/jpeg;base64,${imageUri}`;
-      }
-
-      // 生成 512×512 缩略图，质量 0.6
-      const thumbnailDataUrl = await generateThumbnailDataUrl(dataUrl, 512, 0.6);
-      return thumbnailDataUrl;
-    } catch (error) {
-      console.error("[AutoSync] Failed to compress image:", error);
-      // 压缩失败时返回原图
-      return imageUri;
-    }
-  },
-
-  /**
    * 上传本地数据到云端 - Web 版本
    * 
-   * 优化：
+   * 策略：
    * - 不上传全景图
-   * - 细节图压缩为 512×512 缩略图
+   * - 细节图直接上传本地 2K 版本，不再二次压缩
    */
   async uploadToCloud(
     uploadMutation: any,
@@ -139,32 +109,27 @@ export const AutoSync = {
       // 从 IndexedDB/AsyncStorage 获取产品
       const products = await ProductStorage.getAll();
       
-      console.log('[AutoSync.Web] Found', products.length, 'products, compressing images...');
+      console.log('[AutoSync.Web] Found', products.length, 'products, preparing upload...');
 
-      // 压缩图片并准备上传数据
-      const productsToUpload = await Promise.all(
-        products.map(async (p) => {
-          // 压缩细节图为缩略图
-          const compressedDetailImage = await this.compressForCloud(p.detailImageUri);
-          
-          return {
-            id: p.id,
-            detailImageUri: compressedDetailImage, // 压缩后的缩略图
-            overviewImageUri: "", // 不上传全景图
-            sku: p.sku,
-            quantity: p.quantity,
-            storageLocation: p.storageLocation,
-            operatorId: p.operatorId || 0,
-            operatorName: p.operatorName || "",
-            isDeleted: p.isDeleted ? 1 : 0,
-            deletedAt: p.deletedAt ? new Date(p.deletedAt) : null,
-            createdAt: new Date(p.createdAt),
-            updatedAt: new Date(p.updatedAt || p.createdAt),
-          };
-        })
-      );
+      // 准备上传数据（直接使用本地 2K 图片，不再压缩）
+      const productsToUpload = products.map((p) => {
+        return {
+          id: p.id,
+          detailImageUri: p.detailImageUri, // 直接上传本地 2K 版本
+          overviewImageUri: "", // 不上传全景图
+          sku: p.sku,
+          quantity: p.quantity,
+          storageLocation: p.storageLocation,
+          operatorId: p.operatorId || 0,
+          operatorName: p.operatorName || "",
+          isDeleted: p.isDeleted ? 1 : 0,
+          deletedAt: p.deletedAt ? new Date(p.deletedAt) : null,
+          createdAt: new Date(p.createdAt),
+          updatedAt: new Date(p.updatedAt || p.createdAt),
+        };
+      });
 
-      console.log('[AutoSync.Web] Image compression completed, uploading...');
+      console.log('[AutoSync.Web] Prepared', productsToUpload.length, 'products for upload');
 
       // 调用上传 API
       await uploadMutation.mutateAsync({ products: productsToUpload });
@@ -184,7 +149,7 @@ export const AutoSync = {
   /**
    * 从云端下载数据 - Web 版本
    * 
-   * 注意：云端存储的是缩略图，下载后本地也是缩略图
+   * 注意：云端存储的是本地 2K 版本的细节图
    */
   async downloadFromCloud(
     downloadQuery: any,
