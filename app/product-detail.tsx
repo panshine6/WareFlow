@@ -22,7 +22,7 @@ import { Platform } from "react-native";
 import { AutoSync } from "@/lib/auto-sync";
 import { trpc } from "@/lib/trpc";
 import type { Product } from "@/types/product";
-import { generateLabelForNiimbotD110, generateSystemSKU, shareBarcodeImage, checkPrintAgentStatus, printLabelViaPrintAgent } from "@/lib/barcode";
+import { generateLabelForNiimbotD110, generateSystemSKU, saveBarcodeImage, checkPrintAgentStatus, printLabelViaPrintAgent } from "@/lib/barcode";
 import { 
   getPrinterStatus, 
   connectViaSerial, 
@@ -447,12 +447,12 @@ export default function ProductDetailScreen() {
                   <Pressable
                     onPress={async () => {
                       const skuToUse = product.systemSku || 'unknown';
-                      await shareBarcodeImage(barcodePreview, skuToUse);
+                      await saveBarcodeImage(barcodePreview, skuToUse);
                     }}
                     style={[styles.button, styles.saveButton]}
                   >
                     <ThemedText style={styles.buttonText}>
-                      保存/分享标签
+                      下载标签
                     </ThemedText>
                   </Pressable>
                 </>

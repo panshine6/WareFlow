@@ -280,35 +280,18 @@ export function downloadBarcodeImage(dataURL: string, filename: string): void {
 /**
  * 分享条形码图片（移动端）
  */
-export async function shareBarcodeImage(
+/**
+ * 保存条形码图片（替换分享功能）
+ */
+export async function saveBarcodeImage(
   dataURL: string,
   sku: string
 ): Promise<boolean> {
   try {
-    // 将 Data URL 转换为 Blob
-    const response = await fetch(dataURL);
-    const blob = await response.blob();
-    
-    // 创建 File 对象
-    const file = new File([blob], `label-${sku}.png`, { type: 'image/png' });
-    
-    // 检查是否支持 Web Share API
-    if (navigator.share && navigator.canShare({ files: [file] })) {
-      await navigator.share({
-        title: `标签 - ${sku}`,
-        text: `产品标签: ${sku}`,
-        files: [file],
-      });
-      return true;
-    }
-    
-    // 如果不支持分享，则下载
     downloadBarcodeImage(dataURL, `label-${sku}.png`);
     return true;
   } catch (error) {
-    console.error('分享失败:', error);
-    // 降级为下载
-    downloadBarcodeImage(dataURL, `label-${sku}.png`);
+    console.error('保存失败:', error);
     return false;
   }
 }
