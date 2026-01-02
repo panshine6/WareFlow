@@ -236,6 +236,7 @@ export async function printImage(
     
     // 获取打印任务类型
     const printTaskName = printerClient.getPrintTaskType() ?? 'B1';
+    console.log(`[Print] Using print task: ${printTaskName}`);
     
     // 创建打印任务
     const printTask = printerClient.abstraction.newPrintTask(printTaskName, {
@@ -245,9 +246,13 @@ export async function printImage(
     });
 
     // 执行打印
+    console.log('[Print] Initializing print...');
     await printTask.printInit();
+    console.log(`[Print] Sending print page data (Quantity: ${quantity})...`);
     await printTask.printPage(encoded, quantity);
+    console.log('[Print] Waiting for print to finish...');
     await printTask.waitForFinished();
+    console.log('[Print] Print finished.');
     await printTask.printEnd();
 
     return {
@@ -255,9 +260,19 @@ export async function printImage(
       message: `打印成功！已打印 ${quantity} 张标签`,
     };
   } catch (error: any) {
+    console.error('[Print] Print failed:', error.message);
+    let step = '未知步骤';
+    if (error.message.includes('Timeout')) {
+      step = '等待打印完成';
+    } else if (error.message.includes('printInit')) {
+      step = '初始化打印';
+    } else if (error.message.includes('printPage')) {
+      step = '发送打印数据';
+    }
+    
     return {
       success: false,
-      message: `打印失败: ${error.message || error}`,
+      message: `打印失败: ${error.message || error} (步骤: ${step})`,
     };
   }
 }
