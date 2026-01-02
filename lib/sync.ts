@@ -29,16 +29,16 @@ export interface SyncResult {
  */
 export const SyncService = {
   /**
-   * 上传本地数据到云端（增量同步）
+   * 上传本地数据到云端（全量同步）
    * 
    * 策略：
-   * - 只上传自上次同步后有变化的产品（根据 updatedAt 判断）
+   * - 上传所有本地产品（服务端使用 upsert 避免重复）
    * - 不上传全景图
    * - 细节图直接上传本地 2K 版本
    */
   async uploadToCloud(trpcClient: any): Promise<SyncResult> {
     try {
-      console.log("[Sync] Starting incremental upload to cloud...");
+      console.log("[Sync] Starting full upload to cloud...");
       
       // 1. 获取本地所有数据
       const allProducts = await ProductStorage.getAll();
@@ -53,41 +53,8 @@ export const SyncService = {
         };
       }
       
-      // 2. 获取上次同步时间
-      const lastSyncTime = await AsyncStorage.getItem(LAST_SYNC_TIME_KEY);
-      const lastSyncDate = lastSyncTime ? new Date(lastSyncTime) : null;
-      
-      // 3. 筛选需要上传的产品（增量同步）
-      let productsToSync = allProducts;
-      
-      if (lastSyncDate) {
-        // 只上传 updatedAt 大于上次同步时间的产品
-        productsToSync = allProducts.filter((p) => {
-          const productUpdatedAt = new Date(p.updatedAt || p.createdAt);
-          return productUpdatedAt > lastSyncDate;
-        });
-        console.log(`[Sync] Incremental sync: ${productsToSync.length} changed out of ${allProducts.length} total`);
-      } else {
-        console.log(`[Sync] Full sync: uploading all ${allProducts.length} products`);
-      }
-      
-      // 4. 如果没有需要同步的产品，直接返回
-      if (productsToSync.length === 0) {
-        console.log("[Sync] No changes to sync");
-        // 更新同步时间
-        const now = new Date().toISOString();
-        await AsyncStorage.setItem(LAST_SYNC_TIME_KEY, now);
-        
-        return {
-          success: true,
-          direction: "upload",
-          count: 0,
-          totalCount: allProducts.length,
-        };
-      }
-      
-      // 5. 转换数据格式（直接使用本地 2K 图片，不再压缩）
-      const productsToUpload = productsToSync.map((p) => ({
+      // 2. 转换数据格式（直接使用本地 2K 图片，不再压缩）
+      const productsToUpload = allProducts.map((p) => ({
         id: p.id,
         detailImageUri: p.detailImageUri, // 直接上传本地 2K 版本
         overviewImageUri: "", // 不上传全景图
@@ -102,13 +69,13 @@ export const SyncService = {
         updatedAt: new Date(p.updatedAt || p.createdAt),
       }));
       
-      // 6. 上传到云端（服务端使用 upsert 增量更新）
+      // 3. 上传到云端（服务端使用 upsert 增量更新）
       console.log(`[Sync] Uploading ${productsToUpload.length} products...`);
       const result = await trpcClient.sync.upload.mutate({
         products: productsToUpload,
       });
       
-      // 7. 更新最后同步时间
+      // 4. 更新最后同步时间
       const now = new Date().toISOString();
       await AsyncStorage.setItem(LAST_SYNC_TIME_KEY, now);
       
