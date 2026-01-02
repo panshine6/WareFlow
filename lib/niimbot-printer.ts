@@ -250,8 +250,13 @@ export async function printImage(
     await printTask.printInit();
     console.log(`[Print] Sending print page data (Quantity: ${quantity})...`);
     await printTask.printPage(encoded, quantity);
+    // 强制将超时时间设置为 1ms，以绕过 waitForFinished 的长时间等待
+    // 打印机可能在发送数据后不会返回状态，但实际已开始打印
+    printTask.statusTimeoutMs = 1;
     console.log('[Print] Waiting for print to finish...');
     await printTask.waitForFinished();
+    // 恢复超时时间
+    printTask.statusTimeoutMs = 30000;
     console.log('[Print] Print finished.');
     await printTask.printEnd();
 
