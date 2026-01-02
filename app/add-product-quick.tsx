@@ -190,12 +190,12 @@ export default function AddProductQuickScreen() {
         // 直接切换到全景图阶段
         setStage("overview_photo");
         
-        // 自动打开相机拍全景图
+        // 自动打开相机拍全景图（延迟 500ms 确保状态更新完成）
         setTimeout(() => {
           if (fileInputRef.current) {
             fileInputRef.current.click();
           }
-        }, 100);
+        }, 500);
       } else if (stage === "overview_photo") {
         // 保存全景图
         setOverviewImageUri(dataUrl);
@@ -703,40 +703,41 @@ export default function AddProductQuickScreen() {
             {duplicateResult?.stats && (
               <View style={styles.debugInfo}>
                 <ThemedText style={styles.debugText}>
-                  已检查 {duplicateResult.stats.totalChecked} 个产品，
-                  相似度阈值: {duplicateResult.stats.threshold}
+                  已检查 {duplicateResult.stats.totalProducts} 个产品，
+                  AI对比 {duplicateResult.stats.aiCompared} 个，
+                  耗时 {(duplicateResult.stats.durationMs / 1000).toFixed(1)}s
                 </ThemedText>
               </View>
             )}
 
             {/* 相似产品列表 */}
-            {duplicateResult?.matches && duplicateResult.matches.length > 0 ? (
+            {duplicateResult?.duplicates && duplicateResult.duplicates.length > 0 ? (
               <ScrollView style={styles.matchList}>
                 <ThemedText style={styles.matchListTitle}>
-                  发现 {duplicateResult.matches.length} 个相似产品：
+                  发现 {duplicateResult.duplicates.length} 个相似产品：
                 </ThemedText>
-                {duplicateResult.matches.map((match, index) => (
+                {duplicateResult.duplicates.map((dup, index) => (
                   <Pressable
-                    key={match.product.id}
+                    key={dup.product.id}
                     style={styles.matchItem}
-                    onPress={() => handleMergeToProduct(match.product)}
+                    onPress={() => handleMergeToProduct(dup.product)}
                   >
                     <Image
-                      source={{ uri: match.product.detailImageUri }}
+                      source={{ uri: dup.product.detailImageUri }}
                       style={styles.matchImage}
                     />
                     <View style={styles.matchInfo}>
-                      <ThemedText style={styles.matchSku}>{match.product.sku}</ThemedText>
+                      <ThemedText style={styles.matchSku}>{dup.product.sku}</ThemedText>
                       <ThemedText style={styles.matchSimilarity}>
-                        相似度: {(match.similarity * 100).toFixed(0)}%
+                        相似度: {dup.similarityScore}%
                       </ThemedText>
                       <ThemedText style={styles.matchQuantity}>
-                        当前库存: {match.product.quantity}
+                        当前库存: {dup.product.quantity}
                       </ThemedText>
                     </View>
                     <ThemedText style={styles.matchArrow}>›</ThemedText>
                   </Pressable>
-                ))}
+                ))
               </ScrollView>
             ) : (
               <ThemedText style={styles.noMatchText}>
