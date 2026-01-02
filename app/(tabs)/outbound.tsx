@@ -22,15 +22,7 @@ import { ProductStorage } from "@/lib/storage";
 import { OutboundStorage } from "@/lib/outbound-storage";
 import { UserStorage } from "@/lib/user-storage";
 import type { Product, OutboundRecord, OutboundItem, InventoryHistoryEntry } from "@/types/product";
-import { 
-  getRecentInboundProducts, 
-  groupByBatch, 
-  exportLabelsToExcel,
-  formatLabelTime,
-  formatBatchTimeRange,
-  type LabelItem,
-  type BatchGroup,
-} from "@/lib/excel-export";
+
 
 // 选中的产品项
 interface SelectedProduct extends Product {
@@ -39,7 +31,7 @@ interface SelectedProduct extends Product {
 }
 
 // 视图模式
-type ViewMode = "search" | "history" | "labels";
+type ViewMode = "search" | "history";
 
 /**
  * 出库管理页面
@@ -71,11 +63,7 @@ export default function OutboundScreen() {
   // 确认弹窗状态
   const [showConfirmModal, setShowConfirmModal] = useState(false);
 
-  // 标签导出相关
-  const [labelItems, setLabelItems] = useState<LabelItem[]>([]);
-  const [batchGroups, setBatchGroups] = useState<BatchGroup[]>([]);
-  const [selectedLabelIds, setSelectedLabelIds] = useState<Set<string>>(new Set());
-  const [loadingLabels, setLoadingLabels] = useState(false);
+
 
   // 当前用户
   const [currentUser, setCurrentUser] = useState<{ id: number; name: string } | null>(null);
@@ -91,13 +79,11 @@ export default function OutboundScreen() {
     loadUser();
   }, []);
 
-  // 页面获得焦点时加载出库历史或标签数据
+  // 页面获得焦点时加载出库历史
   useFocusEffect(
     useCallback(() => {
       if (viewMode === "history") {
         loadOutboundHistory();
-      } else if (viewMode === "labels") {
-        loadLabelItems();
       }
     }, [viewMode])
   );
@@ -117,26 +103,7 @@ export default function OutboundScreen() {
     }
   };
 
-  // 加载最近入库的标签数据
-  const loadLabelItems = async () => {
-    setLoadingLabels(true);
-    try {
-      // 获取最近 7 天内入库的商品（168 小时）
-      const items = await getRecentInboundProducts(168);
-      setLabelItems(items);
-      
-      // 按批次分组（30 分钟内算同一批次）
-      const groups = groupByBatch(items, 30);
-      setBatchGroups(groups);
-      
-      // 默认全选
-      setSelectedLabelIds(new Set(items.map(item => `${item.id}-${item.inboundTime}`)));
-    } catch (error) {
-      console.error("[Outbound] Failed to load label items:", error);
-    } finally {
-      setLoadingLabels(false);
-    }
-  };
+
 
   // 搜索产品（按 Box 或 SKU）
   const handleSearch = async () => {
@@ -404,178 +371,11 @@ export default function OutboundScreen() {
               出库记录
             </ThemedText>
           </Pressable>
-          {Platform.OS === 'web' && (
-            <Pressable
-              style={[styles.tab, viewMode === "labels" && styles.tabActive]}
-              onPress={() => {
-                setViewMode("labels");
-                loadLabelItems();
-              }}
-            >
-              <ThemedText
-                style={[styles.tabText, viewMode === "labels" && styles.tabTextActive]}
-              >
-                🏷️ 打印标签
-              </ThemedText>
-            </Pressable>
-          )}
+
         </View>
       </View>
 
-      {viewMode === "labels" ? (
-        // 标签导出视图
-        <ScrollView
-          style={styles.content}
-          contentContainerStyle={styles.contentContainer}
-        >
-          {loadingLabels ? (
-            <View style={styles.loadingContainer}>
-              <ActivityIndicator size="large" />
-              <ThemedText style={{ marginTop: 12 }}>加载中...</ThemedText>
-            </View>
-          ) : labelItems.length === 0 ? (
-            <View style={styles.emptyContainer}>
-              <ThemedText style={styles.emptyText}>最近 7 天内没有入库记录</ThemedText>
-              <ThemedText style={[styles.emptyText, { marginTop: 8, opacity: 0.6 }]}>
-                入库后的商品会显示在这里，方便批量导出打印标签
-              </ThemedText>
-            </View>
-          ) : (
-            <>
-              {/* 批次分组提示 */}
-              {batchGroups.length > 1 && (
-                <View style={styles.batchHint}>
-                  <ThemedText style={styles.batchHintText}>
-                    📦 检测到 {batchGroups.length} 个入库批次，同一批次内的商品已用相同颜色标记
-                  </ThemedText>
-                </View>
-              )}
-
-              {/* 全选/取消全选 */}
-              <View style={styles.selectionHeader}>
-                <Pressable
-                  style={styles.selectAllButton}
-                  onPress={() => {
-                    if (selectedLabelIds.size === labelItems.length) {
-                      setSelectedLabelIds(new Set());
-                    } else {
-                      setSelectedLabelIds(new Set(labelItems.map(item => `${item.id}-${item.inboundTime}`)));
-                    }
-                  }}
-                >
-                  <View
-                    style={[
-                      styles.checkbox,
-                      selectedLabelIds.size === labelItems.length && styles.checkboxChecked,
-                    ]}
-                  >
-                    {selectedLabelIds.size === labelItems.length && (
-                      <ThemedText style={styles.checkmark}>✓</ThemedText>
-                    )}
-                  </View>
-                  <ThemedText style={styles.selectAllText}>全选</ThemedText>
-                </Pressable>
-                <ThemedText style={styles.selectionStats}>
-                  已选 {selectedLabelIds.size} 个，共 {labelItems.filter(item => selectedLabelIds.has(`${item.id}-${item.inboundTime}`)).reduce((sum, item) => sum + item.quantity, 0)} 张标签
-                </ThemedText>
-              </View>
-
-              {/* 标签列表 */}
-              {batchGroups.map((group, groupIndex) => (
-                <View key={groupIndex} style={styles.batchGroup}>
-                  {/* 批次标题 */}
-                  <View style={[
-                    styles.batchHeader,
-                    { backgroundColor: `hsl(${groupIndex * 60}, 70%, 95%)` }
-                  ]}>
-                    <ThemedText style={styles.batchTitle}>
-                      批次 {groupIndex + 1}: {formatBatchTimeRange(group)}
-                    </ThemedText>
-                    <ThemedText style={styles.batchCount}>
-                      {group.items.length} 个商品
-                    </ThemedText>
-                  </View>
-
-                  {/* 批次内的商品 */}
-                  {group.items.map((item) => {
-                    const itemKey = `${item.id}-${item.inboundTime}`;
-                    const isSelected = selectedLabelIds.has(itemKey);
-                    return (
-                      <Pressable
-                        key={itemKey}
-                        style={[
-                          styles.labelItem,
-                          isSelected && styles.labelItemSelected,
-                          { borderLeftColor: `hsl(${groupIndex * 60}, 70%, 50%)` }
-                        ]}
-                        onPress={() => {
-                          const newSet = new Set(selectedLabelIds);
-                          if (isSelected) {
-                            newSet.delete(itemKey);
-                          } else {
-                            newSet.add(itemKey);
-                          }
-                          setSelectedLabelIds(newSet);
-                        }}
-                      >
-                        <View style={[
-                          styles.checkbox,
-                          isSelected && styles.checkboxChecked,
-                        ]}>
-                          {isSelected && (
-                            <ThemedText style={styles.checkmark}>✓</ThemedText>
-                          )}
-                        </View>
-                        <View style={styles.labelItemInfo}>
-                          <ThemedText style={styles.labelItemSku}>
-                            {item.systemSku}
-                          </ThemedText>
-                          {item.userSku && (
-                            <ThemedText style={styles.labelItemUserSku}>
-                              公司SKU: {item.userSku}
-                            </ThemedText>
-                          )}
-                          <ThemedText style={styles.labelItemMeta}>
-                            数量: {item.quantity} | {formatLabelTime(item.inboundTime)}
-                          </ThemedText>
-                        </View>
-                      </Pressable>
-                    );
-                  })}
-                </View>
-              ))}
-
-              {/* 导出按钮 */}
-              <Pressable
-                style={[
-                  styles.exportButton,
-                  selectedLabelIds.size === 0 && styles.buttonDisabled,
-                ]}
-                onPress={() => {
-                  const selectedItems = labelItems.filter(item => 
-                    selectedLabelIds.has(`${item.id}-${item.inboundTime}`)
-                  );
-                  try {
-                    exportLabelsToExcel(selectedItems);
-                    Alert.alert("导出成功", `已导出 ${selectedItems.length} 个商品的标签数据，请在 NIIMBOT APP 中导入打印`);
-                  } catch (error) {
-                    Alert.alert("导出失败", error instanceof Error ? error.message : "未知错误");
-                  }
-                }}
-                disabled={selectedLabelIds.size === 0}
-              >
-                <ThemedText style={styles.exportButtonText}>
-                  📥 导出 Excel ({selectedLabelIds.size} 个商品)
-                </ThemedText>
-              </Pressable>
-
-              <ThemedText style={styles.exportHint}>
-                导出后请在 NIIMBOT APP 中使用「Excel 导入」功能批量打印标签
-              </ThemedText>
-            </>
-          )}
-        </ScrollView>
-      ) : viewMode === "search" ? (
+      {viewMode === "search" ? (
         // 出库操作视图
         <ScrollView
           style={styles.content}
@@ -1176,85 +976,5 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: "#fff",
   },
-  // 标签导出相关样式
-  batchHint: {
-    backgroundColor: "rgba(0, 122, 255, 0.1)",
-    padding: 12,
-    borderRadius: 8,
-    marginBottom: 16,
-  },
-  batchHintText: {
-    fontSize: 14,
-    color: "#007AFF",
-    textAlign: "center",
-  },
-  batchGroup: {
-    marginBottom: 16,
-  },
-  batchHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    padding: 12,
-    borderRadius: 8,
-    marginBottom: 8,
-  },
-  batchTitle: {
-    fontSize: 14,
-    fontWeight: "600",
-  },
-  batchCount: {
-    fontSize: 12,
-    opacity: 0.7,
-  },
-  labelItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    padding: 12,
-    backgroundColor: "rgba(0, 0, 0, 0.03)",
-    borderRadius: 8,
-    marginBottom: 8,
-    borderLeftWidth: 4,
-  },
-  labelItemSelected: {
-    backgroundColor: "rgba(0, 122, 255, 0.1)",
-  },
-  labelItemInfo: {
-    flex: 1,
-    marginLeft: 12,
-  },
-  labelItemSku: {
-    fontSize: 16,
-    fontWeight: "600",
-    fontFamily: "monospace",
-  },
-  labelItemUserSku: {
-    fontSize: 14,
-    opacity: 0.7,
-    marginTop: 2,
-  },
-  labelItemMeta: {
-    fontSize: 12,
-    opacity: 0.5,
-    marginTop: 4,
-  },
-  exportButton: {
-    backgroundColor: "#34C759",
-    paddingVertical: 16,
-    borderRadius: 12,
-    alignItems: "center",
-    marginTop: 16,
-  },
-  exportButtonText: {
-    color: "#fff",
-    fontSize: 18,
-    fontWeight: "bold",
-  },
-  exportHint: {
-    fontSize: 12,
-    opacity: 0.5,
-    textAlign: "center",
-    marginTop: 12,
-    marginBottom: 24,
-  },
+
 });
