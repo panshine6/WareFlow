@@ -295,9 +295,10 @@ export async function printCanvas(
  * 
  * 关键优化：
  * 1. 图片尺寸精确匹配打印机物理像素，1:1 输出，避免缩放产生锯齿
- * 2. 条形码模块宽度使用整数像素（width: 1）
+ * 2. 条形码模块宽度使用整数像素（width: 2）
  * 3. 禁用抗锯齿
- * 4. 文字自动缩放以适应标签宽度
+ * 4. 最大化利用纸张空间，最小化边距
+ * 5. 文字自动缩放以适应标签宽度
  */
 export async function generateLabelForNiimbotB1(
   systemSku: string,
@@ -326,18 +327,19 @@ export async function generateLabelForNiimbotB1(
   // 设置文字样式
   ctx.fillStyle = '#000000';
   
-  // 边距（整数像素）
-  const MARGIN = 8;
-  const TEXT_HEIGHT = 32;  // 底部文字区域高度
+  // *** 最小化边距，最大化利用纸张空间 ***
+  const MARGIN_TOP = 4;       // 顶部边距
+  const MARGIN_BOTTOM = 4;    // 底部边距
+  const TEXT_HEIGHT = 28;     // 底部文字区域高度
   
-  // 1. 生成条形码
-  const barcodeAreaHeight = LABEL_HEIGHT - TEXT_HEIGHT - MARGIN * 2;
+  // 1. 生成条形码 - 最大化高度
+  const barcodeAreaHeight = LABEL_HEIGHT - TEXT_HEIGHT - MARGIN_TOP - MARGIN_BOTTOM;
   
   // 创建条形码 canvas
   const barcodeCanvas = document.createElement('canvas');
   JsBarcode(barcodeCanvas, systemSku, {
     format: 'CODE128',
-    width: 1,                // *** 关键：模块宽度 = 1像素（整数），避免锯齿 ***
+    width: 2,                // 模块宽度 = 2像素，让条形码更宽更清晰
     height: barcodeAreaHeight,
     displayValue: false,     // 不显示文字（我们单独绘制）
     margin: 0,
@@ -347,7 +349,7 @@ export async function generateLabelForNiimbotB1(
   
   // 条形码水平居中（整数像素）
   const barcodeX = Math.floor((LABEL_WIDTH - barcodeCanvas.width) / 2);
-  const barcodeY = MARGIN;
+  const barcodeY = MARGIN_TOP;
   
   // *** 关键：绘制前再次确保禁用平滑 ***
   ctx.imageSmoothingEnabled = false;
@@ -355,14 +357,13 @@ export async function generateLabelForNiimbotB1(
   // 绘制条形码（1:1 不缩放）
   ctx.drawImage(barcodeCanvas, barcodeX, barcodeY);
   
-  // 2. 绘制底部文字
-  const textY = LABEL_HEIGHT - 4;  // 底部位置（整数）
-  const MAX_TEXT_WIDTH = LABEL_WIDTH - MARGIN * 2;  // 最大文字宽度
+  // 2. 绘制底部文字 - 紧贴底部
+  const textY = LABEL_HEIGHT - MARGIN_BOTTOM;
+  const MAX_TEXT_WIDTH = LABEL_WIDTH - 8;  // 最大文字宽度（左右各留4px）
   
   // 动态计算字体大小，确保文字不超出边界
-  let fontSize = 18;  // 起始字体大小
-  const MIN_FONT_SIZE = 10;
-  const SKU_GAP = 16;  // 两个 SKU 之间的间距
+  let fontSize = 22;  // 起始字体大小（增大）
+  const MIN_FONT_SIZE = 12;
   
   // 组合显示文本
   const displayText = userSku ? `${systemSku}    ${userSku}` : systemSku;
