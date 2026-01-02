@@ -126,13 +126,27 @@ export default function AddProductQuickScreen() {
 
   // 后台查重（在细节图拍摄后触发）
   const runDuplicateCheckInBackground = async (dataUrl: string, base64: string) => {
+    console.log("[QuickAdd] Starting background duplicate check...");
     setDuplicateCheckStatus("running");
     try {
+      console.log("[QuickAdd] Calling performDuplicateCheck with dataUrl length:", dataUrl.length, "base64 length:", base64.length);
       const dupResult = await performDuplicateCheck(dataUrl, base64);
+      console.log("[QuickAdd] Duplicate check completed:", JSON.stringify(dupResult, null, 2));
       setDuplicateResult(dupResult);
-      console.log("[QuickAdd] Duplicate check result:", dupResult);
-    } catch (error) {
-      console.error("[QuickAdd] Duplicate check failed:", error);
+    } catch (error: any) {
+      console.error("[QuickAdd] Duplicate check failed:", error.message, error.stack);
+      // 即使失败也设置一个结果，让用户知道查重已完成
+      setDuplicateResult({
+        hasDuplicates: false,
+        duplicates: [],
+        error: error.message,
+        stats: {
+          totalProducts: 0,
+          pHashFiltered: 0,
+          aiCompared: 0,
+          durationMs: 0,
+        },
+      });
     } finally {
       setDuplicateCheckStatus("done");
     }
@@ -700,15 +714,23 @@ export default function AddProductQuickScreen() {
             <ThemedText type="title" style={styles.modalTitle}>查重结果</ThemedText>
 
             {/* 调试信息 */}
-            {duplicateResult?.stats && (
-              <View style={styles.debugInfo}>
-                <ThemedText style={styles.debugText}>
-                  已检查 {duplicateResult.stats.totalProducts} 个产品，
-                  AI对比 {duplicateResult.stats.aiCompared} 个，
-                  耗时 {(duplicateResult.stats.durationMs / 1000).toFixed(1)}s
+            <View style={styles.debugInfo}>
+              <ThemedText style={styles.debugText}>
+                {duplicateResult?.stats 
+                  ? `已检查 ${duplicateResult.stats.totalProducts} 个产品，AI对比 ${duplicateResult.stats.aiCompared} 个，耗时 ${(duplicateResult.stats.durationMs / 1000).toFixed(1)}s`
+                  : duplicateCheckStatus === "running" 
+                    ? "正在查重中..."
+                    : duplicateCheckStatus === "pending"
+                      ? "等待查重..."
+                      : "查重完成"
+                }
+              </ThemedText>
+              {duplicateResult?.error && (
+                <ThemedText style={[styles.debugText, { color: '#FF3B30' }]}>
+                  错误: {duplicateResult.error}
                 </ThemedText>
-              </View>
-            )}
+              )}
+            </View>
 
             {/* 相似产品列表 */}
             {duplicateResult?.duplicates && duplicateResult.duplicates.length > 0 ? (
