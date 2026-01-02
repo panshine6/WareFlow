@@ -759,7 +759,7 @@ export default function AddProductQuickScreen() {
                     </View>
                     <ThemedText style={styles.matchArrow}>›</ThemedText>
                   </Pressable>
-                ))
+                ))}
               </ScrollView>
             ) : (
               <ThemedText style={styles.noMatchText}>
