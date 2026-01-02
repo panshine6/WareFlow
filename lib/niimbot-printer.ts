@@ -242,7 +242,7 @@ export async function printImage(
     const printTask = printerClient.abstraction.newPrintTask(printTaskName, {
       totalPages: quantity,
       statusPollIntervalMs: 100,
-      statusTimeoutMs: 30000,
+      statusTimeoutMs: 5000, // 恢复到 niimbluelib 默认的 5 秒超时
     });
 
     // 执行打印
@@ -250,10 +250,6 @@ export async function printImage(
     await printTask.printInit();
     console.log(`[Print] Sending print page data (Quantity: ${quantity})...`);
     await printTask.printPage(encoded, quantity);
-    // 打印机可能不会返回完成状态，导致 Web 端超时。
-    // 暂时注释掉 waitForFinished()，假设数据发送成功即打印成功。
-    // console.log('[Print] Waiting for print to finish...');
-    // await printTask.waitForFinished();
     console.log('[Print] Print data sent.');
     await printTask.printEnd();
 
