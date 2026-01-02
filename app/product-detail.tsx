@@ -41,6 +41,7 @@ export default function ProductDetailScreen() {
   const [saving, setSaving] = useState(false);
   const [printingLabel, setPrintingLabel] = useState(false);
   const [barcodePreview, setBarcodePreview] = useState<string | null>(null);
+  const [isMobileDevice, setIsMobileDevice] = useState(false);
 
   // 使用 tRPC 同步
   const uploadMutation = trpc.sync.upload.useMutation();
@@ -51,6 +52,18 @@ export default function ProductDetailScreen() {
       loadProduct();
     }, [params.id])
   );
+
+  // 检测是否为移动设备（仅在 Web 平台）
+  useEffect(() => {
+    if (Platform.OS === 'web' && typeof window !== 'undefined') {
+      const checkMobile = () => {
+        const userAgent = navigator.userAgent || navigator.vendor || (window as any).opera;
+        const isMobile = /android|webos|iphone|ipad|ipod|blackberry|iemobile|opera mini/i.test(userAgent.toLowerCase());
+        setIsMobileDevice(isMobile);
+      };
+      checkMobile();
+    }
+  }, []);
 
   const loadProduct = async () => {
     try {
@@ -465,24 +478,27 @@ export default function ProductDetailScreen() {
             {/* 保存按钮组 */}
             {barcodePreview && (
               <View style={styles.printButtonsContainer}>
-                <Pressable
-                  onPress={async () => {
-                    const skuToUse = product.systemSku || 'unknown';
-                    await saveToPhotoAlbum(barcodePreview, skuToUse);
-                  }}
-                  style={[styles.button, styles.previewButton]}
-                >
-                  <ThemedText style={styles.buttonText}>
-                    📱 保存到相册
-                  </ThemedText>
-                </Pressable>
+                {/* 保存到相册按钮 - 仅在移动设备上显示，避免电脑端误触导致浏览器崩溃 */}
+                {isMobileDevice && (
+                  <Pressable
+                    onPress={async () => {
+                      const skuToUse = product.systemSku || 'unknown';
+                      await saveToPhotoAlbum(barcodePreview, skuToUse);
+                    }}
+                    style={[styles.button, styles.previewButton]}
+                  >
+                    <ThemedText style={styles.buttonText}>
+                      📱 保存到相册
+                    </ThemedText>
+                  </Pressable>
+                )}
                 
                 <Pressable
                   onPress={async () => {
                     const skuToUse = product.systemSku || 'unknown';
                     await saveBarcodeImage(barcodePreview, skuToUse);
                   }}
-                  style={[styles.button, styles.saveButton]}
+                  style={[styles.button, styles.saveButton, !isMobileDevice && { flex: 1 }]}
                 >
                   <ThemedText style={styles.buttonText}>
                     📁 下载到文件
