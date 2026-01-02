@@ -3,8 +3,8 @@
  * 支持通过 Web Serial API 或 Web Bluetooth API 连接 NIIMBOT B1 打印机
  * 
  * 打印机规格 (B1):
- * - 分辨率: 203 DPI
- * - 标签尺寸: 40mm × 30mm = 320px × 240px (1mm ≈ 8px @ 203 DPI)
+ * - 分辨率: 203 DPI (1mm ≈ 8px)
+ * - 标签尺寸: 40mm × 30mm = 320px × 240px
  * - 连接方式: USB 串口 / 蓝牙
  */
 
@@ -293,7 +293,11 @@ export async function printCanvas(
  * - 分辨率: 203 DPI (1mm ≈ 8px)
  * - 标签尺寸: 40mm × 30mm = 320px × 240px
  * 
- * 关键：图片尺寸必须精确匹配打印机物理像素，1:1 输出，避免缩放产生锯齿
+ * 关键优化：
+ * 1. 图片尺寸精确匹配打印机物理像素，1:1 输出，避免缩放产生锯齿
+ * 2. 条形码模块宽度使用整数像素（width: 1）
+ * 3. 禁用抗锯齿
+ * 4. 文字自动缩放以适应标签宽度
  */
 export async function generateLabelForNiimbotB1(
   systemSku: string,
@@ -312,7 +316,7 @@ export async function generateLabelForNiimbotB1(
   canvas.height = LABEL_HEIGHT;
   const ctx = canvas.getContext('2d')!;
   
-  // 禁用抗锯齿，确保线条锐利
+  // *** 关键：禁用抗锯齿，确保线条锐利 ***
   ctx.imageSmoothingEnabled = false;
   
   // 白色背景
@@ -322,17 +326,18 @@ export async function generateLabelForNiimbotB1(
   // 设置文字样式
   ctx.fillStyle = '#000000';
   
-  // 边距
-  const MARGIN = 16;
-  const TEXT_HEIGHT = 48;  // 底部文字区域高度
+  // 边距（整数像素）
+  const MARGIN = 8;
+  const TEXT_HEIGHT = 32;  // 底部文字区域高度
   
   // 1. 生成条形码
   const barcodeAreaHeight = LABEL_HEIGHT - TEXT_HEIGHT - MARGIN * 2;
   
+  // 创建条形码 canvas
   const barcodeCanvas = document.createElement('canvas');
   JsBarcode(barcodeCanvas, systemSku, {
     format: 'CODE128',
-    width: 2,                // 模块宽度
+    width: 1,                // *** 关键：模块宽度 = 1像素（整数），避免锯齿 ***
     height: barcodeAreaHeight,
     displayValue: false,     // 不显示文字（我们单独绘制）
     margin: 0,
@@ -340,38 +345,42 @@ export async function generateLabelForNiimbotB1(
     lineColor: '#000000',
   });
   
-  // 条形码水平居中
+  // 条形码水平居中（整数像素）
   const barcodeX = Math.floor((LABEL_WIDTH - barcodeCanvas.width) / 2);
   const barcodeY = MARGIN;
   
+  // *** 关键：绘制前再次确保禁用平滑 ***
   ctx.imageSmoothingEnabled = false;
+  
+  // 绘制条形码（1:1 不缩放）
   ctx.drawImage(barcodeCanvas, barcodeX, barcodeY);
   
   // 2. 绘制底部文字
-  const textY = LABEL_HEIGHT - 8;
-  const FONT_SIZE = 24;
-  const FONT_STYLE = `bold ${FONT_SIZE}px Arial, sans-serif`;
-  const SKU_GAP = 32;
+  const textY = LABEL_HEIGHT - 4;  // 底部位置（整数）
+  const MAX_TEXT_WIDTH = LABEL_WIDTH - MARGIN * 2;  // 最大文字宽度
   
-  if (userSku) {
-    ctx.font = FONT_STYLE;
-    
-    const systemSkuWidth = Math.ceil(ctx.measureText(systemSku).width);
-    const userSkuWidth = Math.ceil(ctx.measureText(userSku).width);
-    
-    const totalWidth = systemSkuWidth + SKU_GAP + userSkuWidth;
-    const startX = Math.floor((LABEL_WIDTH - totalWidth) / 2);
-    
-    ctx.textAlign = 'left';
-    ctx.textBaseline = 'bottom';
-    ctx.fillText(systemSku, startX, textY);
-    ctx.fillText(userSku, startX + systemSkuWidth + SKU_GAP, textY);
-  } else {
-    ctx.font = FONT_STYLE;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'bottom';
-    ctx.fillText(systemSku, Math.floor(LABEL_WIDTH / 2), textY);
+  // 动态计算字体大小，确保文字不超出边界
+  let fontSize = 18;  // 起始字体大小
+  const MIN_FONT_SIZE = 10;
+  const SKU_GAP = 16;  // 两个 SKU 之间的间距
+  
+  // 组合显示文本
+  const displayText = userSku ? `${systemSku}    ${userSku}` : systemSku;
+  
+  // 动态调整字体大小直到文字适合宽度
+  ctx.font = `bold ${fontSize}px Arial, sans-serif`;
+  let textWidth = ctx.measureText(displayText).width;
+  
+  while (textWidth > MAX_TEXT_WIDTH && fontSize > MIN_FONT_SIZE) {
+    fontSize -= 1;
+    ctx.font = `bold ${fontSize}px Arial, sans-serif`;
+    textWidth = ctx.measureText(displayText).width;
   }
+  
+  // 居中绘制文字
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'bottom';
+  ctx.fillText(displayText, Math.floor(LABEL_WIDTH / 2), textY);
   
   return canvas.toDataURL('image/png');
 }
