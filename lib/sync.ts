@@ -15,7 +15,8 @@ export interface SyncResult {
   success: boolean;
   direction: "upload" | "download";
   count: number;
-  totalCount?: number; // 总产品数（用于增量同步时显示）
+  totalCount?: number; // 总产品数（含已删除）
+  activeCount?: number; // 有效产品数（未删除）
   error?: string;
 }
 
@@ -42,7 +43,8 @@ export const SyncService = {
       
       // 1. 获取本地所有数据
       const allProducts = await ProductStorage.getAll();
-      console.log(`[Sync] Found ${allProducts.length} local products`);
+      const activeProducts = allProducts.filter(p => !p.isDeleted);
+      console.log(`[Sync] Found ${allProducts.length} local products (${activeProducts.length} active)`);
       
       if (allProducts.length === 0) {
         return {
@@ -86,6 +88,7 @@ export const SyncService = {
         direction: "upload",
         count: result.count,
         totalCount: allProducts.length,
+        activeCount: activeProducts.length,
       };
     } catch (error: any) {
       console.error("[Sync] Upload failed:", error);

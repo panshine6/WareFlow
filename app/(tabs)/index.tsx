@@ -481,12 +481,11 @@ export default function HomeScreen() {
                     if (result.success) {
                       // 根据同步数量显示不同的提示
                       let msg: string;
+                      const activeCount = result.activeCount || result.count;
                       if (result.count === 0) {
-                        msg = `本地数据无变化，无需同步\n共 ${result.totalCount || 0} 个产品`;
-                      } else if (result.totalCount && result.count < result.totalCount) {
-                        msg = `已同步 ${result.count} 个变更\n共 ${result.totalCount} 个产品`;
+                        msg = `本地数据无变化，无需同步\n共 ${activeCount} 个产品`;
                       } else {
-                        msg = `已上传 ${result.count} 个产品到云端`;
+                        msg = `已同步 ${activeCount} 个产品到云端`;
                       }
                       console.log("[Upload] Success:", msg);
                       if (Platform.OS === 'web') {
