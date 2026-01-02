@@ -71,9 +71,9 @@ function addDpiToPng(dataURL: string, dpi: number): string {
   let newBytes: Uint8Array;
   
   if (existingPhysIndex !== -1) {
-    // 已有 pHYs chunk，替换它
+    // 已有 pHYs chunk，替换它 (pHYs chunk 固定 21 字节)
     const before = bytes.slice(0, existingPhysIndex);
-    const after = bytes.slice(existingPhysIndex + 25);
+    const after = bytes.slice(existingPhysIndex + 21);
     newBytes = new Uint8Array(before.length + phys.length + after.length);
     newBytes.set(before, 0);
     newBytes.set(phys, before.length);
@@ -97,48 +97,47 @@ function addDpiToPng(dataURL: string, dpi: number): string {
 }
 
 /**
- * 创建 pHYs chunk (25 bytes)
+ * 创建 pHYs chunk (21 bytes total)
+ * 结构: 4 (length) + 4 (type) + 9 (data) + 4 (crc) = 21 bytes
  */
 function createPhysChunk(dpi: number): Uint8Array {
   // DPI 转换为每米像素数
   const INCHES_PER_METER = 39.3701;
   const pixelsPerMeter = Math.round(dpi * INCHES_PER_METER);
   
-  // pHYs chunk 数据 (9 bytes)
-  const data = new Uint8Array(9);
-  // X pixels per meter (big-endian)
-  data[0] = (pixelsPerMeter >> 24) & 0xFF;
-  data[1] = (pixelsPerMeter >> 16) & 0xFF;
-  data[2] = (pixelsPerMeter >> 8) & 0xFF;
-  data[3] = pixelsPerMeter & 0xFF;
-  // Y pixels per meter (big-endian)
-  data[4] = (pixelsPerMeter >> 24) & 0xFF;
-  data[5] = (pixelsPerMeter >> 16) & 0xFF;
-  data[6] = (pixelsPerMeter >> 8) & 0xFF;
-  data[7] = pixelsPerMeter & 0xFF;
-  // Unit specifier: 1 = meter
-  data[8] = 1;
+  // 组装完整的 chunk (21 bytes)
+  const chunk = new Uint8Array(21);
   
-  // Type field: "pHYs"
-  const type = new Uint8Array([0x70, 0x48, 0x59, 0x73]);
-  
-  // 计算 CRC32 (type + data)
-  const typeAndData = new Uint8Array(type.length + data.length);
-  typeAndData.set(type, 0);
-  typeAndData.set(data, type.length);
-  const crc = crc32(typeAndData);
-  
-  // 组装完整的 chunk (25 bytes)
-  const chunk = new Uint8Array(25);
-  // Length field: 9 (big-endian)
+  // Length field: 9 (big-endian) - 数据部分的长度
   chunk[0] = 0x00;
   chunk[1] = 0x00;
   chunk[2] = 0x00;
   chunk[3] = 0x09;
-  // Type field
-  chunk.set(type, 4);
-  // Data field
-  chunk.set(data, 8);
+  
+  // Type field: "pHYs" (4 bytes)
+  chunk[4] = 0x70; // 'p'
+  chunk[5] = 0x48; // 'H'
+  chunk[6] = 0x59; // 'Y'
+  chunk[7] = 0x73; // 's'
+  
+  // Data field (9 bytes)
+  // X pixels per meter (big-endian)
+  chunk[8] = (pixelsPerMeter >> 24) & 0xFF;
+  chunk[9] = (pixelsPerMeter >> 16) & 0xFF;
+  chunk[10] = (pixelsPerMeter >> 8) & 0xFF;
+  chunk[11] = pixelsPerMeter & 0xFF;
+  // Y pixels per meter (big-endian)
+  chunk[12] = (pixelsPerMeter >> 24) & 0xFF;
+  chunk[13] = (pixelsPerMeter >> 16) & 0xFF;
+  chunk[14] = (pixelsPerMeter >> 8) & 0xFF;
+  chunk[15] = pixelsPerMeter & 0xFF;
+  // Unit specifier: 1 = meter
+  chunk[16] = 1;
+  
+  // 计算 CRC32 (type + data, 即 chunk[4..16])
+  const typeAndData = chunk.slice(4, 17);
+  const crc = crc32(typeAndData);
+  
   // CRC32 field (big-endian)
   chunk[17] = (crc >> 24) & 0xFF;
   chunk[18] = (crc >> 16) & 0xFF;
