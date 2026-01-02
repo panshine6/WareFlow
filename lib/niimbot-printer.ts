@@ -4,7 +4,7 @@
  * 
  * 打印机规格 (B1):
  * - 分辨率: 203 DPI
- * - 标签尺寸: 50mm × 30mm = 400px × 240px
+ * - 标签尺寸: 40mm × 30mm = 320px × 240px (1mm ≈ 8px @ 203 DPI)
  * - 连接方式: USB 串口 / 蓝牙
  */
 
@@ -290,8 +290,10 @@ export async function printCanvas(
  * 生成适合 NIIMBOT B1 的标签图片
  * 
  * B1 规格:
- * - 分辨率: 203 DPI
- * - 标签尺寸: 50mm × 30mm = 400px × 240px
+ * - 分辨率: 203 DPI (1mm ≈ 8px)
+ * - 标签尺寸: 40mm × 30mm = 320px × 240px
+ * 
+ * 关键：图片尺寸必须精确匹配打印机物理像素，1:1 输出，避免缩放产生锯齿
  */
 export async function generateLabelForNiimbotB1(
   systemSku: string,
@@ -300,7 +302,8 @@ export async function generateLabelForNiimbotB1(
   const JsBarcode = (await import('jsbarcode')).default;
   
   // 精确像素尺寸 @ 203 DPI (1mm ≈ 8px)
-  const LABEL_WIDTH = 400;   // 50mm × 8 = 400px
+  // 40mm × 30mm = 320px × 240px
+  const LABEL_WIDTH = 320;   // 40mm × 8 = 320px
   const LABEL_HEIGHT = 240;  // 30mm × 8 = 240px
   
   // 创建主 canvas

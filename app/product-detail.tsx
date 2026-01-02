@@ -22,17 +22,8 @@ import { Platform } from "react-native";
 import { AutoSync } from "@/lib/auto-sync";
 import { trpc } from "@/lib/trpc";
 import type { Product } from "@/types/product";
-import { generateLabelForNiimbotD110, generateSystemSKU, saveBarcodeImage, checkPrintAgentStatus, printLabelViaPrintAgent } from "@/lib/barcode";
-import { 
-  getPrinterStatus, 
-  connectViaSerial, 
-  connectViaBluetooth, 
-  disconnectPrinter,
-  printImage,
-  generateLabelForNiimbotB1,
-  isWebSerialSupported,
-  isWebBluetoothSupported,
-} from "@/lib/niimbot-printer";
+import { generateLabelForNiimbotD110, generateSystemSKU, saveBarcodeImage } from "@/lib/barcode";
+import { generateLabelForNiimbotB1 } from "@/lib/niimbot-printer";
 
 /**
  * 产品详情页面
@@ -50,23 +41,10 @@ export default function ProductDetailScreen() {
   const [saving, setSaving] = useState(false);
   const [printingLabel, setPrintingLabel] = useState(false);
   const [barcodePreview, setBarcodePreview] = useState<string | null>(null);
-  const [printAgentConnected, setPrintAgentConnected] = useState<boolean | null>(null);
-  const [isPrinting, setIsPrinting] = useState(false);
-  const [printerConnected, setPrinterConnected] = useState(false);
-  const [isConnecting, setIsConnecting] = useState(false);
   const [printerType, setPrinterType] = useState<'b1' | 'd110'>('b1'); // 默认使用 B1
 
   // 使用 tRPC 同步
   const uploadMutation = trpc.sync.upload.useMutation();
-
-  // 检查 Print Agent 状态（仅 Web 端）
-  useEffect(() => {
-    if (Platform.OS === 'web') {
-      checkPrintAgentStatus().then(status => {
-        setPrintAgentConnected(status.connected);
-      });
-    }
-  }, []);
 
   // 加载产品数据 - 使用 useFocusEffect 确保每次页面获得焦点时重新加载
   useFocusEffect(
@@ -459,122 +437,10 @@ export default function ProductDetailScreen() {
               )}
             </View>
             
-            {/* Web Serial/Bluetooth 打印按钮 */}
-            {barcodePreview && (isWebSerialSupported() || isWebBluetoothSupported()) && (
-              <View style={styles.directPrintSection}>
-                <ThemedText style={styles.directPrintTitle}>🖨️ 直接打印</ThemedText>
-                
-                {/* 打印机连接状态 */}
-                <View style={styles.printerStatusRow}>
-                  <ThemedText style={styles.printerStatusText}>
-                    {printerConnected ? '✅ 打印机已连接' : '⚪ 打印机未连接'}
-                  </ThemedText>
-                  {printerConnected && (
-                    <Pressable
-                      onPress={async () => {
-                        await disconnectPrinter();
-                        setPrinterConnected(false);
-                      }}
-                      style={styles.disconnectButton}
-                    >
-                      <ThemedText style={styles.disconnectButtonText}>断开</ThemedText>
-                    </Pressable>
-                  )}
-                </View>
-                
-                {/* 连接按钮 */}
-                {!printerConnected && (
-                  <View style={styles.connectButtonsRow}>
-                    {isWebSerialSupported() && (
-                      <Pressable
-                        onPress={async () => {
-                          setIsConnecting(true);
-                          try {
-                            const result = await connectViaSerial();
-                            if (result.success) {
-                              setPrinterConnected(true);
-                              window.alert('✅ ' + result.message);
-                            } else {
-                              window.alert('❌ ' + result.message);
-                            }
-                          } catch (error: any) {
-                            window.alert('连接失败: ' + (error.message || '未知错误'));
-                          } finally {
-                            setIsConnecting(false);
-                          }
-                        }}
-                        disabled={isConnecting}
-                        style={[styles.button, styles.connectButton, isConnecting && styles.buttonDisabled]}
-                      >
-                        <ThemedText style={styles.buttonText}>
-                          {isConnecting ? '连接中...' : '🔌 USB 连接'}
-                        </ThemedText>
-                      </Pressable>
-                    )}
-                    {isWebBluetoothSupported() && (
-                      <Pressable
-                        onPress={async () => {
-                          setIsConnecting(true);
-                          try {
-                            const result = await connectViaBluetooth();
-                            if (result.success) {
-                              setPrinterConnected(true);
-                              window.alert('✅ ' + result.message);
-                            } else {
-                              window.alert('❌ ' + result.message);
-                            }
-                          } catch (error: any) {
-                            window.alert('连接失败: ' + (error.message || '未知错误'));
-                          } finally {
-                            setIsConnecting(false);
-                          }
-                        }}
-                        disabled={isConnecting}
-                        style={[styles.button, styles.bluetoothButton, isConnecting && styles.buttonDisabled]}
-                      >
-                        <ThemedText style={styles.buttonText}>
-                          {isConnecting ? '连接中...' : '📶 蓝牙连接'}
-                        </ThemedText>
-                      </Pressable>
-                    )}
-                  </View>
-                )}
-                
-                {/* 打印按钮 */}
-                {printerConnected && (
-                  <Pressable
-                    onPress={async () => {
-                      if (!barcodePreview) return;
-                      
-                      setIsPrinting(true);
-                      try {
-                        const result = await printImage(barcodePreview);
-                        if (result.success) {
-                          window.alert('✅ ' + result.message);
-                        } else {
-                          window.alert('❌ ' + result.message);
-                        }
-                      } catch (error: any) {
-                        window.alert('打印失败: ' + (error.message || '未知错误'));
-                      } finally {
-                        setIsPrinting(false);
-                      }
-                    }}
-                    disabled={isPrinting}
-                    style={[styles.button, styles.printButton, isPrinting && styles.buttonDisabled]}
-                  >
-                    <ThemedText style={styles.buttonText}>
-                      {isPrinting ? '打印中...' : '🖨️ 立即打印'}
-                    </ThemedText>
-                  </Pressable>
-                )}
-              </View>
-            )}
-            
             {/* 提示信息 */}
             <ThemedText style={styles.printHint}>
               {printerType === 'b1' 
-                ? '标签尺寸：50mm × 30mm（适用于 NIIMBOT B1）'
+                ? '标签尺寸：40mm × 30mm（适用于 NIIMBOT B1）'
                 : '标签尺寸：38mm × 12mm（适用于 NIIMBOT D110）'
               }
             </ThemedText>
