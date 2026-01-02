@@ -485,11 +485,14 @@ export async function generateLabelForNiimbotB1(
   ctx.fillStyle = '#000000';
   
   // *** 双条形码布局参数 ***
-  const MARGIN_TOP = 6;        // 顶部边距
-  const MARGIN_BOTTOM = 4;     // 底部边距
-  const BARCODE_HEIGHT = 70;   // 每个条形码高度
+  const BARCODE_HEIGHT = 80;   // 每个条形码高度（增大）
   const TEXT_HEIGHT = 18;      // 每个文字高度
-  const GAP = 4;               // 条形码组之间的间距
+  const GAP = 6;               // 条形码组之间的间距
+  
+  // 计算总内容高度，用于垂直居中
+  // 内容 = 条形码1 + 文字1 + 间距 + 条形码2 + 文字2
+  const TOTAL_CONTENT_HEIGHT = BARCODE_HEIGHT + TEXT_HEIGHT + GAP + BARCODE_HEIGHT + TEXT_HEIGHT;
+  const MARGIN_TOP = Math.floor((LABEL_HEIGHT - TOTAL_CONTENT_HEIGHT) / 2);  // 自动计算顶部边距使内容居中
   
   // 字体设置
   const FONT_SIZE = 14;
@@ -502,7 +505,7 @@ export async function generateLabelForNiimbotB1(
   const barcode1Canvas = document.createElement('canvas');
   JsBarcode(barcode1Canvas, systemSku, {
     format: 'CODE128',
-    width: 1.5,              // 模块宽度
+    width: 2,                // 模块宽度（增大使条形码更宽）
     height: BARCODE_HEIGHT,
     displayValue: false,     // 不显示文字（我们单独绘制）
     margin: 0,
@@ -528,7 +531,7 @@ export async function generateLabelForNiimbotB1(
   const barcode2Canvas = document.createElement('canvas');
   JsBarcode(barcode2Canvas, secondSku, {
     format: 'CODE128',
-    width: 1.5,
+    width: 2,                // 模块宽度（与第一个条形码一致）
     height: BARCODE_HEIGHT,
     displayValue: false,
     margin: 0,
