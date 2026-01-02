@@ -50,6 +50,11 @@ export default function HomeScreen() {
   
   // 上传状态
   const [uploading, setUploading] = useState(false);
+  
+  // 下载提示状态
+  const [showDownloadPrompt, setShowDownloadPrompt] = useState(false);
+  const [cloudProductCount, setCloudProductCount] = useState(0);
+  const [downloading, setDownloading] = useState(false);
 
   // 加载产品列表（Web 使用 AsyncStorage，原生使用 SQLite）
   const loadProducts = async () => {
@@ -94,24 +99,94 @@ export default function HomeScreen() {
   useFocusEffect(
     useCallback(() => {
       loadProducts();
-      autoSyncOnEnter();
+      checkAndPromptDownload();
     }, [])
   );
 
-  // 进入页面时自动同步
-  const autoSyncOnEnter = async () => {
+  // 进入页面时检查本地和云端数据状态
+  const checkAndPromptDownload = async () => {
     try {
-      await AutoSync.downloadFromCloud(
-        downloadQuery,
-        async () => {
-          await loadProducts();
+      // 获取本地数据
+      const isWeb = Platform.OS === 'web';
+      const localProducts = isWeb 
+        ? await ProductStorage.getAll()
+        : await ProductAPI.getAll();
+      
+      // 如果本地有数据，不需要提示
+      if (localProducts.length > 0) {
+        return;
+      }
+      
+      // 本地无数据，检查云端是否有数据
+      const trpcClient = {
+        sync: {
+          status: {
+            query: async () => {
+              // 使用 downloadQuery 来获取云端数据数量
+              const result = await downloadQuery.refetch();
+              return { cloudCount: result.data?.products?.length || 0 };
+            },
+          },
         },
-        (error) => {
-          console.log("自动同步失败（静默）", error);
-        }
-      );
+      };
+      
+      const result = await downloadQuery.refetch();
+      const cloudCount = result.data?.products?.length || 0;
+      
+      // 如果云端有数据，提示用户下载
+      if (cloudCount > 0) {
+        setCloudProductCount(cloudCount);
+        setShowDownloadPrompt(true);
+      }
     } catch (error) {
-      console.log("自动同步失败", error);
+      console.log("检查云端数据失败", error);
+    }
+  };
+  
+  // 用户确认下载云端数据
+  const handleConfirmDownload = async () => {
+    setDownloading(true);
+    try {
+      const trpcClient = {
+        sync: {
+          download: {
+            query: async () => {
+              const result = await downloadQuery.refetch();
+              return result.data;
+            },
+          },
+        },
+      };
+      
+      const result = await SyncService.downloadFromCloud(trpcClient);
+      
+      if (result.success) {
+        await loadProducts();
+        setShowDownloadPrompt(false);
+        
+        const msg = `已下载 ${result.count} 个产品到本地`;
+        if (Platform.OS === 'web') {
+          window.alert(`下载成功\n${msg}`);
+        } else {
+          Alert.alert("下载成功", msg);
+        }
+      } else {
+        const errMsg = result.error || "未知错误";
+        if (Platform.OS === 'web') {
+          window.alert(`下载失败\n${errMsg}`);
+        } else {
+          Alert.alert("下载失败", errMsg);
+        }
+      }
+    } catch (error: any) {
+      const errMsg = error.message || "网络错误";
+      if (Platform.OS === 'web') {
+        window.alert(`下载失败\n${errMsg}`);
+      } else {
+        Alert.alert("下载失败", errMsg);
+      }
+    } finally {
+      setDownloading(false);
     }
   };
 
@@ -537,6 +612,45 @@ export default function HomeScreen() {
           </View>
         </TouchableWithoutFeedback>
       </Modal>
+
+      {/* 下载提示弹窗 - 本地无数据但云端有数据时显示 */}
+      <Modal
+        visible={showDownloadPrompt}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowDownloadPrompt(false)}
+      >
+        <View style={[styles.modalOverlay, { backgroundColor: overlayBg }]}>
+          <View style={[styles.downloadPromptContainer, { backgroundColor: modalBg }]}>
+            <ThemedText style={styles.downloadPromptIcon}>☁️</ThemedText>
+            <ThemedText style={styles.downloadPromptTitle}>检测到云端数据</ThemedText>
+            <ThemedText style={styles.downloadPromptMessage}>
+              本地暂无数据，云端有 {cloudProductCount} 个产品。{"\n"}
+              建议先下载云端数据，否则 AI 对比款式功能无法正常使用。
+            </ThemedText>
+            <View style={styles.downloadPromptButtons}>
+              <Pressable
+                style={[styles.downloadPromptButton, styles.downloadPromptButtonSecondary]}
+                onPress={() => setShowDownloadPrompt(false)}
+                disabled={downloading}
+              >
+                <ThemedText style={styles.downloadPromptButtonTextSecondary}>稍后再说</ThemedText>
+              </Pressable>
+              <Pressable
+                style={[styles.downloadPromptButton, styles.downloadPromptButtonPrimary, downloading && styles.downloadPromptButtonDisabled]}
+                onPress={handleConfirmDownload}
+                disabled={downloading}
+              >
+                {downloading ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <ThemedText style={styles.downloadPromptButtonTextPrimary}>立即下载</ThemedText>
+                )}
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </ThemedView>
   );
 }
@@ -804,5 +918,61 @@ const styles = StyleSheet.create({
     fontSize: 12,
     opacity: 0.5,
     marginTop: 4,
+  },
+  // 下载提示弹窗样式
+  downloadPromptContainer: {
+    width: "85%",
+    maxWidth: 340,
+    borderRadius: 16,
+    padding: 24,
+    alignItems: "center",
+  },
+  downloadPromptIcon: {
+    fontSize: 48,
+    marginBottom: 16,
+  },
+  downloadPromptTitle: {
+    fontSize: 20,
+    fontWeight: "700",
+    marginBottom: 12,
+    textAlign: "center",
+  },
+  downloadPromptMessage: {
+    fontSize: 15,
+    opacity: 0.7,
+    textAlign: "center",
+    lineHeight: 22,
+    marginBottom: 24,
+  },
+  downloadPromptButtons: {
+    flexDirection: "row",
+    gap: 12,
+  },
+  downloadPromptButton: {
+    flex: 1,
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    minHeight: 48,
+  },
+  downloadPromptButtonPrimary: {
+    backgroundColor: "#007AFF",
+  },
+  downloadPromptButtonSecondary: {
+    backgroundColor: "rgba(0, 0, 0, 0.05)",
+  },
+  downloadPromptButtonDisabled: {
+    opacity: 0.6,
+  },
+  downloadPromptButtonTextPrimary: {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  downloadPromptButtonTextSecondary: {
+    fontSize: 16,
+    fontWeight: "500",
   },
 });
