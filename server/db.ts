@@ -225,6 +225,45 @@ export async function batchInsertProducts(productsData: InsertProduct[]) {
   }
 }
 
+/**
+ * 增量更新产品（upsert）
+ * 存在则更新，不存在则插入
+ */
+export async function upsertProduct(productData: InsertProduct) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  await db.insert(products).values(productData).onDuplicateKeyUpdate({
+    set: {
+      detailImageUri: productData.detailImageUri,
+      overviewImageUri: productData.overviewImageUri,
+      sku: productData.sku,
+      quantity: productData.quantity,
+      storageLocation: productData.storageLocation,
+      operatorId: productData.operatorId,
+      operatorName: productData.operatorName,
+      isDeleted: productData.isDeleted,
+      deletedAt: productData.deletedAt,
+      updatedAt: new Date(),
+    },
+  });
+}
+
+/**
+ * 批量增量更新产品（upsert）
+ * 存在则更新，不存在则插入
+ */
+export async function batchUpsertProducts(productsData: InsertProduct[]) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  if (productsData.length === 0) return;
+  
+  // 逐个 upsert
+  for (const product of productsData) {
+    await upsertProduct(product);
+  }
+}
+
 export async function getLastSyncTime() {
   const db = await getDb();
   if (!db) return null;

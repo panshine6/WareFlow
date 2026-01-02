@@ -41,7 +41,7 @@ export const appRouter = router({
   }),
 
   sync: router({
-    // 上传本地数据到云端（覆盖）
+    // 上传本地数据到云端（增量更新）
     upload: publicProcedure
       .input(z.object({
         products: z.array(z.object({
@@ -60,10 +60,8 @@ export const appRouter = router({
         })),
       }))
       .mutation(async ({ input }) => {
-        // 清空云端数据
-        await db.clearAllProducts();
-        // 批量插入本地数据
-        await db.batchInsertProducts(input.products);
+        // 增量更新：存在则更新，不存在则插入
+        await db.batchUpsertProducts(input.products);
         return { success: true, count: input.products.length };
       }),
     

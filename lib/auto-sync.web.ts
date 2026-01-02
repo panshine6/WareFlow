@@ -8,6 +8,7 @@ const SYNC_INTERVAL = 300000; // 5 分钟
  * 自动同步工具 - Web 版本（不使用 SQLite）
  * 
  * 同步策略：
+ * - 增量同步：只上传自上次同步后有变化的产品
  * - 不上传全景图（overviewImageUri 设为空）
  * - 细节图直接上传本地 2K 版本，不再二次压缩
  */
@@ -92,27 +93,56 @@ export const AutoSync = {
   },
 
   /**
-   * 上传本地数据到云端 - Web 版本
+   * 上传本地数据到云端 - Web 版本（增量同步）
    * 
    * 策略：
+   * - 只上传自上次同步后有变化的产品（根据 updatedAt 判断）
    * - 不上传全景图
    * - 细节图直接上传本地 2K 版本，不再二次压缩
+   * 
+   * @param forceFullSync 是否强制全量同步（默认 false，增量同步）
    */
   async uploadToCloud(
     uploadMutation: any,
     onSuccess?: () => void,
-    onError?: (error: any) => void
+    onError?: (error: any) => void,
+    forceFullSync: boolean = false
   ): Promise<void> {
     try {
       console.log('[AutoSync.Web] Starting upload to cloud...');
       
-      // 从 IndexedDB/AsyncStorage 获取产品
-      const products = await ProductStorage.getAll();
+      // 从 IndexedDB/AsyncStorage 获取所有产品
+      const allProducts = await ProductStorage.getAll();
       
-      console.log('[AutoSync.Web] Found', products.length, 'products, preparing upload...');
+      // 获取上次同步时间
+      const lastSyncTime = await this.getLastSyncTime();
+      const lastSyncDate = lastSyncTime ? new Date(lastSyncTime) : null;
+      
+      // 筛选需要上传的产品
+      let productsToSync = allProducts;
+      
+      if (!forceFullSync && lastSyncDate) {
+        // 增量同步：只上传 updatedAt 大于上次同步时间的产品
+        productsToSync = allProducts.filter((p) => {
+          const productUpdatedAt = new Date(p.updatedAt || p.createdAt);
+          return productUpdatedAt > lastSyncDate;
+        });
+        
+        console.log('[AutoSync.Web] Incremental sync: found', productsToSync.length, 'changed products out of', allProducts.length, 'total');
+      } else {
+        console.log('[AutoSync.Web] Full sync: uploading all', allProducts.length, 'products');
+      }
+      
+      // 如果没有需要同步的产品，直接返回
+      if (productsToSync.length === 0) {
+        console.log('[AutoSync.Web] No changes to sync');
+        await this.setLastSyncTime();
+        onSuccess?.();
+        return;
+      }
 
       // 准备上传数据（直接使用本地 2K 图片，不再压缩）
-      const productsToUpload = products.map((p) => {
+      const productsToUpload = productsToSync.map((p) => {
         return {
           id: p.id,
           detailImageUri: p.detailImageUri, // 直接上传本地 2K 版本
@@ -129,9 +159,9 @@ export const AutoSync = {
         };
       });
 
-      console.log('[AutoSync.Web] Prepared', productsToUpload.length, 'products for upload');
+      console.log('[AutoSync.Web] Uploading', productsToUpload.length, 'products...');
 
-      // 调用上传 API
+      // 调用上传 API（服务端会使用 upsert 增量更新）
       await uploadMutation.mutateAsync({ products: productsToUpload });
 
       // 更新同步时间
