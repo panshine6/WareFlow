@@ -24,7 +24,7 @@ import { useColorScheme } from "@/hooks/use-color-scheme";
 import { UserStorage } from "@/lib/user-storage";
 import { SettingsStorage, ProductStorage } from "@/lib/storage";
 import { calculateAndSaveProductHash, imageToBase64, performDuplicateCheck, DuplicateCheckResult } from "@/lib/deduplication";
-import { generateSystemSKU, generateLabelForNiimbotD110, shareBarcodeImage } from "@/lib/barcode";
+import { generateSystemSKU, generateLabelForNiimbotD110, saveToPhotoAlbum } from "@/lib/barcode";
 import { generateLabelForNiimbotB1 } from "@/lib/niimbot-printer";
 import { countProductsInImage } from "@/lib/ai-vision";
 import { compressImage, base64ToDataUrl } from "@/lib/image-utils";
@@ -394,7 +394,7 @@ export default function AddProductQuickScreen() {
           const barcodeDataUrl = printerType === 'b1'
             ? await generateLabelForNiimbotB1(savedProduct.systemSku, savedProduct.sku)
             : await generateLabelForNiimbotD110(savedProduct.systemSku, savedProduct.sku);
-          await shareBarcodeImage(barcodeDataUrl, savedProduct.systemSku);
+          await saveToPhotoAlbum(barcodeDataUrl, savedProduct.systemSku);
         } catch (error) {
           console.error("[QuickAdd] Failed to generate barcode:", error);
           alert("条形码生成失败，但产品已保存");
