@@ -319,7 +319,7 @@ export default function ProductDetailScreen() {
                 placeholderTextColor={Colors[colorScheme ?? "light"].icon}
               />
             ) : (
-              <View style={styles.valueWithCopy}>
+              <View style={styles.storageLocationRow}>
                 <ThemedText style={styles.value}>{product.storageLocation}</ThemedText>
                 {Platform.OS === 'web' && (
                   <Pressable
@@ -331,9 +331,9 @@ export default function ProductDetailScreen() {
                         Alert.alert('复制失败', '请手动复制');
                       }
                     }}
-                    style={styles.inlineCopyButton}
+                    style={styles.copyButton}
                   >
-                    <ThemedText style={styles.inlineCopyButtonText}>📋</ThemedText>
+                    <ThemedText style={styles.copyButtonText}>📋 复制</ThemedText>
                   </Pressable>
                 )}
               </View>
@@ -736,6 +736,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
+  },
+  storageLocationRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
   },
   inlineCopyButton: {
     padding: 4,
