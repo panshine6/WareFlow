@@ -88,6 +88,16 @@ export default function RootLayout() {
               <Stack.Screen name="modal" options={{ presentation: "modal", title: "Modal" }} />
               <Stack.Screen name="oauth/callback" options={{ headerShown: false }} />
               <Stack.Screen name="product-detail" options={{ title: "产品详情" }} />
+              <Stack.Screen name="add-product-quick" options={{ title: "快速产品添加" }} />
+              <Stack.Screen name="add-product" options={{ title: "添加产品" }} />
+              <Stack.Screen name="add-product-sku" options={{ title: "SKU 设置" }} />
+              <Stack.Screen name="add-product-location" options={{ title: "存储位置" }} />
+              <Stack.Screen name="add-product-overview" options={{ title: "拍摄全景图" }} />
+              <Stack.Screen name="recycle-bin" options={{ title: "回收站" }} />
+              <Stack.Screen name="backup" options={{ title: "数据备份" }} />
+              <Stack.Screen name="user-management" options={{ title: "用户管理" }} />
+              <Stack.Screen name="duplicate-check" options={{ title: "查重结果" }} />
+              <Stack.Screen name="feedback" options={{ title: "意见反馈" }} />
             </Stack>
             <StatusBar style="auto" />
           </ThemeProvider>
