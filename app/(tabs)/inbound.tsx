@@ -438,42 +438,7 @@ export default function InboundScreen() {
             </View>
           </View>
 
-          {/* 功能特点 */}
-          <View style={styles.featuresSection}>
-            <ThemedText style={styles.featuresTitle}>智能功能</ThemedText>
-            
-            <View style={styles.featureItem}>
-              <ThemedText style={styles.featureIcon}>🔍</ThemedText>
-              <View style={styles.featureContent}>
-                <ThemedText style={styles.featureTitle}>AI 图像查重</ThemedText>
-                <ThemedText style={styles.featureDesc}>自动检测重复产品，避免重复录入</ThemedText>
-              </View>
-            </View>
 
-            <View style={styles.featureItem}>
-              <ThemedText style={styles.featureIcon}>🔢</ThemedText>
-              <View style={styles.featureContent}>
-                <ThemedText style={styles.featureTitle}>AI 自动计数</ThemedText>
-                <ThemedText style={styles.featureDesc}>智能识别图片中的产品数量</ThemedText>
-              </View>
-            </View>
-
-            <View style={styles.featureItem}>
-              <ThemedText style={styles.featureIcon}>🏷️</ThemedText>
-              <View style={styles.featureContent}>
-                <ThemedText style={styles.featureTitle}>条形码生成</ThemedText>
-                <ThemedText style={styles.featureDesc}>自动生成条形码，支持打印标签</ThemedText>
-              </View>
-            </View>
-
-            <View style={styles.featureItem}>
-              <ThemedText style={styles.featureIcon}>📊</ThemedText>
-              <View style={styles.featureContent}>
-                <ThemedText style={styles.featureTitle}>智能 SKU 管理</ThemedText>
-                <ThemedText style={styles.featureDesc}>元素化生成、序列管理、自动进位</ThemedText>
-              </View>
-            </View>
-          </View>
         </ScrollView>
       ) : (
         // 入库记录视图
@@ -642,37 +607,7 @@ const styles = StyleSheet.create({
     fontSize: 13,
     opacity: 0.6,
   },
-  featuresSection: {
-    backgroundColor: "rgba(52, 199, 89, 0.1)",
-    borderRadius: 16,
-    padding: 20,
-  },
-  featuresTitle: {
-    fontSize: 18,
-    fontWeight: "700",
-    marginBottom: 16,
-    color: "#34C759",
-  },
-  featureItem: {
-    flexDirection: "row",
-    marginBottom: 16,
-  },
-  featureIcon: {
-    fontSize: 24,
-    marginRight: 12,
-  },
-  featureContent: {
-    flex: 1,
-  },
-  featureTitle: {
-    fontSize: 15,
-    fontWeight: "600",
-    marginBottom: 2,
-  },
-  featureDesc: {
-    fontSize: 13,
-    opacity: 0.6,
-  },
+
   historyContainer: {
     flex: 1,
     paddingHorizontal: 16,
