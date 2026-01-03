@@ -248,9 +248,19 @@ export default function ProductDetailScreen() {
         </Pressable>
 
         {/* 标题 */}
-        <ThemedText type="title" style={styles.title}>
-          产品详情
-        </ThemedText>
+        <View style={styles.titleContainer}>
+          <View style={styles.titleIconContainer}>
+            <ThemedText style={styles.titleIcon}>📦</ThemedText>
+          </View>
+          <View style={styles.titleTextContainer}>
+            <ThemedText type="title" style={styles.title}>
+              产品详情
+            </ThemedText>
+            <ThemedText style={styles.titleSubtitle}>
+              {product.sku}
+            </ThemedText>
+          </View>
+        </View>
 
         {/* 产品照片 */}
         <View style={styles.photoContainer}>
@@ -715,8 +725,41 @@ const styles = StyleSheet.create({
     lineHeight: 24,
     color: "#007AFF",
   },
+  titleContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 16,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    backgroundColor: "rgba(0, 122, 255, 0.08)",
+    borderRadius: 16,
+    borderLeftWidth: 4,
+    borderLeftColor: "#007AFF",
+  },
+  titleIconContainer: {
+    width: 48,
+    height: 48,
+    borderRadius: 12,
+    backgroundColor: "#007AFF",
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: 14,
+  },
+  titleIcon: {
+    fontSize: 24,
+  },
+  titleTextContainer: {
+    flex: 1,
+  },
   title: {
-    marginBottom: 8,
+    fontSize: 22,
+    fontWeight: "700",
+    marginBottom: 2,
+  },
+  titleSubtitle: {
+    fontSize: 14,
+    color: "#666",
+    fontWeight: "500",
   },
   photoContainer: {
     gap: 8,

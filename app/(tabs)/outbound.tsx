@@ -643,8 +643,6 @@ const styles = StyleSheet.create({
     paddingBottom: 16,
   },
   title: {
-    fontSize: 28,
-    fontWeight: "bold",
     marginBottom: 16,
   },
   tabContainer: {

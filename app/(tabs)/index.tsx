@@ -309,6 +309,43 @@ export default function HomeScreen() {
             <ThemedText style={styles.dataSecurityArrow}>›</ThemedText>
           </View>
         </Pressable>
+
+        {/* 智能功能介绍 */}
+        <View style={styles.smartFeaturesSection}>
+          <ThemedText style={styles.smartFeaturesTitle}>智能功能</ThemedText>
+          
+          <View style={styles.smartFeatureItem}>
+            <ThemedText style={styles.smartFeatureIcon}>🔍</ThemedText>
+            <View style={styles.smartFeatureContent}>
+              <ThemedText style={styles.smartFeatureTitle}>AI 图像查重</ThemedText>
+              <ThemedText style={styles.smartFeatureDesc}>自动检测重复产品，避免重复录入</ThemedText>
+            </View>
+          </View>
+
+          <View style={styles.smartFeatureItem}>
+            <ThemedText style={styles.smartFeatureIcon}>🔢</ThemedText>
+            <View style={styles.smartFeatureContent}>
+              <ThemedText style={styles.smartFeatureTitle}>AI 自动计数</ThemedText>
+              <ThemedText style={styles.smartFeatureDesc}>智能识别图片中的产品数量</ThemedText>
+            </View>
+          </View>
+
+          <View style={styles.smartFeatureItem}>
+            <ThemedText style={styles.smartFeatureIcon}>🏷️</ThemedText>
+            <View style={styles.smartFeatureContent}>
+              <ThemedText style={styles.smartFeatureTitle}>条形码生成</ThemedText>
+              <ThemedText style={styles.smartFeatureDesc}>自动生成条形码，支持打印标签</ThemedText>
+            </View>
+          </View>
+
+          <View style={styles.smartFeatureItem}>
+            <ThemedText style={styles.smartFeatureIcon}>📊</ThemedText>
+            <View style={styles.smartFeatureContent}>
+              <ThemedText style={styles.smartFeatureTitle}>智能 SKU 管理</ThemedText>
+              <ThemedText style={styles.smartFeatureDesc}>元素化生成、序列管理、自动进位</ThemedText>
+            </View>
+          </View>
+        </View>
       </View>
 
       {/* 设置底部弹窗 */}
@@ -957,5 +994,43 @@ const styles = StyleSheet.create({
   downloadPromptButtonTextSecondary: {
     fontSize: 16,
     fontWeight: "500",
+  },
+  // 智能功能介绍样式
+  smartFeaturesSection: {
+    backgroundColor: "rgba(52, 199, 89, 0.08)",
+    borderRadius: 16,
+    padding: 16,
+    marginTop: 12,
+  },
+  smartFeaturesTitle: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#34C759",
+    marginBottom: 12,
+  },
+  smartFeatureItem: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(52, 199, 89, 0.1)",
+  },
+  smartFeatureIcon: {
+    fontSize: 20,
+    marginRight: 12,
+    marginTop: 2,
+  },
+  smartFeatureContent: {
+    flex: 1,
+  },
+  smartFeatureTitle: {
+    fontSize: 15,
+    fontWeight: "600",
+    marginBottom: 2,
+  },
+  smartFeatureDesc: {
+    fontSize: 13,
+    opacity: 0.6,
+    lineHeight: 18,
   },
 });

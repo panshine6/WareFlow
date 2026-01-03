@@ -465,6 +465,14 @@ export default function InboundScreen() {
                 <ThemedText style={styles.featureDesc}>自动生成条形码，支持打印标签</ThemedText>
               </View>
             </View>
+
+            <View style={styles.featureItem}>
+              <ThemedText style={styles.featureIcon}>📊</ThemedText>
+              <View style={styles.featureContent}>
+                <ThemedText style={styles.featureTitle}>智能 SKU 管理</ThemedText>
+                <ThemedText style={styles.featureDesc}>元素化生成、序列管理、自动进位</ThemedText>
+              </View>
+            </View>
           </View>
         </ScrollView>
       ) : (
