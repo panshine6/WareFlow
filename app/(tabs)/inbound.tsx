@@ -6,7 +6,6 @@ import {
   Image,
   Platform,
   Pressable,
-  RefreshControl,
   ScrollView,
   StyleSheet,
   View,
@@ -475,6 +474,23 @@ export default function InboundScreen() {
       ) : (
         // 入库记录视图
         <View style={styles.historyContainer}>
+          {/* 同步按钮 */}
+          <Pressable
+            style={({ pressed }) => [
+              styles.syncButton,
+              { opacity: pressed ? 0.7 : 1 },
+              refreshing && styles.syncButtonDisabled,
+            ]}
+            onPress={onRefresh}
+            disabled={refreshing}
+          >
+            {refreshing ? (
+              <ActivityIndicator size="small" color="#fff" />
+            ) : (
+              <ThemedText style={styles.syncButtonText}>☁️ 同步到云端</ThemedText>
+            )}
+          </Pressable>
+
           {loadingHistory ? (
             <View style={styles.loadingContainer}>
               <ActivityIndicator size="large" />
@@ -519,20 +535,6 @@ export default function InboundScreen() {
                 </Pressable>
               )}
               contentContainerStyle={styles.historyListContent}
-              refreshControl={
-                <RefreshControl
-                  refreshing={refreshing}
-                  onRefresh={onRefresh}
-                  title="下拉同步到云端"
-                  tintColor={Colors[colorScheme ?? 'light'].tint}
-                  colors={[Colors[colorScheme ?? 'light'].tint]}
-                />
-              }
-              ListHeaderComponent={
-                <View style={styles.refreshHint}>
-                  <ThemedText style={styles.refreshHintText}>↓ 下拉同步数据到云端</ThemedText>
-                </View>
-              }
             />
           )}
         </View>
@@ -842,13 +844,25 @@ const styles = StyleSheet.create({
     marginTop: 12,
     marginBottom: 24,
   },
-  refreshHint: {
-    paddingVertical: 8,
-    paddingHorizontal: 16,
+  syncButton: {
+    backgroundColor: "#007AFF",
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 10,
+    marginHorizontal: 16,
+    marginTop: 8,
+    marginBottom: 12,
     alignItems: "center",
+    justifyContent: "center",
+    flexDirection: "row",
+    minHeight: 44,
   },
-  refreshHintText: {
-    fontSize: 12,
-    opacity: 0.5,
+  syncButtonDisabled: {
+    backgroundColor: "#999",
+  },
+  syncButtonText: {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "600",
   },
 });
