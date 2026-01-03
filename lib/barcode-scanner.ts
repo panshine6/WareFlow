@@ -70,7 +70,7 @@ export interface BoxLookupResult {
 
 /**
  * 判断条形码类型
- * - 系统 SKU: BL + YYMMDD + 4位随机数 + 校验位 (如 BL260103EKBAM)
+ * - 系统 SKU: LB + YYMMDD + 4位随机数 + 校验位 (如 LB260103EKBAM)
  * - Box ID: XX-XX-XX-Box-N (如 LB-RF-GM-Box-1)
  * - 用户 SKU: 其他格式
  */
@@ -84,8 +84,9 @@ export function detectBarcodeType(value: string): 'systemSku' | 'userSku' | 'box
     return 'boxId';
   }
   
-  // 检查是否为系统 SKU (BL 开头 + 校验位验证)
-  if (value.startsWith('BL') && value.length === 13) {
+  // 检查是否为系统 SKU (LB 开头 + 校验位验证)
+  // 同时兼容旧版本的 BL 前缀
+  if ((value.startsWith('LB') || value.startsWith('BL')) && value.length === 13) {
     if (validateSKU(value)) {
       return 'systemSku';
     }

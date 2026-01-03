@@ -65,11 +65,11 @@ export function validateSKU(sku: string): boolean {
 
 /**
  * 生成系统 SKU
- * 格式: BL + YYMMDD + 4位随机数 + 校验位
- * 示例: BL241229A7K3X
+ * 格式: LB + YYMMDD + 4位随机数 + 校验位
+ * 示例: LB241229A7K3X
  */
 export function generateSystemSKU(): string {
-  const prefix = 'BL';
+  const prefix = 'LB';
   
   // 获取当前日期 YYMMDD
   const now = new Date();
