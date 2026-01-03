@@ -87,6 +87,7 @@ export default function RootLayout() {
               <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
               <Stack.Screen name="modal" options={{ presentation: "modal", title: "Modal" }} />
               <Stack.Screen name="oauth/callback" options={{ headerShown: false }} />
+              <Stack.Screen name="product-detail" options={{ title: "产品详情" }} />
             </Stack>
             <StatusBar style="auto" />
           </ThemeProvider>

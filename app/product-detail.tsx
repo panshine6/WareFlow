@@ -255,8 +255,8 @@ export default function ProductDetailScreen() {
             <ThemedText style={styles.titleCardIconText}>📦</ThemedText>
           </View>
           <View style={styles.titleCardContent}>
-            <ThemedText style={styles.titleCardTitle}>产品详情</ThemedText>
-            <ThemedText style={styles.titleCardSubtitle}>SKU: {product.sku}</ThemedText>
+            <ThemedText style={styles.titleCardTitle}>产品</ThemedText>
+            <ThemedText style={styles.titleCardSubtitle}>{product.sku}</ThemedText>
           </View>
         </View>
 
