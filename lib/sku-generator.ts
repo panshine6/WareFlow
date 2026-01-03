@@ -1,76 +1,35 @@
 /**
- * SKU 生成助手
+ * SKU 生成助手 v2
  * 
- * SKU 格式: [品牌代码(2位)]-[大类代码(2位)]-[材料代码(2位)]-[颜色代码(2位)]-[流水号(4位)]
- * 示例: LB-ES-CR-RE-0001 = Ladybuty 耳钉 水晶 红色 第1号
+ * 支持动态段数和自定义字段
+ * 默认格式: [品牌代码]-[大类代码]-[材料代码]-[颜色代码]-[流水号(4位)]
+ * 可扩展为: [品牌]-[大类]-[材料]-[颜色]-[设计系列]-[流水号] 等
  */
 
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
-// SKU 序列存储键
-const SKU_SEQUENCE_KEY = "sku_sequences";
+// 存储键
+const SKU_SEQUENCE_KEY = "sku_sequences_v2";
+const SKU_SEGMENTS_KEY = "sku_segments_v2";
+const SKU_HISTORY_KEY = "sku_history_v2";
 
 // 代码选项接口
 export interface CodeOption {
   code: string;
   nameEn: string;
   nameCn: string;
+  isCustom?: boolean; // 是否为用户自定义
 }
 
-// 预设品牌代码
-export const BRAND_CODES: CodeOption[] = [
-  { code: "LB", nameEn: "Ladybuty", nameCn: "Ladybuty" },
-];
-
-// 预设大类代码
-export const CATEGORY_CODES: CodeOption[] = [
-  { code: "RF", nameEn: "Ring Fixed", nameCn: "固定戒指" },
-  { code: "RA", nameEn: "Ring Adjustable", nameCn: "可调节戒指" },
-  { code: "ES", nameEn: "Earring Stud", nameCn: "耳钉" },
-  { code: "ED", nameEn: "Earring Drop", nameCn: "耳坠" },
-  { code: "NE", nameEn: "Necklace", nameCn: "项链" },
-  { code: "BC", nameEn: "Bracelet Chain", nameCn: "手链" },
-  { code: "BB", nameEn: "Bracelet Bangle", nameCn: "手环" },
-  { code: "AN", nameEn: "Anklet", nameCn: "脚链" },
-  { code: "WC", nameEn: "Waist Chain", nameCn: "腰链" },
-  { code: "PI", nameEn: "Piercing", nameCn: "穿刺饰品" },
-];
-
-// 预设材料代码
-export const MATERIAL_CODES: CodeOption[] = [
-  { code: "GM", nameEn: "Gold Metal", nameCn: "金色金属" },
-  { code: "SM", nameEn: "Silver Metal", nameCn: "银色金属" },
-  { code: "DM", nameEn: "Diamond", nameCn: "钻石" },
-  { code: "PE", nameEn: "Pearl", nameCn: "珍珠" },
-  { code: "GS", nameEn: "Gemstone", nameCn: "宝石" },
-  { code: "CR", nameEn: "Crystal", nameCn: "水晶" },
-  { code: "IR", nameEn: "Iron", nameCn: "铁艺" },
-  { code: "TX", nameEn: "Textile", nameCn: "布料" },
-  { code: "WD", nameEn: "Wood", nameCn: "木质" },
-  { code: "EN", nameEn: "Enamel", nameCn: "珐琅" },
-  { code: "BO", nameEn: "Bone", nameCn: "骨质" },
-  { code: "LT", nameEn: "Leather", nameCn: "皮革" },
-  { code: "SH", nameEn: "Shell", nameCn: "贝壳" },
-  { code: "FT", nameEn: "Feather", nameCn: "羽毛" },
-];
-
-// 预设颜色代码
-export const COLOR_CODES: CodeOption[] = [
-  { code: "RE", nameEn: "Red", nameCn: "红色" },
-  { code: "BL", nameEn: "Blue", nameCn: "蓝色" },
-  { code: "GR", nameEn: "Green", nameCn: "绿色" },
-  { code: "YE", nameEn: "Yellow", nameCn: "黄色" },
-  { code: "BK", nameEn: "Black", nameCn: "黑色" },
-  { code: "WH", nameEn: "White", nameCn: "白色" },
-  { code: "PK", nameEn: "Pink", nameCn: "粉色" },
-  { code: "OR", nameEn: "Orange", nameCn: "橙色" },
-  { code: "PU", nameEn: "Purple", nameCn: "紫色" },
-  { code: "SV", nameEn: "Silver", nameCn: "银色" },
-  { code: "GD", nameEn: "Gold", nameCn: "金色" },
-  { code: "BR", nameEn: "Brown", nameCn: "棕色" },
-  { code: "MC", nameEn: "Multi-color", nameCn: "多色" },
-  { code: "NT", nameEn: "Natural", nameCn: "原色" },
-];
+// SKU 段定义
+export interface SkuSegment {
+  id: string;
+  name: string; // 段名称，如"品牌代码"
+  codeLength: number; // 代码长度，如 2
+  options: CodeOption[]; // 可选项
+  isRequired: boolean; // 是否必填
+  order: number; // 排序
+}
 
 // SKU 序列记录
 export interface SkuSequence {
@@ -79,18 +38,193 @@ export interface SkuSequence {
   updatedAt: string; // 最后更新时间
 }
 
-// SKU 生成参数
-export interface SkuGeneratorParams {
-  brand: string;
-  category: string;
-  material: string;
-  color: string;
+// SKU 使用记录
+export interface SkuHistoryRecord {
+  sku: string; // 完整 SKU
+  prefix: string; // 前缀
+  number: number; // 流水号
+  createdAt: string; // 创建时间
+  segments: Record<string, string>; // 各段的值
 }
 
+// 预设段定义
+export const DEFAULT_SEGMENTS: SkuSegment[] = [
+  {
+    id: "brand",
+    name: "品牌代码",
+    codeLength: 2,
+    isRequired: true,
+    order: 1,
+    options: [
+      { code: "LB", nameEn: "Ladybuty", nameCn: "Ladybuty" },
+    ],
+  },
+  {
+    id: "category",
+    name: "大类代码",
+    codeLength: 2,
+    isRequired: true,
+    order: 2,
+    options: [
+      { code: "RF", nameEn: "Ring Fixed", nameCn: "固定戒指" },
+      { code: "RA", nameEn: "Ring Adjustable", nameCn: "可调节戒指" },
+      { code: "ES", nameEn: "Earring Stud", nameCn: "耳钉" },
+      { code: "ED", nameEn: "Earring Drop", nameCn: "耳坠" },
+      { code: "NE", nameEn: "Necklace", nameCn: "项链" },
+      { code: "BC", nameEn: "Bracelet Chain", nameCn: "手链" },
+      { code: "BB", nameEn: "Bracelet Bangle", nameCn: "手环" },
+      { code: "AN", nameEn: "Anklet", nameCn: "脚链" },
+      { code: "WC", nameEn: "Waist Chain", nameCn: "腰链" },
+      { code: "PI", nameEn: "Piercing", nameCn: "穿刺饰品" },
+    ],
+  },
+  {
+    id: "material",
+    name: "材料代码",
+    codeLength: 2,
+    isRequired: true,
+    order: 3,
+    options: [
+      { code: "GM", nameEn: "Gold Metal", nameCn: "金色金属" },
+      { code: "SM", nameEn: "Silver Metal", nameCn: "银色金属" },
+      { code: "DM", nameEn: "Diamond", nameCn: "钻石" },
+      { code: "PE", nameEn: "Pearl", nameCn: "珍珠" },
+      { code: "GS", nameEn: "Gemstone", nameCn: "宝石" },
+      { code: "CR", nameEn: "Crystal", nameCn: "水晶" },
+      { code: "IR", nameEn: "Iron", nameCn: "铁艺" },
+      { code: "TX", nameEn: "Textile", nameCn: "布料" },
+      { code: "WD", nameEn: "Wood", nameCn: "木质" },
+      { code: "EN", nameEn: "Enamel", nameCn: "珐琅" },
+      { code: "BO", nameEn: "Bone", nameCn: "骨质" },
+      { code: "LT", nameEn: "Leather", nameCn: "皮革" },
+      { code: "SH", nameEn: "Shell", nameCn: "贝壳" },
+      { code: "FT", nameEn: "Feather", nameCn: "羽毛" },
+    ],
+  },
+  {
+    id: "color",
+    name: "颜色代码",
+    codeLength: 2,
+    isRequired: true,
+    order: 4,
+    options: [
+      { code: "RE", nameEn: "Red", nameCn: "红色" },
+      { code: "BL", nameEn: "Blue", nameCn: "蓝色" },
+      { code: "GR", nameEn: "Green", nameCn: "绿色" },
+      { code: "YE", nameEn: "Yellow", nameCn: "黄色" },
+      { code: "BK", nameEn: "Black", nameCn: "黑色" },
+      { code: "WH", nameEn: "White", nameCn: "白色" },
+      { code: "PK", nameEn: "Pink", nameCn: "粉色" },
+      { code: "OR", nameEn: "Orange", nameCn: "橙色" },
+      { code: "PU", nameEn: "Purple", nameCn: "紫色" },
+      { code: "SV", nameEn: "Silver", nameCn: "银色" },
+      { code: "GD", nameEn: "Gold", nameCn: "金色" },
+      { code: "BR", nameEn: "Brown", nameCn: "棕色" },
+      { code: "MC", nameEn: "Multi-color", nameCn: "多色" },
+      { code: "NT", nameEn: "Natural", nameCn: "原色" },
+    ],
+  },
+];
+
 /**
- * SKU 生成器服务
+ * SKU 生成器服务 v2
  */
 export const SkuGenerator = {
+  // ==================== 段管理 ====================
+  
+  /**
+   * 获取所有段定义
+   */
+  async getSegments(): Promise<SkuSegment[]> {
+    try {
+      const data = await AsyncStorage.getItem(SKU_SEGMENTS_KEY);
+      if (data) {
+        return JSON.parse(data);
+      }
+      // 首次使用，返回默认段并保存
+      await this.saveSegments(DEFAULT_SEGMENTS);
+      return DEFAULT_SEGMENTS;
+    } catch (error) {
+      console.error("[SkuGenerator] Failed to get segments:", error);
+      return DEFAULT_SEGMENTS;
+    }
+  },
+
+  /**
+   * 保存段定义
+   */
+  async saveSegments(segments: SkuSegment[]): Promise<void> {
+    try {
+      await AsyncStorage.setItem(SKU_SEGMENTS_KEY, JSON.stringify(segments));
+    } catch (error) {
+      console.error("[SkuGenerator] Failed to save segments:", error);
+    }
+  },
+
+  /**
+   * 添加新段
+   */
+  async addSegment(segment: Omit<SkuSegment, "id" | "order">): Promise<SkuSegment> {
+    const segments = await this.getSegments();
+    const newSegment: SkuSegment = {
+      ...segment,
+      id: `custom_${Date.now()}`,
+      order: segments.length + 1,
+    };
+    segments.push(newSegment);
+    await this.saveSegments(segments);
+    return newSegment;
+  },
+
+  /**
+   * 删除段
+   */
+  async deleteSegment(segmentId: string): Promise<void> {
+    const segments = await this.getSegments();
+    const filtered = segments.filter(s => s.id !== segmentId);
+    // 重新排序
+    filtered.forEach((s, i) => s.order = i + 1);
+    await this.saveSegments(filtered);
+  },
+
+  /**
+   * 更新段
+   */
+  async updateSegment(segmentId: string, updates: Partial<SkuSegment>): Promise<void> {
+    const segments = await this.getSegments();
+    const index = segments.findIndex(s => s.id === segmentId);
+    if (index !== -1) {
+      segments[index] = { ...segments[index], ...updates };
+      await this.saveSegments(segments);
+    }
+  },
+
+  /**
+   * 向段添加选项
+   */
+  async addOptionToSegment(segmentId: string, option: CodeOption): Promise<void> {
+    const segments = await this.getSegments();
+    const segment = segments.find(s => s.id === segmentId);
+    if (segment) {
+      segment.options.push({ ...option, isCustom: true });
+      await this.saveSegments(segments);
+    }
+  },
+
+  /**
+   * 从段删除选项
+   */
+  async removeOptionFromSegment(segmentId: string, code: string): Promise<void> {
+    const segments = await this.getSegments();
+    const segment = segments.find(s => s.id === segmentId);
+    if (segment) {
+      segment.options = segment.options.filter(o => o.code !== code);
+      await this.saveSegments(segments);
+    }
+  },
+
+  // ==================== 序列管理 ====================
+
   /**
    * 获取所有序列记录
    */
@@ -116,13 +250,6 @@ export const SkuGenerator = {
   },
 
   /**
-   * 生成 SKU 前缀
-   */
-  generatePrefix(params: SkuGeneratorParams): string {
-    return `${params.brand}-${params.category}-${params.material}-${params.color}`;
-  },
-
-  /**
    * 获取下一个流水号
    */
   async getNextNumber(prefix: string): Promise<number> {
@@ -132,44 +259,91 @@ export const SkuGenerator = {
   },
 
   /**
-   * 生成完整的 SKU
+   * 设置流水号（手动调整）
    */
-  async generateSku(params: SkuGeneratorParams): Promise<string> {
-    const prefix = this.generatePrefix(params);
-    const nextNumber = await this.getNextNumber(prefix);
-    const paddedNumber = nextNumber.toString().padStart(4, "0");
-    return `${prefix}-${paddedNumber}`;
+  async setSequenceNumber(prefix: string, number: number): Promise<void> {
+    const sequences = await this.getAllSequences();
+    sequences[prefix] = {
+      prefix,
+      lastNumber: number,
+      updatedAt: new Date().toISOString(),
+    };
+    await this.saveSequences(sequences);
+  },
+
+  /**
+   * 重置流水号为0
+   */
+  async resetSequence(prefix: string): Promise<void> {
+    const sequences = await this.getAllSequences();
+    if (sequences[prefix]) {
+      sequences[prefix].lastNumber = 0;
+      sequences[prefix].updatedAt = new Date().toISOString();
+      await this.saveSequences(sequences);
+    }
+  },
+
+  /**
+   * 删除序列记录
+   */
+  async deleteSequence(prefix: string): Promise<void> {
+    const sequences = await this.getAllSequences();
+    delete sequences[prefix];
+    await this.saveSequences(sequences);
+  },
+
+  /**
+   * 增加流水号
+   */
+  async incrementSequence(prefix: string, amount: number = 1): Promise<number> {
+    const sequences = await this.getAllSequences();
+    const current = sequences[prefix]?.lastNumber || 0;
+    const newNumber = Math.max(0, current + amount);
+    sequences[prefix] = {
+      prefix,
+      lastNumber: newNumber,
+      updatedAt: new Date().toISOString(),
+    };
+    await this.saveSequences(sequences);
+    return newNumber;
+  },
+
+  // ==================== SKU 生成 ====================
+
+  /**
+   * 生成 SKU 前缀（根据选择的段值）
+   */
+  generatePrefix(segmentValues: Record<string, string>, segments: SkuSegment[]): string {
+    return segments
+      .sort((a, b) => a.order - b.order)
+      .map(s => segmentValues[s.id] || "")
+      .filter(v => v)
+      .join("-");
   },
 
   /**
    * 预览 SKU（不更新序列）
    */
-  async previewSku(params: SkuGeneratorParams): Promise<string> {
-    const prefix = this.generatePrefix(params);
+  async previewSku(segmentValues: Record<string, string>, segments: SkuSegment[]): Promise<string> {
+    const prefix = this.generatePrefix(segmentValues, segments);
     const nextNumber = await this.getNextNumber(prefix);
     const paddedNumber = nextNumber.toString().padStart(4, "0");
     return `${prefix}-${paddedNumber}`;
   },
 
   /**
-   * 确认使用 SKU（更新序列）
+   * 确认使用 SKU（更新序列和历史）
    */
-  async confirmSku(sku: string): Promise<void> {
-    // 解析 SKU
+  async confirmSku(sku: string, segmentValues: Record<string, string>): Promise<void> {
     const parts = sku.split("-");
-    if (parts.length !== 5) {
-      console.error("[SkuGenerator] Invalid SKU format:", sku);
-      return;
-    }
-
-    const prefix = parts.slice(0, 4).join("-");
-    const number = parseInt(parts[4], 10);
+    const numberStr = parts[parts.length - 1];
+    const number = parseInt(numberStr, 10);
+    const prefix = parts.slice(0, -1).join("-");
 
     // 更新序列
     const sequences = await this.getAllSequences();
     const currentSequence = sequences[prefix];
     
-    // 只有当新号码大于当前记录时才更新
     if (!currentSequence || number > currentSequence.lastNumber) {
       sequences[prefix] = {
         prefix,
@@ -177,26 +351,102 @@ export const SkuGenerator = {
         updatedAt: new Date().toISOString(),
       };
       await this.saveSequences(sequences);
-      console.log(`[SkuGenerator] Updated sequence for ${prefix}: ${number}`);
+    }
+
+    // 添加历史记录
+    await this.addHistoryRecord({
+      sku,
+      prefix,
+      number,
+      createdAt: new Date().toISOString(),
+      segments: segmentValues,
+    });
+  },
+
+  // ==================== 历史记录管理 ====================
+
+  /**
+   * 获取所有历史记录
+   */
+  async getHistory(): Promise<SkuHistoryRecord[]> {
+    try {
+      const data = await AsyncStorage.getItem(SKU_HISTORY_KEY);
+      return data ? JSON.parse(data) : [];
+    } catch (error) {
+      console.error("[SkuGenerator] Failed to get history:", error);
+      return [];
     }
   },
 
   /**
-   * 从现有产品同步序列
-   * 用于初始化或修复序列数据
+   * 添加历史记录
+   */
+  async addHistoryRecord(record: SkuHistoryRecord): Promise<void> {
+    try {
+      const history = await this.getHistory();
+      // 检查是否已存在
+      if (!history.find(h => h.sku === record.sku)) {
+        history.unshift(record); // 添加到开头
+        // 限制历史记录数量（最多保留 1000 条）
+        if (history.length > 1000) {
+          history.pop();
+        }
+        await AsyncStorage.setItem(SKU_HISTORY_KEY, JSON.stringify(history));
+      }
+    } catch (error) {
+      console.error("[SkuGenerator] Failed to add history:", error);
+    }
+  },
+
+  /**
+   * 删除历史记录
+   */
+  async deleteHistoryRecord(sku: string): Promise<void> {
+    try {
+      const history = await this.getHistory();
+      const filtered = history.filter(h => h.sku !== sku);
+      await AsyncStorage.setItem(SKU_HISTORY_KEY, JSON.stringify(filtered));
+    } catch (error) {
+      console.error("[SkuGenerator] Failed to delete history:", error);
+    }
+  },
+
+  /**
+   * 清空历史记录
+   */
+  async clearHistory(): Promise<void> {
+    try {
+      await AsyncStorage.setItem(SKU_HISTORY_KEY, JSON.stringify([]));
+    } catch (error) {
+      console.error("[SkuGenerator] Failed to clear history:", error);
+    }
+  },
+
+  /**
+   * 按前缀筛选历史记录
+   */
+  async getHistoryByPrefix(prefix: string): Promise<SkuHistoryRecord[]> {
+    const history = await this.getHistory();
+    return history.filter(h => h.prefix === prefix);
+  },
+
+  // ==================== 兼容旧版本 ====================
+
+  /**
+   * 从现有产品同步序列（兼容旧版本）
    */
   async syncFromProducts(skus: string[]): Promise<void> {
     const sequences: Record<string, SkuSequence> = {};
 
     for (const sku of skus) {
       const parts = sku.split("-");
-      if (parts.length !== 5) continue;
+      if (parts.length < 2) continue;
 
-      const prefix = parts.slice(0, 4).join("-");
-      const number = parseInt(parts[4], 10);
-
+      const numberStr = parts[parts.length - 1];
+      const number = parseInt(numberStr, 10);
       if (isNaN(number)) continue;
 
+      const prefix = parts.slice(0, -1).join("-");
       const current = sequences[prefix];
       if (!current || number > current.lastNumber) {
         sequences[prefix] = {
@@ -207,7 +457,7 @@ export const SkuGenerator = {
       }
     }
 
-    // 合并现有序列（保留较大的值）
+    // 合并现有序列
     const existingSequences = await this.getAllSequences();
     for (const [prefix, sequence] of Object.entries(existingSequences)) {
       if (!sequences[prefix] || sequences[prefix].lastNumber < sequence.lastNumber) {
@@ -216,52 +466,11 @@ export const SkuGenerator = {
     }
 
     await this.saveSequences(sequences);
-    console.log("[SkuGenerator] Synced sequences from products:", Object.keys(sequences).length);
-  },
-
-  /**
-   * 获取指定前缀的当前序列信息
-   */
-  async getSequenceInfo(prefix: string): Promise<SkuSequence | null> {
-    const sequences = await this.getAllSequences();
-    return sequences[prefix] || null;
-  },
-
-  /**
-   * 解析 SKU 获取各部分信息
-   */
-  parseSku(sku: string): SkuGeneratorParams & { number: number } | null {
-    const parts = sku.split("-");
-    if (parts.length !== 5) return null;
-
-    return {
-      brand: parts[0],
-      category: parts[1],
-      material: parts[2],
-      color: parts[3],
-      number: parseInt(parts[4], 10),
-    };
-  },
-
-  /**
-   * 验证 SKU 格式是否正确
-   */
-  validateSku(sku: string): boolean {
-    const parts = sku.split("-");
-    if (parts.length !== 5) return false;
-
-    const [brand, category, material, color, number] = parts;
-    
-    // 检查各部分长度
-    if (brand.length !== 2) return false;
-    if (category.length !== 2) return false;
-    if (material.length !== 2) return false;
-    if (color.length !== 2) return false;
-    if (number.length !== 4) return false;
-
-    // 检查流水号是否为数字
-    if (isNaN(parseInt(number, 10))) return false;
-
-    return true;
   },
 };
+
+// 导出旧版本兼容的常量
+export const BRAND_CODES = DEFAULT_SEGMENTS.find(s => s.id === "brand")?.options || [];
+export const CATEGORY_CODES = DEFAULT_SEGMENTS.find(s => s.id === "category")?.options || [];
+export const MATERIAL_CODES = DEFAULT_SEGMENTS.find(s => s.id === "material")?.options || [];
+export const COLOR_CODES = DEFAULT_SEGMENTS.find(s => s.id === "color")?.options || [];
