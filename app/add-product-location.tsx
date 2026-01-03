@@ -200,16 +200,16 @@ export default function AddProductLocationScreen() {
       // 更新默认位置
       await SettingsStorage.update({ defaultLocation: locationValue });
 
-      // 返回主页
+      // 返回入库页面
       if (Platform.OS === "web") {
         window.alert("产品入库成功！");
-        router.replace("/(tabs)");
+        router.replace("/(tabs)/inbound");
       } else {
         Alert.alert("成功", "产品入库成功", [
           {
             text: "确定",
             onPress: () => {
-              router.replace("/(tabs)");
+              router.replace("/(tabs)/inbound");
             },
           },
         ]);

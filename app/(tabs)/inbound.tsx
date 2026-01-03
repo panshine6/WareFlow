@@ -6,6 +6,7 @@ import {
   Image,
   Platform,
   Pressable,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   View,
@@ -18,6 +19,8 @@ import { ThemedView } from "@/components/themed-view";
 import { Colors } from "@/constants/theme";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { ProductStorage } from "@/lib/storage";
+import { trpc } from "@/lib/trpc";
+import { AutoSync } from "@/lib/auto-sync";
 import type { Product, InventoryHistoryEntry } from "@/types/product";
 import { 
   getRecentInboundProducts, 
@@ -55,6 +58,10 @@ export default function InboundScreen() {
   const [batchGroups, setBatchGroups] = useState<BatchGroup[]>([]);
   const [selectedLabelIds, setSelectedLabelIds] = useState<Set<string>>(new Set());
   const [loadingLabels, setLoadingLabels] = useState(false);
+
+  // 下拉同步相关
+  const [refreshing, setRefreshing] = useState(false);
+  const uploadMutation = trpc.sync.upload.useMutation();
 
   // 页面获得焦点时加载入库历史或标签数据
   useFocusEffect(
@@ -142,6 +149,31 @@ export default function InboundScreen() {
       setLoadingLabels(false);
     }
   };
+
+  // 下拉同步到云端
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      await AutoSync.uploadToCloud(
+        uploadMutation,
+        () => {
+          Alert.alert("同步成功", "数据已上传到云端");
+        },
+        (error) => {
+          console.error("[Inbound] Sync failed:", error);
+          Alert.alert("同步失败", "请检查网络连接后重试");
+        }
+      );
+      // 同步后重新加载入库历史
+      if (viewMode === "history") {
+        await loadInboundHistory();
+      }
+    } catch (error) {
+      console.error("[Inbound] Refresh failed:", error);
+    } finally {
+      setRefreshing(false);
+    }
+  }, [viewMode, uploadMutation]);
 
   // 格式化时间
   const formatTime = (timestamp: string) => {
@@ -461,7 +493,7 @@ export default function InboundScreen() {
                     styles.historyCard,
                     { opacity: pressed ? 0.7 : 1 },
                   ]}
-                  onPress={() => router.push({ pathname: "/product-detail" as any, params: { id: item.product.id } })}
+                  onPress={() => router.push({ pathname: "/product-detail" as any, params: { id: item.product.id, from: 'inbound' } })}
                 >
                   <Image
                     source={{ uri: item.entry.detailImageUri || item.product.detailImageUri }}
@@ -487,6 +519,20 @@ export default function InboundScreen() {
                 </Pressable>
               )}
               contentContainerStyle={styles.historyListContent}
+              refreshControl={
+                <RefreshControl
+                  refreshing={refreshing}
+                  onRefresh={onRefresh}
+                  title="下拉同步到云端"
+                  tintColor={Colors[colorScheme ?? 'light'].tint}
+                  colors={[Colors[colorScheme ?? 'light'].tint]}
+                />
+              }
+              ListHeaderComponent={
+                <View style={styles.refreshHint}>
+                  <ThemedText style={styles.refreshHintText}>↓ 下拉同步数据到云端</ThemedText>
+                </View>
+              }
             />
           )}
         </View>
@@ -795,5 +841,14 @@ const styles = StyleSheet.create({
     textAlign: "center",
     marginTop: 12,
     marginBottom: 24,
+  },
+  refreshHint: {
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    alignItems: "center",
+  },
+  refreshHintText: {
+    fontSize: 12,
+    opacity: 0.5,
   },
 });

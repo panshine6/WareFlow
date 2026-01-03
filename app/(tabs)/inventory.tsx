@@ -415,7 +415,7 @@ export default function InventoryScreen() {
                   item.quantity === 0 && styles.productCardEmpty,
                   { opacity: pressed ? 0.7 : 1 },
                 ]}
-                onPress={() => router.push({ pathname: "/product-detail" as any, params: { id: item.id } })}
+                onPress={() => router.push({ pathname: "/product-detail" as any, params: { id: item.id, from: 'inventory' } })}
               >
                 {item.quantity === 0 && (
                   <View style={styles.emptyBadge}>

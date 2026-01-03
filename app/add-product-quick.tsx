@@ -521,7 +521,7 @@ export default function AddProductQuickScreen() {
       }
 
       alert("产品入库成功！");
-      router.replace("/(tabs)");
+      router.replace("/(tabs)/inbound");
     } catch (error) {
       console.error("[QuickAdd] Failed to save product:", error);
       const errorMessage = error instanceof Error ? error.message : String(error);

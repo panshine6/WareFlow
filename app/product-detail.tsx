@@ -30,7 +30,7 @@ import { generateLabelForNiimbotB1 } from "@/lib/niimbot-printer";
  */
 export default function ProductDetailScreen() {
 
-  const params = useLocalSearchParams<{ id: string }>();
+  const params = useLocalSearchParams<{ id: string; from?: string }>();
   
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -245,7 +245,21 @@ export default function ProductDetailScreen() {
         ]}
       >
         {/* 返回按钮 */}
-        <Pressable onPress={() => router.back()} style={styles.backButton}>
+        <Pressable 
+          onPress={() => {
+            // 根据来源页面决定返回目标
+            if (params.from === 'inventory') {
+              router.replace('/(tabs)/inventory');
+            } else if (params.from === 'inbound') {
+              router.replace('/(tabs)/inbound');
+            } else if (params.from === 'outbound') {
+              router.replace('/(tabs)/outbound');
+            } else {
+              router.back();
+            }
+          }} 
+          style={styles.backButton}
+        >
           <ThemedText style={styles.backButtonText}>← 返回</ThemedText>
         </Pressable>
 
