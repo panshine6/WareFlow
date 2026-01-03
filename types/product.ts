@@ -76,6 +76,10 @@ export interface Product {
   systemSku?: string;
   /** 产品价格（美元） */
   price?: number;
+  /** 所属 Box ID */
+  boxId?: string;
+  /** 所属 Box 名称 */
+  boxName?: string;
 }
 
 /**

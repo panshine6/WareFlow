@@ -4,6 +4,7 @@
  */
 
 import type { Box, BoxItem, CreateBoxInput, AddItemToBoxInput } from '@/types/box';
+import { ProductStorage } from './storage';
 
 const DB_NAME = 'wareflow-boxes';
 const DB_VERSION = 1;
@@ -209,6 +210,17 @@ export async function addItemToBox(input: AddItemToBoxInput): Promise<Box> {
 
   box.updatedAt = new Date().toISOString();
 
+  // 同时更新产品的 boxId 和 boxName
+  try {
+    await ProductStorage.update(input.productId, {
+      boxId: input.boxId,
+      boxName: box.name,
+    });
+    console.log('[BoxStorage] Product boxId updated:', input.productId, '->', input.boxId);
+  } catch (error) {
+    console.error('[BoxStorage] Failed to update product boxId:', error);
+  }
+
   return new Promise((resolve, reject) => {
     const transaction = database.transaction([STORE_NAME], 'readwrite');
     const store = transaction.objectStore(STORE_NAME);
@@ -236,6 +248,17 @@ export async function removeItemFromBox(boxId: string, productId: string): Promi
 
   box.items = box.items.filter(item => item.productId !== productId);
   box.updatedAt = new Date().toISOString();
+
+  // 清除产品的 boxId 和 boxName
+  try {
+    await ProductStorage.update(productId, {
+      boxId: undefined,
+      boxName: undefined,
+    });
+    console.log('[BoxStorage] Product boxId cleared:', productId);
+  } catch (error) {
+    console.error('[BoxStorage] Failed to clear product boxId:', error);
+  }
 
   return new Promise((resolve, reject) => {
     const transaction = database.transaction([STORE_NAME], 'readwrite');
