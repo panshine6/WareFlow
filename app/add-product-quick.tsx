@@ -31,6 +31,8 @@ import { scanBarcodeFromImage, detectBarcodeType, lookupProductByBarcode } from 
 import SkuGeneratorModal from "@/components/SkuGeneratorModal";
 import { compressImage, base64ToDataUrl } from "@/lib/image-utils";
 import type { Product, InventoryHistoryEntry } from "@/types/product";
+import type { Box } from "@/types/box";
+import { getAllBoxes, createBox } from "@/lib/box-storage";
 
 // 流程阶段
 type FlowStage = 
@@ -97,6 +99,12 @@ export default function AddProductQuickScreen() {
   const [scannedProduct, setScannedProduct] = useState<Product | null>(null);
   const [showBarcodeScanResult, setShowBarcodeScanResult] = useState(false);
 
+  // Box 相关状态
+  const [boxes, setBoxes] = useState<Box[]>([]);
+  const [selectedBox, setSelectedBox] = useState<Box | null>(null);
+  const [showBoxPicker, setShowBoxPicker] = useState(false);
+  const [newBoxName, setNewBoxName] = useState("");
+
   // 加载默认设置
   useEffect(() => {
     const loadDefaults = async () => {
@@ -119,6 +127,10 @@ export default function AddProductQuickScreen() {
           setOperatorName(user.name || "未知用户");
           setOperatorId(parseInt(user.id?.toString() || "1"));
         }
+
+        // 加载 Box 列表
+        const allBoxes = await getAllBoxes();
+        setBoxes(allBoxes.filter(b => b.status === 'open')); // 只显示开放中的 Box
       } catch (error) {
         console.error("[QuickAdd] Failed to load defaults:", error);
       }
@@ -483,6 +495,9 @@ export default function AddProductQuickScreen() {
           isDeleted: false,
           price,
           history: [historyEntry],
+          // Box 信息
+          boxId: selectedBox?.id,
+          boxName: selectedBox?.name,
         };
 
         // 计算 pHash
@@ -766,6 +781,20 @@ export default function AddProductQuickScreen() {
                 />
               </View>
             </View>
+
+            {/* Box 选择 */}
+            <View style={styles.formRow}>
+              <ThemedText style={styles.formLabel}>Box</ThemedText>
+              <Pressable
+                style={[styles.formInput, { backgroundColor: inputBg }]}
+                onPress={() => setShowBoxPicker(true)}
+              >
+                <ThemedText style={[styles.formValue, !selectedBox && styles.placeholder, { color: inputColor }]}>
+                  {selectedBox ? selectedBox.name : "点击选择 Box（可选）"}
+                </ThemedText>
+                <ThemedText style={styles.formArrow}>›</ThemedText>
+              </Pressable>
+            </View>
           </View>
         </ScrollView>
 
@@ -1012,6 +1041,99 @@ export default function AddProductQuickScreen() {
                 }}
               >
                 <ThemedText style={styles.confirmButtonText}>确认并继续</ThemedText>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      )}
+
+      {/* Box 选择弹窗 */}
+      {showBoxPicker && (
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <ThemedText type="title" style={styles.modalTitle}>📦 选择 Box</ThemedText>
+            
+            <ScrollView style={styles.boxList}>
+              {/* 不选择 Box 的选项 */}
+              <Pressable
+                style={[
+                  styles.boxItem,
+                  !selectedBox && styles.boxItemSelected
+                ]}
+                onPress={() => {
+                  setSelectedBox(null);
+                  setShowBoxPicker(false);
+                }}
+              >
+                <ThemedText style={styles.boxItemName}>不放入 Box</ThemedText>
+                <ThemedText style={styles.boxItemHint}>产品将不关联任何 Box</ThemedText>
+              </Pressable>
+
+              {/* 现有 Box 列表 */}
+              {boxes.map((box) => (
+                <Pressable
+                  key={box.id}
+                  style={[
+                    styles.boxItem,
+                    selectedBox?.id === box.id && styles.boxItemSelected
+                  ]}
+                  onPress={() => {
+                    setSelectedBox(box);
+                    setShowBoxPicker(false);
+                  }}
+                >
+                  <ThemedText style={styles.boxItemName}>{box.name}</ThemedText>
+                  <ThemedText style={styles.boxItemHint}>
+                    {box.location || '未设置位置'} · {box.items?.length || 0} 件产品
+                  </ThemedText>
+                </Pressable>
+              ))}
+
+              {/* 新建 Box */}
+              <View style={styles.newBoxContainer}>
+                <ThemedText style={styles.newBoxLabel}>新建 Box：</ThemedText>
+                <View style={styles.newBoxInputRow}>
+                  <TextInput
+                    style={[styles.newBoxInput, { backgroundColor: inputBg, color: inputColor }]}
+                    value={newBoxName}
+                    onChangeText={setNewBoxName}
+                    placeholder="输入 Box 名称"
+                    placeholderTextColor={placeholderColor}
+                  />
+                  <Pressable
+                    style={[styles.newBoxButton, !newBoxName && styles.newBoxButtonDisabled]}
+                    onPress={async () => {
+                      if (!newBoxName.trim()) return;
+                      try {
+                        const newBox = await createBox({
+                          prefix: newBoxName.trim(),
+                          location: location || '',
+                          operatorId,
+                          operatorName,
+                        });
+                        setBoxes([newBox, ...boxes]);
+                        setSelectedBox(newBox);
+                        setNewBoxName('');
+                        setShowBoxPicker(false);
+                      } catch (error) {
+                        console.error('[QuickAdd] Failed to create box:', error);
+                        alert('创建 Box 失败');
+                      }
+                    }}
+                    disabled={!newBoxName.trim()}
+                  >
+                    <ThemedText style={styles.newBoxButtonText}>创建</ThemedText>
+                  </Pressable>
+                </View>
+              </View>
+            </ScrollView>
+
+            <View style={styles.modalButtons}>
+              <Pressable
+                style={[styles.modalButton, styles.cancelButton]}
+                onPress={() => setShowBoxPicker(false)}
+              >
+                <ThemedText style={styles.cancelButtonText}>关闭</ThemedText>
               </Pressable>
             </View>
           </View>
@@ -1602,5 +1724,71 @@ const styles = StyleSheet.create({
     color: "#666",
     textAlign: "center",
     fontStyle: "italic",
+  },
+
+  // Box 选择弹窗样式
+  boxList: {
+    maxHeight: 300,
+    marginBottom: 16,
+  },
+  boxItem: {
+    padding: 16,
+    backgroundColor: "#f5f5f5",
+    borderRadius: 10,
+    marginBottom: 8,
+  },
+  boxItemSelected: {
+    backgroundColor: "#e3f2fd",
+    borderWidth: 2,
+    borderColor: "#2196F3",
+  },
+  boxItemName: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#000",
+    marginBottom: 4,
+  },
+  boxItemHint: {
+    fontSize: 13,
+    color: "#666",
+  },
+  newBoxContainer: {
+    marginTop: 16,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: "#e0e0e0",
+  },
+  newBoxLabel: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#000",
+    marginBottom: 8,
+  },
+  newBoxInputRow: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  newBoxInput: {
+    flex: 1,
+    height: 44,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    fontSize: 15,
+  },
+  newBoxButton: {
+    height: 44,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    backgroundColor: "#2196F3",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  newBoxButtonDisabled: {
+    backgroundColor: "#ccc",
+  },
+  newBoxButtonText: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: "#fff",
   },
 });

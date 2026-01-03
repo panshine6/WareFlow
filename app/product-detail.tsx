@@ -376,17 +376,17 @@ export default function ProductDetailScreen() {
           </View>
 
           {/* Box */}
-          {product.boxId && (
+          {product.boxName && (
             <View style={styles.infoRow}>
               <ThemedText style={styles.label}>Box</ThemedText>
               <View style={styles.storageLocationRow}>
-                <ThemedText style={styles.value}>{product.boxName || product.boxId}</ThemedText>
+                <ThemedText style={styles.value}>{product.boxName}</ThemedText>
                 {Platform.OS === 'web' && (
                   <Pressable
                     onPress={async () => {
                       try {
-                        await navigator.clipboard.writeText(product.boxName || product.boxId || '');
-                        Alert.alert('复制成功', `已复制 Box: ${product.boxName || product.boxId}`);
+                        await navigator.clipboard.writeText(product.boxName || '');
+                        Alert.alert('复制成功', `已复制 Box: ${product.boxName}`);
                       } catch (error) {
                         Alert.alert('复制失败', '请手动复制');
                       }
