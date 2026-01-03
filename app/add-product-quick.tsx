@@ -87,6 +87,9 @@ export default function AddProductQuickScreen() {
   // SKU 生成助手弹窗
   const [showSkuGenerator, setShowSkuGenerator] = useState(false);
 
+  // 选中的相似产品（用于显示合并按钮）
+  const [selectedSimilarProduct, setSelectedSimilarProduct] = useState<Product | null>(null);
+
   // 加载默认设置
   useEffect(() => {
     const loadDefaults = async () => {
@@ -253,11 +256,27 @@ export default function AddProductQuickScreen() {
     setShowDuplicateModal(false);
   };
 
-  // 选择合并到现有产品
-  const handleMergeToProduct = (product: Product) => {
-    setMergeToProductId(product.id);
-    setSku(product.sku);
-    setShowDuplicateModal(false);
+  // 查看相似产品详情（跳转到详情页）
+  const handleViewSimilarProduct = (product: Product) => {
+    // 设置选中的产品，用于返回后显示合并按钮
+    setSelectedSimilarProduct(product);
+    // 跳转到产品详情页
+    router.push({ pathname: "/product-detail" as any, params: { id: product.id } });
+  };
+
+  // 确认合并到选中的产品
+  const handleConfirmMerge = () => {
+    if (selectedSimilarProduct) {
+      setMergeToProductId(selectedSimilarProduct.id);
+      setSku(selectedSimilarProduct.sku);
+      setSelectedSimilarProduct(null);
+      setShowDuplicateModal(false);
+    }
+  };
+
+  // 取消合并选择
+  const handleCancelMerge = () => {
+    setSelectedSimilarProduct(null);
   };
 
   // 点击数量字段 - 显示 AI 计数结果
@@ -740,29 +759,50 @@ export default function AddProductQuickScreen() {
             {duplicateResult?.duplicates && duplicateResult.duplicates.length > 0 ? (
               <ScrollView style={styles.matchList}>
                 <ThemedText style={styles.matchListTitle}>
-                  发现 {duplicateResult.duplicates.length} 个相似产品：
+                  发现 {duplicateResult.duplicates.length} 个相似产品（点击查看详情）：
                 </ThemedText>
                 {duplicateResult.duplicates.map((dup, index) => (
-                  <Pressable
-                    key={dup.product.id}
-                    style={styles.matchItem}
-                    onPress={() => handleMergeToProduct(dup.product)}
-                  >
-                    <Image
-                      source={{ uri: dup.product.detailImageUri }}
-                      style={styles.matchImage}
-                    />
-                    <View style={styles.matchInfo}>
-                      <ThemedText style={styles.matchSku}>{dup.product.sku}</ThemedText>
-                      <ThemedText style={styles.matchSimilarity}>
-                        相似度: {dup.similarityScore}%
-                      </ThemedText>
-                      <ThemedText style={styles.matchQuantity}>
-                        当前库存: {dup.product.quantity}
-                      </ThemedText>
-                    </View>
-                    <ThemedText style={styles.matchArrow}>›</ThemedText>
-                  </Pressable>
+                  <View key={dup.product.id}>
+                    <Pressable
+                      style={[
+                        styles.matchItem,
+                        selectedSimilarProduct?.id === dup.product.id && styles.matchItemSelected
+                      ]}
+                      onPress={() => handleViewSimilarProduct(dup.product)}
+                    >
+                      <Image
+                        source={{ uri: dup.product.detailImageUri }}
+                        style={styles.matchImage}
+                      />
+                      <View style={styles.matchInfo}>
+                        <ThemedText style={styles.matchSku}>{dup.product.sku}</ThemedText>
+                        <ThemedText style={styles.matchSimilarity}>
+                          相似度: {dup.similarityScore}%
+                        </ThemedText>
+                        <ThemedText style={styles.matchQuantity}>
+                          当前库存: {dup.product.quantity}
+                        </ThemedText>
+                      </View>
+                      <ThemedText style={styles.matchArrow}>›</ThemedText>
+                    </Pressable>
+                    {/* 如果该产品被选中，显示合并按钮 */}
+                    {selectedSimilarProduct?.id === dup.product.id && (
+                      <View style={styles.mergeButtonsContainer}>
+                        <Pressable
+                          style={styles.cancelMergeButton}
+                          onPress={handleCancelMerge}
+                        >
+                          <ThemedText style={styles.cancelMergeButtonText}>取消</ThemedText>
+                        </Pressable>
+                        <Pressable
+                          style={styles.confirmMergeButton}
+                          onPress={handleConfirmMerge}
+                        >
+                          <ThemedText style={styles.confirmMergeButtonText}>合并到此款式</ThemedText>
+                        </Pressable>
+                      </View>
+                    )}
+                  </View>
                 ))}
               </ScrollView>
             ) : (
@@ -1215,6 +1255,11 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     marginBottom: 8,
   },
+  matchItemSelected: {
+    backgroundColor: "#e3f2fd",
+    borderWidth: 2,
+    borderColor: "#007AFF",
+  },
   matchImage: {
     width: 50,
     height: 50,
@@ -1242,6 +1287,39 @@ const styles = StyleSheet.create({
   matchArrow: {
     fontSize: 20,
     color: "#999",
+  },
+  mergeButtonsContainer: {
+    flexDirection: "row",
+    gap: 8,
+    marginTop: -4,
+    marginBottom: 12,
+    paddingHorizontal: 4,
+  },
+  cancelMergeButton: {
+    flex: 1,
+    height: 40,
+    borderRadius: 8,
+    backgroundColor: "#f0f0f0",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  cancelMergeButtonText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#666",
+  },
+  confirmMergeButton: {
+    flex: 2,
+    height: 40,
+    borderRadius: 8,
+    backgroundColor: "#34C759",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  confirmMergeButtonText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#fff",
   },
   noMatchText: {
     textAlign: "center",
