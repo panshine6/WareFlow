@@ -21,7 +21,11 @@ import { useColorScheme } from "@/hooks/use-color-scheme";
 import { ProductStorage } from "@/lib/storage";
 import { OutboundStorage } from "@/lib/outbound-storage";
 import { UserStorage } from "@/lib/user-storage";
+import { scanBarcodeFromImage, detectBarcodeType, lookupProductByBarcode } from "@/lib/barcode-scanner";
+import { getBoxById } from "@/lib/box-storage";
+import { compressImage, base64ToDataUrl } from "@/lib/image-utils";
 import type { Product, OutboundRecord, OutboundItem, InventoryHistoryEntry } from "@/types/product";
+import type { Box } from "@/types/box";
 
 
 // 选中的产品项
@@ -63,7 +67,13 @@ export default function OutboundScreen() {
   // 确认弹窗状态
   const [showConfirmModal, setShowConfirmModal] = useState(false);
 
-
+  // 条形码扫描状态
+  const [scanningBarcode, setScanningBarcode] = useState(false);
+  const [showScanResult, setShowScanResult] = useState(false);
+  const [scannedBarcode, setScannedBarcode] = useState<string | null>(null);
+  const [scannedBox, setScannedBox] = useState<Box | null>(null);
+  const [scannedProduct, setScannedProduct] = useState<Product | null>(null);
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
 
   // 当前用户
   const [currentUser, setCurrentUser] = useState<{ id: number; name: string } | null>(null);
@@ -143,6 +153,132 @@ export default function OutboundScreen() {
     } finally {
       setSearching(false);
     }
+  };
+
+  // 处理条形码扫描
+  const handleBarcodeScan = async (event: Event) => {
+    const target = event.target as HTMLInputElement;
+    const file = target.files?.[0];
+    if (!file) return;
+
+    try {
+      setScanningBarcode(true);
+
+      // 读取文件为 base64
+      const reader = new FileReader();
+      const result = await new Promise<string>((resolve, reject) => {
+        reader.onload = (e) => resolve(e.target?.result as string);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+
+      const originalBase64 = result.split(",")[1];
+
+      // 压缩图片
+      const compressedBase64 = await compressImage(originalBase64, 1024 * 1024, 0.8);
+
+      // 调用条形码识别 API
+      const scanResult = await scanBarcodeFromImage(compressedBase64);
+
+      if (!scanResult.found || !scanResult.barcode) {
+        Alert.alert("提示", "未在图片中检测到条形码，请确保图片清晰并包含条形码");
+        return;
+      }
+
+      const barcode = scanResult.barcode;
+      setScannedBarcode(barcode);
+
+      // 检测条形码类型
+      const barcodeType = detectBarcodeType(barcode);
+
+      if (barcodeType === "box") {
+        // Box 条形码，查找 Box 信息
+        const box = await getBoxById(barcode);
+        if (box) {
+          setScannedBox(box);
+          setScannedProduct(null);
+          setShowScanResult(true);
+        } else {
+          Alert.alert("提示", `未找到 Box: ${barcode}`);
+        }
+      } else {
+        // 产品条形码，查找产品信息
+        const product = await lookupProductByBarcode(barcode);
+        if (product) {
+          setScannedProduct(product);
+          setScannedBox(null);
+          setShowScanResult(true);
+        } else {
+          Alert.alert("提示", `未找到产品: ${barcode}`);
+        }
+      }
+    } catch (error) {
+      console.error("[Outbound] Barcode scan failed:", error);
+      Alert.alert("错误", "条形码识别失败，请重试");
+    } finally {
+      setScanningBarcode(false);
+      // 清空文件输入
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
+    }
+  };
+
+  // 确认扫描结果，添加到出库列表
+  const handleConfirmScanResult = async () => {
+    if (scannedBox) {
+      // Box 出库：添加 Box 内所有产品
+      const boxProducts: SelectedProduct[] = [];
+      for (const item of scannedBox.items) {
+        const product = await ProductStorage.getById(item.productId);
+        if (product && product.quantity > 0) {
+          boxProducts.push({
+            ...product,
+            selectedQuantity: Math.min(item.quantity, product.quantity),
+            isSelected: true,
+          });
+        }
+      }
+
+      if (boxProducts.length > 0) {
+        // 合并到现有搜索结果
+        setSearchResults((prev) => {
+          const existingIds = new Set(prev.map((p) => p.id));
+          const newProducts = boxProducts.filter((p) => !existingIds.has(p.id));
+          return [...prev, ...newProducts];
+        });
+        Alert.alert("成功", `已添加 Box "${scannedBox.name}" 内的 ${boxProducts.length} 个产品到出库列表`);
+      } else {
+        Alert.alert("提示", "Box 内没有可出库的产品");
+      }
+    } else if (scannedProduct) {
+      // 单品出库：添加单个产品
+      const existingIndex = searchResults.findIndex((p) => p.id === scannedProduct.id);
+      if (existingIndex >= 0) {
+        // 已存在，选中它
+        setSearchResults((prev) =>
+          prev.map((p, i) =>
+            i === existingIndex ? { ...p, isSelected: true } : p
+          )
+        );
+      } else {
+        // 不存在，添加到列表
+        setSearchResults((prev) => [
+          ...prev,
+          {
+            ...scannedProduct,
+            selectedQuantity: scannedProduct.quantity,
+            isSelected: true,
+          },
+        ]);
+      }
+      Alert.alert("成功", `已添加产品 "${scannedProduct.sku}" 到出库列表`);
+    }
+
+    setShowScanResult(false);
+    setScannedBarcode(null);
+    setScannedBox(null);
+    setScannedProduct(null);
   };
 
   // 切换产品选中状态
@@ -403,6 +539,32 @@ export default function OutboundScreen() {
             </Pressable>
           </View>
 
+          {/* 条形码扫描按钮 */}
+          <Pressable
+            style={[styles.scanButton, scanningBarcode && styles.buttonDisabled]}
+            onPress={() => fileInputRef.current?.click()}
+            disabled={scanningBarcode}
+          >
+            <ThemedText style={styles.scanButtonText}>
+              {scanningBarcode ? "📷 扫描中..." : "📷 扫描条形码出库"}
+            </ThemedText>
+            <ThemedText style={styles.scanButtonHint}>
+              支持单品条形码或 Box 条形码
+            </ThemedText>
+          </Pressable>
+
+          {/* 隐藏的文件输入 */}
+          {Platform.OS === "web" && (
+            <input
+              ref={fileInputRef as any}
+              type="file"
+              accept="image/*"
+              capture="environment"
+              style={{ display: "none" }}
+              onChange={(e) => handleBarcodeScan(e as any)}
+            />
+          )}
+
           {/* 搜索结果 */}
           {searchResults.length > 0 && (
             <>
@@ -626,6 +788,82 @@ export default function OutboundScreen() {
                 onPress={handleConfirmOutbound}
               >
                 <ThemedText style={styles.modalConfirmText}>确认出库</ThemedText>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* 条形码扫描结果弹窗 */}
+      <Modal
+        visible={showScanResult}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setShowScanResult(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { backgroundColor: colorScheme === 'dark' ? '#333' : '#fff' }]}>
+            <ThemedText style={styles.modalTitle}>📷 条形码识别结果</ThemedText>
+            
+            <View style={styles.scanResultContainer}>
+              <View style={styles.scanResultHeader}>
+                <ThemedText style={styles.scanResultLabel}>识别到的条形码：</ThemedText>
+                <ThemedText style={styles.scanResultValue}>{scannedBarcode}</ThemedText>
+              </View>
+
+              {scannedBox ? (
+                <View style={styles.scanResultInfo}>
+                  <ThemedText style={styles.scanResultTitle}>📦 Box 信息</ThemedText>
+                  <View style={styles.boxInfoCard}>
+                    <ThemedText style={styles.boxName}>{scannedBox.name}</ThemedText>
+                    <ThemedText style={styles.boxLocation}>位置：{scannedBox.location}</ThemedText>
+                    <ThemedText style={styles.boxItemCount}>包含 {scannedBox.items.length} 个产品</ThemedText>
+                    <ThemedText style={styles.boxStatus}>状态：{scannedBox.status === 'open' ? '开放中' : '已封箱'}</ThemedText>
+                  </View>
+                  <ThemedText style={styles.scanResultHint}>
+                    点击确认将添加 Box 内所有产品到出库列表
+                  </ThemedText>
+                </View>
+              ) : scannedProduct ? (
+                <View style={styles.scanResultInfo}>
+                  <ThemedText style={styles.scanResultTitle}>🎁 产品信息</ThemedText>
+                  <View style={styles.productInfoCard}>
+                    {scannedProduct.detailImageUri && (
+                      <Image 
+                        source={{ uri: scannedProduct.detailImageUri }} 
+                        style={styles.productInfoImage} 
+                      />
+                    )}
+                    <View style={styles.productInfoDetails}>
+                      <ThemedText style={styles.productInfoSku}>{scannedProduct.sku}</ThemedText>
+                      <ThemedText style={styles.productInfoQuantity}>当前库存：{scannedProduct.quantity}</ThemedText>
+                      <ThemedText style={styles.productInfoLocation}>位置：{scannedProduct.storageLocation || '未设置'}</ThemedText>
+                    </View>
+                  </View>
+                  <ThemedText style={styles.scanResultHint}>
+                    点击确认将添加此产品到出库列表
+                  </ThemedText>
+                </View>
+              ) : null}
+            </View>
+
+            <View style={styles.modalButtons}>
+              <Pressable
+                style={[styles.modalButton, styles.modalCancelButton]}
+                onPress={() => {
+                  setShowScanResult(false);
+                  setScannedBarcode(null);
+                  setScannedBox(null);
+                  setScannedProduct(null);
+                }}
+              >
+                <ThemedText style={styles.modalCancelText}>取消</ThemedText>
+              </Pressable>
+              <Pressable
+                style={[styles.modalButton, styles.modalConfirmButton]}
+                onPress={handleConfirmScanResult}
+              >
+                <ThemedText style={styles.modalConfirmText}>确认添加</ThemedText>
               </Pressable>
             </View>
           </View>
@@ -975,4 +1213,117 @@ const styles = StyleSheet.create({
     color: "#fff",
   },
 
+  // 条形码扫描按钮样式
+  scanButton: {
+    backgroundColor: "rgba(52, 199, 89, 0.15)",
+    borderRadius: 12,
+    padding: 16,
+    alignItems: "center",
+    marginBottom: 16,
+    borderWidth: 2,
+    borderColor: "#34C759",
+    borderStyle: "dashed",
+  },
+  scanButtonText: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#34C759",
+    marginBottom: 4,
+  },
+  scanButtonHint: {
+    fontSize: 12,
+    color: "#666",
+  },
+
+  // 条形码扫描结果弹窗样式
+  scanResultContainer: {
+    marginBottom: 16,
+  },
+  scanResultHeader: {
+    backgroundColor: "rgba(52, 199, 89, 0.1)",
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 16,
+  },
+  scanResultLabel: {
+    fontSize: 13,
+    color: "#666",
+    marginBottom: 4,
+  },
+  scanResultValue: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#34C759",
+    fontFamily: "monospace",
+  },
+  scanResultInfo: {
+    marginBottom: 8,
+  },
+  scanResultTitle: {
+    fontSize: 14,
+    fontWeight: "600",
+    marginBottom: 8,
+  },
+  boxInfoCard: {
+    backgroundColor: "rgba(0, 0, 0, 0.05)",
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 8,
+  },
+  boxName: {
+    fontSize: 16,
+    fontWeight: "600",
+    marginBottom: 4,
+  },
+  boxLocation: {
+    fontSize: 14,
+    color: "#666",
+    marginBottom: 2,
+  },
+  boxItemCount: {
+    fontSize: 14,
+    color: "#007AFF",
+    marginBottom: 2,
+  },
+  boxStatus: {
+    fontSize: 14,
+    color: "#666",
+  },
+  productInfoCard: {
+    flexDirection: "row",
+    backgroundColor: "rgba(0, 0, 0, 0.05)",
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 8,
+  },
+  productInfoImage: {
+    width: 60,
+    height: 60,
+    borderRadius: 8,
+    marginRight: 12,
+  },
+  productInfoDetails: {
+    flex: 1,
+    justifyContent: "center",
+  },
+  productInfoSku: {
+    fontSize: 15,
+    fontWeight: "600",
+    marginBottom: 4,
+  },
+  productInfoQuantity: {
+    fontSize: 13,
+    color: "#666",
+    marginBottom: 2,
+  },
+  productInfoLocation: {
+    fontSize: 13,
+    color: "#666",
+  },
+  scanResultHint: {
+    fontSize: 13,
+    color: "#666",
+    textAlign: "center",
+    fontStyle: "italic",
+  },
 });

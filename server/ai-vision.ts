@@ -159,6 +159,86 @@ export async function compareImageSimilarity(
 }
 
 /**
+ * 从图片中识别条形码
+ */
+export async function scanBarcodeFromImage(imageBase64: string): Promise<{ barcodeValue: string | null; confidence: number }> {
+  if (!OPENAI_API_KEY) {
+    throw new Error("未配置 OpenAI API 密钥");
+  }
+
+  try {
+    const response = await fetch(`${OPENAI_BASE_URL}/chat/completions`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${OPENAI_API_KEY}`,
+      },
+      body: JSON.stringify({
+        model: "gpt-4o-mini",
+        messages: [
+          {
+            role: "user",
+            content: [
+              {
+                type: "text",
+                text: `请仔细观察这张图片，识别其中的条形码或二维码。
+
+识别要点：
+1. 查找图片中的条形码（Code 128 格式）或二维码
+2. 读取条形码下方的文字内容（通常是 SKU 编号）
+3. SKU 格式可能是：
+   - 系统 SKU：BL + 6位日期 + 4位字符 + 1位校验位（如 BL260103EKBAM）
+   - 用户 SKU：如 LB-ER-ME-0006
+   - Box ID：如 LB-RF-GM-Box-1
+
+请返回 JSON 格式的结果：
+{
+  "barcodeValue": "识别到的条形码内容，如果未识别到则为 null",
+  "confidence": 0-100 的整数，表示识别置信度
+}
+
+注意：
+- 优先读取条形码下方的文字
+- 如果图片中没有条形码，返回 barcodeValue 为 null`,
+              },
+              {
+                type: "image_url",
+                image_url: {
+                  url: `data:image/jpeg;base64,${imageBase64}`,
+                  detail: "high",
+                },
+              },
+            ],
+          },
+        ],
+        max_tokens: 100,
+        response_format: { type: "json_object" },
+      }),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      console.error("OpenAI API error:", errorData);
+      throw new Error(`API request failed: ${response.statusText}`);
+    }
+
+    const data = await response.json();
+    const content = data.choices[0]?.message?.content || "{}";
+    const result = JSON.parse(content);
+
+    console.log("[AI Vision] Barcode scan result:", result);
+
+    return {
+      barcodeValue: result.barcodeValue || null,
+      confidence: result.confidence || 0,
+    };
+  } catch (error) {
+    console.error("Barcode scan error:", error);
+    throw error;
+  }
+}
+
+/**
  * 批量对比图片相似度（优化版：并行处理 + 超时限制）
  */
 export async function batchCompareImages(

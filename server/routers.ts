@@ -251,6 +251,16 @@ export const appRouter = router({
         );
         return { results };
       }),
+
+    // 从图片中识别条形码
+    scanBarcode: publicProcedure
+      .input(z.object({
+        imageBase64: z.string(),
+      }))
+      .mutation(async ({ input }) => {
+        const result = await aiVision.scanBarcodeFromImage(input.imageBase64);
+        return result;
+      }),
   }),
 });
 

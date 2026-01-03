@@ -27,6 +27,7 @@ import { calculateAndSaveProductHash, imageToBase64, performDuplicateCheck, Dupl
 import { generateSystemSKU, generateLabelForNiimbotD110, saveToPhotoAlbum } from "@/lib/barcode";
 import { generateLabelForNiimbotB1 } from "@/lib/niimbot-printer";
 import { countProductsInImage } from "@/lib/ai-vision";
+import { scanBarcodeFromImage, detectBarcodeType, lookupProductByBarcode } from "@/lib/barcode-scanner";
 import SkuGeneratorModal from "@/components/SkuGeneratorModal";
 import { compressImage, base64ToDataUrl } from "@/lib/image-utils";
 import type { Product, InventoryHistoryEntry } from "@/types/product";
@@ -89,6 +90,12 @@ export default function AddProductQuickScreen() {
 
   // 选中的相似产品（用于显示合并按钮）
   const [selectedSimilarProduct, setSelectedSimilarProduct] = useState<Product | null>(null);
+
+  // 条形码扫描相关状态
+  const [barcodeScanStatus, setBarcodeScanStatus] = useState<"idle" | "scanning" | "found" | "not_found">("idle");
+  const [scannedBarcode, setScannedBarcode] = useState<string | null>(null);
+  const [scannedProduct, setScannedProduct] = useState<Product | null>(null);
+  const [showBarcodeScanResult, setShowBarcodeScanResult] = useState(false);
 
   // 加载默认设置
   useEffect(() => {
@@ -159,6 +166,45 @@ export default function AddProductQuickScreen() {
     }
   };
 
+  // 后台条形码扫描（在细节图拍摄后触发）
+  const runBarcodeScanInBackground = async (base64: string) => {
+    console.log("[QuickAdd] Starting background barcode scan...");
+    setBarcodeScanStatus("scanning");
+    try {
+      const scanResult = await scanBarcodeFromImage(base64);
+      console.log("[QuickAdd] Barcode scan result:", scanResult);
+      
+      if (scanResult.success && scanResult.barcodeValue) {
+        setScannedBarcode(scanResult.barcodeValue);
+        
+        // 根据条形码查找产品
+        const barcodeType = detectBarcodeType(scanResult.barcodeValue);
+        if (barcodeType === 'systemSku' || barcodeType === 'userSku') {
+          const lookupResult = await lookupProductByBarcode(scanResult.barcodeValue);
+          if (lookupResult.found && lookupResult.product) {
+            setScannedProduct(lookupResult.product as Product);
+            setBarcodeScanStatus("found");
+            // 自动填充 SKU
+            setSku(lookupResult.product.sku);
+            // 显示扫描结果弹窗
+            setShowBarcodeScanResult(true);
+            console.log("[QuickAdd] Product found by barcode:", lookupResult.product);
+          } else {
+            setBarcodeScanStatus("not_found");
+            console.log("[QuickAdd] No product found for barcode:", scanResult.barcodeValue);
+          }
+        } else {
+          setBarcodeScanStatus("not_found");
+        }
+      } else {
+        setBarcodeScanStatus("idle");
+      }
+    } catch (error: any) {
+      console.error("[QuickAdd] Barcode scan failed:", error.message);
+      setBarcodeScanStatus("idle");
+    }
+  };
+
   // 后台计数（在全景图拍摄后触发）
   const runCountInBackground = async (base64: string) => {
     setCountStatus("running");
@@ -207,6 +253,9 @@ export default function AddProductQuickScreen() {
 
         // 后台查重（不等待）
         runDuplicateCheckInBackground(dataUrl, compressedBase64);
+        
+        // 后台条形码扫描（不等待）
+        runBarcodeScanInBackground(compressedBase64);
 
         // 直接切换到全景图阶段
         setStage("overview_photo");
@@ -645,6 +694,19 @@ export default function AddProductQuickScreen() {
                  countStatus === "running" ? "计数中..." : "✓ 计数已完成"}
               </ThemedText>
             </View>
+            {barcodeScanStatus !== "idle" && (
+              <View style={[
+                styles.statusBadge,
+                barcodeScanStatus === "found" ? styles.statusBadgeFound : 
+                barcodeScanStatus === "scanning" ? styles.statusBadgeRunning : styles.statusBadgeNotFound
+              ]}>
+                {barcodeScanStatus === "scanning" && <ActivityIndicator size="small" color="#007AFF" style={styles.statusSpinner} />}
+                <ThemedText style={styles.statusText}>
+                  {barcodeScanStatus === "scanning" ? "📷 扫描中..." :
+                   barcodeScanStatus === "found" ? "✓ 已识别条形码" : "⚠ 未找到条形码"}
+                </ThemedText>
+              </View>
+            )}
           </View>
 
           {/* 表单 */}
@@ -905,6 +967,56 @@ export default function AddProductQuickScreen() {
           setShowSkuGenerator(false);
         }}
       />
+
+      {/* 条形码扫描结果弹窗 */}
+      {showBarcodeScanResult && scannedProduct && (
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <ThemedText type="title" style={styles.modalTitle}>📷 条形码识别结果</ThemedText>
+            
+            <View style={styles.barcodeScanResultContainer}>
+              <View style={styles.barcodeResultHeader}>
+                <ThemedText style={styles.barcodeResultLabel}>识别到的条形码：</ThemedText>
+                <ThemedText style={styles.barcodeResultValue}>{scannedBarcode}</ThemedText>
+              </View>
+              
+              <View style={styles.barcodeProductInfo}>
+                <ThemedText style={styles.barcodeProductTitle}>匹配到的产品：</ThemedText>
+                <View style={styles.barcodeProductCard}>
+                  {scannedProduct.detailImageUri && (
+                    <Image 
+                      source={{ uri: scannedProduct.detailImageUri }} 
+                      style={styles.barcodeProductImage} 
+                    />
+                  )}
+                  <View style={styles.barcodeProductDetails}>
+                    <ThemedText style={styles.barcodeProductSku}>{scannedProduct.sku}</ThemedText>
+                    <ThemedText style={styles.barcodeProductQuantity}>当前库存：{scannedProduct.quantity}</ThemedText>
+                    <ThemedText style={styles.barcodeProductLocation}>位置：{scannedProduct.location || '未设置'}</ThemedText>
+                  </View>
+                </View>
+              </View>
+              
+              <ThemedText style={styles.barcodeHint}>
+                系统已自动填充 SKU，您可以继续完成入库操作
+              </ThemedText>
+            </View>
+
+            <View style={styles.modalButtons}>
+              <Pressable
+                style={[styles.modalButton, styles.confirmButton, { flex: 1 }]}
+                onPress={() => {
+                  setShowBarcodeScanResult(false);
+                  // 设置合并模式
+                  setMergeToProductId(scannedProduct.id);
+                }}
+              >
+                <ThemedText style={styles.confirmButtonText}>确认并继续</ThemedText>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      )}
     </ThemedView>
   );
 }
@@ -1104,6 +1216,12 @@ const styles = StyleSheet.create({
   },
   statusBadgeDone: {
     backgroundColor: "rgba(76, 217, 100, 0.15)",
+  },
+  statusBadgeFound: {
+    backgroundColor: "rgba(52, 199, 89, 0.15)",
+  },
+  statusBadgeNotFound: {
+    backgroundColor: "rgba(255, 149, 0, 0.15)",
   },
   statusSpinner: {
     marginRight: 6,
@@ -1416,5 +1534,73 @@ const styles = StyleSheet.create({
     textAlign: "center",
     fontSize: 20,
     fontWeight: "bold",
+  },
+
+  // 条形码扫描结果弹窗样式
+  barcodeScanResultContainer: {
+    marginBottom: 16,
+  },
+  barcodeResultHeader: {
+    backgroundColor: "rgba(52, 199, 89, 0.1)",
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 16,
+  },
+  barcodeResultLabel: {
+    fontSize: 13,
+    color: "#666",
+    marginBottom: 4,
+  },
+  barcodeResultValue: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#34C759",
+    fontFamily: "monospace",
+  },
+  barcodeProductInfo: {
+    marginBottom: 16,
+  },
+  barcodeProductTitle: {
+    fontSize: 14,
+    fontWeight: "600",
+    marginBottom: 8,
+    color: "#000",
+  },
+  barcodeProductCard: {
+    flexDirection: "row",
+    backgroundColor: "#f5f5f5",
+    borderRadius: 10,
+    padding: 12,
+  },
+  barcodeProductImage: {
+    width: 60,
+    height: 60,
+    borderRadius: 8,
+    marginRight: 12,
+  },
+  barcodeProductDetails: {
+    flex: 1,
+    justifyContent: "center",
+  },
+  barcodeProductSku: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: "#000",
+    marginBottom: 4,
+  },
+  barcodeProductQuantity: {
+    fontSize: 13,
+    color: "#666",
+    marginBottom: 2,
+  },
+  barcodeProductLocation: {
+    fontSize: 13,
+    color: "#666",
+  },
+  barcodeHint: {
+    fontSize: 13,
+    color: "#666",
+    textAlign: "center",
+    fontStyle: "italic",
   },
 });
