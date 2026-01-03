@@ -29,6 +29,12 @@ import { generateLabelForNiimbotB1 } from "@/lib/niimbot-printer";
  * 产品详情页面
  */
 export default function ProductDetailScreen() {
+  // 隐藏 Web 端的标题栏
+  // @ts-ignore
+  ProductDetailScreen.options = {
+    headerShown: false,
+    title: '产品详情',
+  };
   const params = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const insets = useSafeAreaInsets();
