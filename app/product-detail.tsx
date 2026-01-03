@@ -247,18 +247,14 @@ export default function ProductDetailScreen() {
           <ThemedText style={styles.backButtonText}>← 返回</ThemedText>
         </Pressable>
 
-        {/* 标题 */}
-        <View style={styles.titleContainer}>
-          <View style={styles.titleIconContainer}>
-            <ThemedText style={styles.titleIcon}>📦</ThemedText>
+        {/* 标题卡片美化 */}
+        <View style={styles.titleCard}>
+          <View style={styles.titleCardIcon}>
+            <ThemedText style={styles.titleCardIconText}>📦</ThemedText>
           </View>
-          <View style={styles.titleTextContainer}>
-            <ThemedText type="title" style={styles.title}>
-              产品详情
-            </ThemedText>
-            <ThemedText style={styles.titleSubtitle}>
-              {product.sku}
-            </ThemedText>
+          <View style={styles.titleCardContent}>
+            <ThemedText style={styles.titleCardTitle}>产品详情</ThemedText>
+            <ThemedText style={styles.titleCardSubtitle}>SKU: {product.sku}</ThemedText>
           </View>
         </View>
 
@@ -725,37 +721,56 @@ const styles = StyleSheet.create({
     lineHeight: 24,
     color: "#007AFF",
   },
-  titleContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 16,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    backgroundColor: "rgba(0, 122, 255, 0.08)",
-    borderRadius: 16,
-    borderLeftWidth: 4,
-    borderLeftColor: "#007AFF",
-  },
-  titleIconContainer: {
-    width: 48,
-    height: 48,
+    // 新增标题卡片样式
+  titleCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#007AFF', // iOS 蓝色
+    padding: 20,
+    marginHorizontal: 0, // 移除水平边距，让它更宽
+    marginTop: 10,
     borderRadius: 12,
-    backgroundColor: "#007AFF",
-    justifyContent: "center",
-    alignItems: "center",
-    marginRight: 14,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 5,
+    // 渐变效果
+    // Note: React Native does not support CSS `backgroundImage` with `linear-gradient`.
+    // We will use a solid color and rely on the platform's theming for a better look.
+    // For a true gradient, a third-party library like `expo-linear-gradient` would be needed.
+    // We will use a darker blue for a more premium feel in dark mode.
+    backgroundColor: Colors.dark.cardBackground, // 使用主题背景色
+    borderColor: Colors.dark.border,
+    borderWidth: 1,
   },
-  titleIcon: {
-    fontSize: 24,
+  titleCardIcon: {
+    width: 50,
+    height: 50,
+    borderRadius: 10,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 15,
   },
-  titleTextContainer: {
+  titleCardIconText: {
+    fontSize: 28,
+    color: Colors.dark.text,
+  },
+  titleCardContent: {
     flex: 1,
   },
-  title: {
-    fontSize: 22,
-    fontWeight: "700",
-    marginBottom: 2,
+  titleCardTitle: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: Colors.dark.text,
+    marginBottom: 4,
   },
+  titleCardSubtitle: {
+    fontSize: 14,
+    color: Colors.dark.text,
+    opacity: 0.7,
+  },,
   titleSubtitle: {
     fontSize: 14,
     color: "#666",
