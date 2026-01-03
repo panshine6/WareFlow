@@ -24,6 +24,20 @@ import {
   CodeOption,
 } from "@/lib/sku-generator";
 
+// 跨平台确认对话框
+const showConfirm = (title: string, message: string, onConfirm: () => void) => {
+  if (Platform.OS === "web") {
+    if (window.confirm(`${title}\n${message}`)) {
+      onConfirm();
+    }
+  } else {
+    Alert.alert(title, message, [
+      { text: "取消", style: "cancel" },
+      { text: "确定", style: "destructive", onPress: onConfirm },
+    ]);
+  }
+};
+
 interface SkuGeneratorModalProps {
   visible: boolean;
   onClose: () => void;
@@ -207,29 +221,18 @@ export default function SkuGeneratorModal({
 
   // 删除段
   const handleDeleteSegment = async (segmentId: string) => {
-    Alert.alert(
-      "确认删除",
-      "确定要删除这个段吗？",
-      [
-        { text: "取消", style: "cancel" },
-        {
-          text: "删除",
-          style: "destructive",
-          onPress: async () => {
-            await SkuGenerator.deleteSegment(segmentId);
-            const segs = await SkuGenerator.getSegments();
-            setSegments(segs);
-            
-            // 移除该段的选中值
-            setSegmentValues(prev => {
-              const newValues = { ...prev };
-              delete newValues[segmentId];
-              return newValues;
-            });
-          },
-        },
-      ]
-    );
+    showConfirm("确认删除", "确定要删除这个段吗？", async () => {
+      await SkuGenerator.deleteSegment(segmentId);
+      const segs = await SkuGenerator.getSegments();
+      setSegments(segs);
+      
+      // 移除该段的选中值
+      setSegmentValues(prev => {
+        const newValues = { ...prev };
+        delete newValues[segmentId];
+        return newValues;
+      });
+    });
   };
 
   // 删除选项
@@ -250,17 +253,11 @@ export default function SkuGeneratorModal({
 
   // 序列操作
   const handleResetSequence = async (prefix: string) => {
-    Alert.alert("确认置零", `确定要将 ${prefix} 的流水号置零吗？`, [
-      { text: "取消", style: "cancel" },
-      {
-        text: "确定",
-        onPress: async () => {
-          await SkuGenerator.resetSequence(prefix);
-          const seqs = await SkuGenerator.getAllSequences();
-          setSequences(seqs);
-        },
-      },
-    ]);
+    showConfirm("确认置零", `确定要将 ${prefix} 的流水号置零吗？`, async () => {
+      await SkuGenerator.resetSequence(prefix);
+      const seqs = await SkuGenerator.getAllSequences();
+      setSequences(seqs);
+    });
   };
 
   const handleIncrementSequence = async (prefix: string, amount: number) => {
@@ -271,18 +268,11 @@ export default function SkuGeneratorModal({
   };
 
   const handleDeleteSequence = async (prefix: string) => {
-    Alert.alert("确认删除", `确定要删除 ${prefix} 的序列记录吗？`, [
-      { text: "取消", style: "cancel" },
-      {
-        text: "删除",
-        style: "destructive",
-        onPress: async () => {
-          await SkuGenerator.deleteSequence(prefix);
-          const seqs = await SkuGenerator.getAllSequences();
-          setSequences(seqs);
-        },
-      },
-    ]);
+    showConfirm("确认删除", `确定要删除 ${prefix} 的序列记录吗？`, async () => {
+      await SkuGenerator.deleteSequence(prefix);
+      const seqs = await SkuGenerator.getAllSequences();
+      setSequences(seqs);
+    });
   };
 
   // 渲染段选择器
