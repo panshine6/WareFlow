@@ -375,6 +375,31 @@ export default function ProductDetailScreen() {
             )}
           </View>
 
+          {/* Box */}
+          {product.boxId && (
+            <View style={styles.infoRow}>
+              <ThemedText style={styles.label}>Box</ThemedText>
+              <View style={styles.storageLocationRow}>
+                <ThemedText style={styles.value}>{product.boxName || product.boxId}</ThemedText>
+                {Platform.OS === 'web' && (
+                  <Pressable
+                    onPress={async () => {
+                      try {
+                        await navigator.clipboard.writeText(product.boxName || product.boxId || '');
+                        Alert.alert('复制成功', `已复制 Box: ${product.boxName || product.boxId}`);
+                      } catch (error) {
+                        Alert.alert('复制失败', '请手动复制');
+                      }
+                    }}
+                    style={styles.copyButton}
+                  >
+                    <ThemedText style={styles.copyButtonText}>📋 复制</ThemedText>
+                  </Pressable>
+                )}
+              </View>
+            </View>
+          )}
+
           {/* 操作员 */}
           <View style={styles.infoRow}>
             <ThemedText style={styles.label}>操作员</ThemedText>

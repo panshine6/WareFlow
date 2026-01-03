@@ -100,10 +100,22 @@ export default function SkuGeneratorModal({
     const segs = await SkuGenerator.getSegments();
     setSegments(segs);
     
-    // 初始化选中值（默认选中第一个选项）
+    // 尝试加载上次的选择
+    const lastSelection = await SkuGenerator.getLastSelection();
+    
+    // 初始化选中值
     const initialValues: Record<string, string> = {};
     segs.forEach(seg => {
-      if (seg.options.length > 0) {
+      if (lastSelection && lastSelection[seg.id]) {
+        // 使用上次的选择（如果该选项仍然存在）
+        const optionExists = seg.options.some(o => o.code === lastSelection[seg.id]);
+        if (optionExists) {
+          initialValues[seg.id] = lastSelection[seg.id];
+        } else if (seg.options.length > 0) {
+          initialValues[seg.id] = seg.options[0].code;
+        }
+      } else if (seg.options.length > 0) {
+        // 没有上次选择，默认选中第一个选项
         initialValues[seg.id] = seg.options[0].code;
       }
     });
@@ -144,6 +156,9 @@ export default function SkuGeneratorModal({
     if (!previewSku) return;
     
     await SkuGenerator.confirmSku(previewSku, segmentValues);
+    
+    // 保存当前选择，以便下次使用
+    await SkuGenerator.saveLastSelection(segmentValues);
     
     // 刷新数据
     const hist = await SkuGenerator.getHistory();

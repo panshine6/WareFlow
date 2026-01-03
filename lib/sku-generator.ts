@@ -12,6 +12,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 const SKU_SEQUENCE_KEY = "sku_sequences_v2";
 const SKU_SEGMENTS_KEY = "sku_segments_v2";
 const SKU_HISTORY_KEY = "sku_history_v2";
+const SKU_LAST_SELECTION_KEY = "sku_last_selection";
 
 // 代码选项接口
 export interface CodeOption {
@@ -466,6 +467,32 @@ export const SkuGenerator = {
     }
 
     await this.saveSequences(sequences);
+  },
+
+  // ==================== 上次选择管理 ====================
+
+  /**
+   * 保存上次的段选择
+   */
+  async saveLastSelection(segmentValues: Record<string, string>): Promise<void> {
+    try {
+      await AsyncStorage.setItem(SKU_LAST_SELECTION_KEY, JSON.stringify(segmentValues));
+    } catch (error) {
+      console.error("[SkuGenerator] Failed to save last selection:", error);
+    }
+  },
+
+  /**
+   * 获取上次的段选择
+   */
+  async getLastSelection(): Promise<Record<string, string> | null> {
+    try {
+      const data = await AsyncStorage.getItem(SKU_LAST_SELECTION_KEY);
+      return data ? JSON.parse(data) : null;
+    } catch (error) {
+      console.error("[SkuGenerator] Failed to get last selection:", error);
+      return null;
+    }
   },
 };
 
