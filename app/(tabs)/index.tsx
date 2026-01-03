@@ -27,6 +27,8 @@ import { AutoSync } from "@/lib/auto-sync";
 import { SyncService } from "@/lib/sync";
 import { trpc } from "@/lib/trpc";
 import { APP_VERSION, APP_BUILD, APP_AUTHOR } from "@/lib/version";
+import { SkuGenerator } from "@/lib/sku-generator";
+import SkuGeneratorModal from "@/components/SkuGeneratorModal";
 import type { Product } from "@/types/product";
 
 export default function HomeScreen() {
@@ -41,6 +43,7 @@ export default function HomeScreen() {
   // 弹窗状态
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [showDataModal, setShowDataModal] = useState(false);
+  const [showSkuGenerator, setShowSkuGenerator] = useState(false);
 
   // 使用 tRPC 同步
   const downloadQuery = trpc.sync.download.useQuery(undefined, {
@@ -288,75 +291,24 @@ export default function HomeScreen() {
             <ThemedText style={styles.dataSecurityArrow}>›</ThemedText>
           </View>
         </Pressable>
-      </View>
 
-      {/* 最近入库记录列表 */}
-      <View style={styles.listContainer}>
-        <ThemedText type="subtitle" style={styles.listTitle}>
-          最近入库记录
-        </ThemedText>
-
-        {loading ? (
-          <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" />
+        {/* SKU 生成助手按钮 */}
+        <Pressable
+          style={({ pressed }) => [
+            styles.skuGeneratorButton,
+            { opacity: pressed ? 0.8 : 1 },
+          ]}
+          onPress={() => setShowSkuGenerator(true)}
+        >
+          <View style={styles.dataSecurityContent}>
+            <ThemedText style={styles.skuGeneratorIcon}>🏷️</ThemedText>
+            <View style={styles.dataSecurityTextContainer}>
+              <ThemedText style={styles.skuGeneratorTitle}>SKU 生成助手</ThemedText>
+              <ThemedText style={styles.dataSecurityHint}>元素化生成、序列管理、自动进位</ThemedText>
+            </View>
+            <ThemedText style={styles.dataSecurityArrow}>›</ThemedText>
           </View>
-        ) : recentProducts.length === 0 ? (
-          <View style={styles.emptyContainer}>
-            <ThemedText style={styles.emptyText}>暂无入库记录</ThemedText>
-            <ThemedText style={styles.emptyHint}>
-              点击底部「入库」开始添加产品
-            </ThemedText>
-          </View>
-        ) : (
-          <FlatList
-            data={recentProducts}
-            keyExtractor={(item) => item.id}
-            renderItem={({ item }) => (
-              <Pressable
-                style={({ pressed }) => [
-                  styles.productCard,
-                  item.quantity === 0 && styles.productCardEmpty,
-                  { opacity: pressed ? 0.7 : 1 },
-                ]}
-                onPress={() => router.push({ pathname: "/product-detail" as any, params: { id: item.id } })}
-              >
-                {item.quantity === 0 && (
-                  <View style={styles.emptyBadge}>
-                    <ThemedText style={styles.emptyBadgeText}>库存为0</ThemedText>
-                  </View>
-                )}
-                <Image
-                  source={{ uri: item.detailImageUri }}
-                  style={[
-                    styles.productImage,
-                    item.quantity === 0 && styles.productImageEmpty
-                  ]}
-                />
-                <View style={styles.productInfo}>
-                  <ThemedText type="defaultSemiBold" style={[
-                    styles.productSku,
-                    item.quantity === 0 && styles.productSkuEmpty
-                  ]}>
-                    {item.sku}
-                  </ThemedText>
-                  <ThemedText style={[
-                    styles.productDetail,
-                    item.quantity === 0 && styles.productDetailEmpty
-                  ]}>
-                    数量：{item.quantity} | 位置：{item.storageLocation}
-                  </ThemedText>
-                  <ThemedText style={styles.productTime}>
-                    {new Date(item.createdAt).toLocaleString("zh-CN")}
-                  </ThemedText>
-                </View>
-              </Pressable>
-            )}
-            refreshControl={
-              <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-            }
-            contentContainerStyle={styles.listContent}
-          />
-        )}
+        </Pressable>
       </View>
 
       {/* 设置底部弹窗 */}
@@ -650,6 +602,21 @@ export default function HomeScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* SKU 生成助手弹窗 */}
+      <SkuGeneratorModal
+        visible={showSkuGenerator}
+        onClose={() => setShowSkuGenerator(false)}
+        onConfirm={(sku) => {
+          // 复制到剪贴板或显示提示
+          if (Platform.OS === 'web') {
+            navigator.clipboard?.writeText(sku);
+            window.alert(`SKU 已生成: ${sku}\n\n已复制到剪贴板`);
+          } else {
+            Alert.alert("SKU 已生成", `${sku}\n\n可在新品录入时使用`);
+          }
+        }}
+      />
     </ThemedView>
   );
 }
@@ -743,6 +710,23 @@ const styles = StyleSheet.create({
   dataSecurityArrow: {
     fontSize: 24,
     opacity: 0.5,
+  },
+  skuGeneratorButton: {
+    backgroundColor: "rgba(255, 149, 0, 0.1)",
+    borderRadius: 12,
+    padding: 16,
+    marginTop: 12,
+    borderWidth: 1,
+    borderColor: "rgba(255, 149, 0, 0.2)",
+  },
+  skuGeneratorIcon: {
+    fontSize: 28,
+    marginRight: 12,
+  },
+  skuGeneratorTitle: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#FF9500",
   },
   listContainer: {
     flex: 1,

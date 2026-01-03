@@ -27,6 +27,7 @@ import { calculateAndSaveProductHash, imageToBase64, performDuplicateCheck, Dupl
 import { generateSystemSKU, generateLabelForNiimbotD110, saveToPhotoAlbum } from "@/lib/barcode";
 import { generateLabelForNiimbotB1 } from "@/lib/niimbot-printer";
 import { countProductsInImage } from "@/lib/ai-vision";
+import SkuGeneratorModal from "@/components/SkuGeneratorModal";
 import { compressImage, base64ToDataUrl } from "@/lib/image-utils";
 import type { Product, InventoryHistoryEntry } from "@/types/product";
 
@@ -82,6 +83,9 @@ export default function AddProductQuickScreen() {
   
   // 打印机类型（默认使用 B1）
   const [printerType, setPrinterType] = useState<'b1' | 'd110'>('b1');
+  
+  // SKU 生成助手弹窗
+  const [showSkuGenerator, setShowSkuGenerator] = useState(false);
 
   // 加载默认设置
   useEffect(() => {
@@ -769,7 +773,15 @@ export default function AddProductQuickScreen() {
 
             {/* SKU 输入 */}
             <View style={styles.skuInputContainer}>
-              <ThemedText style={styles.skuInputLabel}>新建 SKU：</ThemedText>
+              <View style={styles.skuInputHeader}>
+                <ThemedText style={styles.skuInputLabel}>新建 SKU：</ThemedText>
+                <Pressable
+                  style={styles.skuGeneratorBtn}
+                  onPress={() => setShowSkuGenerator(true)}
+                >
+                  <ThemedText style={styles.skuGeneratorBtnText}>🏷️ 生成助手</ThemedText>
+                </Pressable>
+              </View>
               <TextInput
                 style={[styles.skuInput, { backgroundColor: inputBg, color: inputColor }]}
                 value={sku}
@@ -843,6 +855,16 @@ export default function AddProductQuickScreen() {
           </View>
         </View>
       )}
+
+      {/* SKU 生成助手弹窗 */}
+      <SkuGeneratorModal
+        visible={showSkuGenerator}
+        onClose={() => setShowSkuGenerator(false)}
+        onConfirm={(generatedSku) => {
+          setSku(generatedSku);
+          setShowSkuGenerator(false);
+        }}
+      />
     </ThemedView>
   );
 }
@@ -1229,11 +1251,27 @@ const styles = StyleSheet.create({
   skuInputContainer: {
     marginBottom: 16,
   },
+  skuInputHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 8,
+  },
   skuInputLabel: {
     fontSize: 14,
     fontWeight: "600",
-    marginBottom: 8,
     color: "#000",
+  },
+  skuGeneratorBtn: {
+    backgroundColor: "rgba(255, 149, 0, 0.15)",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+  },
+  skuGeneratorBtnText: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#FF9500",
   },
   skuInput: {
     height: 50,
