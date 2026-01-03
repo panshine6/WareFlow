@@ -32,10 +32,6 @@ export default function ProductDetailScreen() {
 
   const params = useLocalSearchParams<{ id: string }>();
   
-  // 隐藏 Web 端的标题栏
-  useEffect(() => {
-    router.setOptions({ headerShown: false, title: '' });
-  }, []);
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const colorScheme = useColorScheme();
@@ -741,14 +737,6 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 8,
     elevation: 5,
-    // 渐变效果
-    // Note: React Native does not support CSS `backgroundImage` with `linear-gradient`.
-    // We will use a solid color and rely on the platform's theming for a better look.
-    // For a true gradient, a third-party library like `expo-linear-gradient` would be needed.
-    // We will use a darker blue for a more premium feel in dark mode.
-    backgroundColor: Colors.dark.cardBackground, // 使用主题背景色
-    borderColor: Colors.dark.border,
-    borderWidth: 1,
   },
   titleCardIcon: {
     width: 50,
@@ -776,7 +764,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: Colors.dark.text,
     opacity: 0.7,
-  },,
+  },
   titleSubtitle: {
     fontSize: 14,
     color: "#666",

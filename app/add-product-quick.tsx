@@ -992,7 +992,7 @@ export default function AddProductQuickScreen() {
                   <View style={styles.barcodeProductDetails}>
                     <ThemedText style={styles.barcodeProductSku}>{scannedProduct.sku}</ThemedText>
                     <ThemedText style={styles.barcodeProductQuantity}>当前库存：{scannedProduct.quantity}</ThemedText>
-                    <ThemedText style={styles.barcodeProductLocation}>位置：{scannedProduct.location || '未设置'}</ThemedText>
+                    <ThemedText style={styles.barcodeProductLocation}>位置：{scannedProduct.storageLocation || '未设置'}</ThemedText>
                   </View>
                 </View>
               </View>

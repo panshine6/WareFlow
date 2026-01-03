@@ -1,5 +1,5 @@
 import { useRouter, useFocusEffect } from "expo-router";
-import { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState, useRef } from "react";
 import {
   ActivityIndicator,
   FlatList,
@@ -73,7 +73,7 @@ export default function OutboundScreen() {
   const [scannedBarcode, setScannedBarcode] = useState<string | null>(null);
   const [scannedBox, setScannedBox] = useState<Box | null>(null);
   const [scannedProduct, setScannedProduct] = useState<Product | null>(null);
-  const fileInputRef = React.useRef<HTMLInputElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // 当前用户
   const [currentUser, setCurrentUser] = useState<{ id: number; name: string } | null>(null);
@@ -180,18 +180,18 @@ export default function OutboundScreen() {
       // 调用条形码识别 API
       const scanResult = await scanBarcodeFromImage(compressedBase64);
 
-      if (!scanResult.found || !scanResult.barcode) {
-        Alert.alert("提示", "未在图片中检测到条形码，请确保图片清晰并包含条形码");
+      if (!scanResult.success || !scanResult.barcodeValue) {
+        Alert.alert("提示", scanResult.error || "未在图片中检测到条形码，请确保图片清暙并包含条形码");
         return;
       }
 
-      const barcode = scanResult.barcode;
+      const barcode = scanResult.barcodeValue;
       setScannedBarcode(barcode);
 
       // 检测条形码类型
       const barcodeType = detectBarcodeType(barcode);
 
-      if (barcodeType === "box") {
+      if (barcodeType === "boxId") {
         // Box 条形码，查找 Box 信息
         const box = await getBoxById(barcode);
         if (box) {
@@ -203,13 +203,19 @@ export default function OutboundScreen() {
         }
       } else {
         // 产品条形码，查找产品信息
-        const product = await lookupProductByBarcode(barcode);
-        if (product) {
-          setScannedProduct(product);
-          setScannedBox(null);
-          setShowScanResult(true);
+        const lookupResult = await lookupProductByBarcode(barcode);
+        if (lookupResult.found && lookupResult.product) {
+          // 从本地存储获取完整的产品信息
+          const fullProduct = await ProductStorage.getById(lookupResult.product.id);
+          if (fullProduct) {
+            setScannedProduct(fullProduct);
+            setScannedBox(null);
+            setShowScanResult(true);
+          } else {
+            Alert.alert("提示", `未找到产品: ${barcode}`);
+          }
         } else {
-          Alert.alert("提示", `未找到产品: ${barcode}`);
+          Alert.alert("提示", lookupResult.error || `未找到产品: ${barcode}`);
         }
       }
     } catch (error) {
