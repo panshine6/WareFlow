@@ -72,7 +72,17 @@ export default function BackupScreen() {
         document.body.removeChild(link);
         URL.revokeObjectURL(url);
 
-        window.alert('备份文件已下载！');
+        // 延迟显示提示，让用户有时间完成下载操作
+        setTimeout(() => {
+          window.alert(
+            `✅ 备份文件已准备完成！\n\n` +
+            `📁 文件名：${filename}\n\n` +
+            `💡 提示：文件已保存到浏览器的下载文件夹中。\n` +
+            `• iPhone：可在「文件」App → 「下载」中找到\n` +
+            `• Android：可在「下载」或「文件管理器」中找到\n` +
+            `• 电脑：可在浏览器下载目录中找到`
+          );
+        }, 500);
       } else {
         // 原生平台：使用文件系统
         const file = new File(Paths.cache, filename);
