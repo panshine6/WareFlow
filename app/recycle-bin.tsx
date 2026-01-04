@@ -18,6 +18,7 @@ import { Colors } from "@/constants/theme";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { ProductAPI } from "@/lib/api-client";
 import { ProductStorage } from "@/lib/storage";
+import { trpc } from "@/lib/trpc";
 import type { Product } from "@/types/product";
 
 /**
@@ -68,6 +69,11 @@ export default function RecycleBinScreen() {
     console.log("Automatic cleanup not yet implemented");
   };
 
+  // tRPC mutation for restore
+  const restoreMutation = trpc.products.restore.useMutation();
+  // tRPC mutation for permanent delete
+  const permanentDeleteMutation = trpc.products.permanentDelete.useMutation();
+
   // 恢复产品
   const handleRestore = (product: Product) => {
     console.log('[RecycleBin] handleRestore called for product:', product.id, product.sku);
@@ -79,13 +85,16 @@ export default function RecycleBinScreen() {
       async () => {
         try {
           console.log('[RecycleBin] Restoring product...');
-          // Web 平台使用 ProductStorage，原生平台使用 ProductAPI
           if (isWeb) {
+            // Web 平台：同时更新本地和云端
             await ProductStorage.restore(product.id);
+            await restoreMutation.mutateAsync({ id: product.id });
+            console.log('[RecycleBin] Restore successful (local + cloud)');
           } else {
+            // 原生平台：只调用云端 API
             await ProductAPI.restore(product.id);
+            console.log('[RecycleBin] Restore successful (cloud)');
           }
-          console.log('[RecycleBin] Restore successful');
           Alert.alert("成功", "产品已恢复");
           await loadProducts();
         } catch (error: any) {
@@ -107,13 +116,16 @@ export default function RecycleBinScreen() {
       async () => {
         try {
           console.log('[RecycleBin] Permanently deleting product...');
-          // Web 平台使用 ProductStorage，原生平台使用 ProductAPI
           if (isWeb) {
+            // Web 平台：同时删除本地和云端
             await ProductStorage.permanentDelete(product.id);
+            await permanentDeleteMutation.mutateAsync({ id: product.id });
+            console.log('[RecycleBin] Permanent delete successful (local + cloud)');
           } else {
+            // 原生平台：只调用云端 API
             await ProductAPI.permanentDelete(product.id);
+            console.log('[RecycleBin] Permanent delete successful (cloud)');
           }
-          console.log('[RecycleBin] Permanent delete successful');
           Alert.alert("成功", "产品已永久删除");
           await loadProducts();
         } catch (error: any) {

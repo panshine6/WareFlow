@@ -24,6 +24,7 @@ import { ProductAPI } from "@/lib/api-client";
 import { trpc } from "@/lib/trpc";
 import { AutoSync } from "@/lib/auto-sync";
 import { ProductStorage } from "@/lib/storage";
+import { isMobileWeb, isDesktopWeb } from "@/lib/platform-detect";
 import type { Product } from "@/types/product";
 
 // 库存筛选类型
@@ -74,7 +75,9 @@ export default function InventoryScreen() {
   };
 
   useEffect(() => {
-    // 启动定时同步（5 分钟）
+    // 只有电脑 Web 端才启动定时同步（手机 Web 端是主操作端，不自动下载）
+    if (!isDesktopWeb()) return;
+    
     const interval = setInterval(() => {
       autoSyncInBackground();
     }, 300000); // 5 分钟
@@ -85,7 +88,10 @@ export default function InventoryScreen() {
   useFocusEffect(
     useCallback(() => {
       loadProducts();
-      autoSyncOnEnter();
+      // 只有电脑 Web 端才自动从云端下载（手机 Web 端是主操作端，不自动下载）
+      if (isDesktopWeb()) {
+        autoSyncOnEnter();
+      }
     }, [])
   );
 
