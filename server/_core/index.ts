@@ -3,6 +3,8 @@ import "dotenv/config";
 import "../../scripts/load-env.js";
 
 import express from "express";
+import { sql } from "drizzle-orm";
+import { db } from "../db";
 import { createServer } from "http";
 import net from "net";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
@@ -27,6 +29,44 @@ async function findAvailablePort(startPort: number = 3000): Promise<number> {
     }
   }
   throw new Error(`No available port found starting from ${startPort}`);
+}
+
+async function ensureDbColumns() {
+  try {
+    // Check if boxId column exists
+    const result = await db.execute(sql`
+      SELECT COLUMN_NAME 
+      FROM INFORMATION_SCHEMA.COLUMNS 
+      WHERE TABLE_SCHEMA = DATABASE() 
+        AND TABLE_NAME = 'products' 
+        AND COLUMN_NAME = 'boxId'
+    `);
+    
+    if (!result.rows || result.rows.length === 0) {
+      console.log('[db] Adding missing boxId column...');
+      await db.execute(sql`ALTER TABLE products ADD COLUMN boxId varchar(64) NULL`);
+      console.log('[db] boxId column added successfully');
+    }
+    
+    // Check if boxName column exists
+    const result2 = await db.execute(sql`
+      SELECT COLUMN_NAME 
+      FROM INFORMATION_SCHEMA.COLUMNS 
+      WHERE TABLE_SCHEMA = DATABASE() 
+        AND TABLE_NAME = 'products' 
+        AND COLUMN_NAME = 'boxName'
+    `);
+    
+    if (!result2.rows || result2.rows.length === 0) {
+      console.log('[db] Adding missing boxName column...');
+      await db.execute(sql`ALTER TABLE products ADD COLUMN boxName varchar(255) NULL`);
+      console.log('[db] boxName column added successfully');
+    }
+    
+    console.log('[db] Database schema check completed');
+  } catch (error) {
+    console.error('[db] Error ensuring database columns:', error);
+  }
 }
 
 async function startServer() {
@@ -78,6 +118,9 @@ async function startServer() {
     console.log(`Port ${preferredPort} is busy, using port ${port} instead`);
   }
 
+  // Ensure database columns exist before starting server
+  await ensureDbColumns();
+  
   server.listen(port, () => {
     console.log(`[api] server listening on port ${port}`);
   });
