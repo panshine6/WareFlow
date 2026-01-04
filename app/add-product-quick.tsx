@@ -31,8 +31,7 @@ import { scanBarcodeFromImage, detectBarcodeType, lookupProductByBarcode } from 
 import SkuGeneratorModal from "@/components/SkuGeneratorModal";
 import { compressImage, base64ToDataUrl } from "@/lib/image-utils";
 import type { Product, InventoryHistoryEntry } from "@/types/product";
-import type { Box } from "@/types/box";
-import { getAllBoxes, createBox } from "@/lib/box-storage";
+import { getAllBoxes, createBox, deleteBox, Box } from "@/lib/box-storage";
 
 // 流程阶段
 type FlowStage = 
@@ -1071,33 +1070,57 @@ export default function AddProductQuickScreen() {
 
               {/* 现有 Box 列表 */}
               {boxes.map((box) => (
-                <Pressable
+                <View
                   key={box.id}
                   style={[
                     styles.boxItem,
                     selectedBox?.id === box.id && styles.boxItemSelected
                   ]}
-                  onPress={() => {
-                    setSelectedBox(box);
-                    setShowBoxPicker(false);
-                  }}
                 >
-                  <ThemedText style={styles.boxItemName}>{box.name}</ThemedText>
-                  <ThemedText style={styles.boxItemHint}>
-                    {box.location || '未设置位置'} · {box.items?.length || 0} 件产品
-                  </ThemedText>
-                </Pressable>
+                  <Pressable
+                    style={styles.boxItemContent}
+                    onPress={() => {
+                      setSelectedBox(box);
+                      setShowBoxPicker(false);
+                    }}
+                  >
+                    <ThemedText style={styles.boxItemName}>{box.name}</ThemedText>
+                    <ThemedText style={styles.boxItemHint}>
+                      {box.location || '未设置位置'} · {box.items?.length || 0} 件产品
+                    </ThemedText>
+                  </Pressable>
+                  <Pressable
+                    style={styles.boxDeleteButton}
+                    onPress={async () => {
+                      if (confirm(`确定要删除 Box "${box.name}" 吗？`)) {
+                        try {
+                          await deleteBox(box.id);
+                          setBoxes(boxes.filter(b => b.id !== box.id));
+                          if (selectedBox?.id === box.id) {
+                            setSelectedBox(null);
+                          }
+                        } catch (error) {
+                          console.error('[QuickAdd] Failed to delete box:', error);
+                          alert('删除 Box 失败');
+                        }
+                      }
+                    }}
+                  >
+                    <ThemedText style={styles.boxDeleteButtonText}>🗑️</ThemedText>
+                  </Pressable>
+                </View>
               ))}
 
               {/* 新建 Box */}
               <View style={styles.newBoxContainer}>
                 <ThemedText style={styles.newBoxLabel}>新建 Box：</ThemedText>
+                <ThemedText style={styles.newBoxFormatHint}>格式：品牌-大类-Box-流水号，例如：LB-RF-Box-1</ThemedText>
                 <View style={styles.newBoxInputRow}>
                   <TextInput
                     style={[styles.newBoxInput, { backgroundColor: inputBg, color: inputColor }]}
                     value={newBoxName}
                     onChangeText={setNewBoxName}
-                    placeholder="输入 Box 名称"
+                    placeholder="例如：LB-RF-Box-1"
                     placeholderTextColor={placeholderColor}
                   />
                   <Pressable
@@ -1732,6 +1755,8 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   boxItem: {
+    flexDirection: "row",
+    alignItems: "center",
     padding: 16,
     backgroundColor: "#f5f5f5",
     borderRadius: 10,
@@ -1741,6 +1766,9 @@ const styles = StyleSheet.create({
     backgroundColor: "#e3f2fd",
     borderWidth: 2,
     borderColor: "#2196F3",
+  },
+  boxItemContent: {
+    flex: 1,
   },
   boxItemName: {
     fontSize: 16,
@@ -1752,6 +1780,13 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: "#666",
   },
+  boxDeleteButton: {
+    padding: 8,
+    marginLeft: 8,
+  },
+  boxDeleteButtonText: {
+    fontSize: 18,
+  },
   newBoxContainer: {
     marginTop: 16,
     paddingTop: 16,
@@ -1762,7 +1797,13 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "600",
     color: "#000",
+    marginBottom: 4,
+  },
+  newBoxFormatHint: {
+    fontSize: 12,
+    color: "#888",
     marginBottom: 8,
+    fontStyle: "italic",
   },
   newBoxInputRow: {
     flexDirection: "row",
