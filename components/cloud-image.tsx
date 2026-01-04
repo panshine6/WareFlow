@@ -52,15 +52,21 @@ export function CloudImage({
   );
 
   useEffect(() => {
+    console.log('[CloudImage] useEffect triggered', { productId, localUri: localUri?.substring(0, 50), isDesktopWeb });
+    
     // 如果本地有图片，直接使用
     if (localUri && localUri.length > 0) {
+      console.log('[CloudImage] Using local URI');
       setImageUri(localUri);
       return;
     }
 
     // 如果是电脑 Web 端且没有本地图片，从云端加载
     if (isDesktopWeb && !localUri) {
+      console.log('[CloudImage] Desktop Web without local image, loading from cloud...');
       loadImageFromCloud();
+    } else {
+      console.log('[CloudImage] Not loading from cloud', { isDesktopWeb, hasLocalUri: !!localUri });
     }
   }, [localUri, productId, isDesktopWeb]);
 
@@ -68,20 +74,27 @@ export function CloudImage({
     try {
       setLoading(true);
       setError(false);
+      console.log('[CloudImage] loadImageFromCloud called for productId:', productId);
       
       const result = await imageQuery.refetch();
+      console.log('[CloudImage] Query result:', { hasData: !!result.data, error: result.error });
       
       if (result.data) {
         const uri = imageType === "detail" 
           ? result.data.detailImageUri 
           : result.data.overviewImageUri;
         
+        console.log('[CloudImage] Image URI from cloud:', uri?.substring(0, 100));
+        
         if (uri && uri.length > 0) {
           setImageUri(uri);
+          console.log('[CloudImage] Image URI set successfully');
         } else {
+          console.log('[CloudImage] No image URI in response');
           setError(true);
         }
       } else {
+        console.log('[CloudImage] No data in response');
         setError(true);
       }
     } catch (err) {
