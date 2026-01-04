@@ -128,7 +128,12 @@ export async function searchProductsBySku(sku: string) {
   const db = await getDb();
   if (!db) return [];
   const result = await db.select().from(products).where(eq(products.isDeleted, 0)).orderBy(desc(products.createdAt));
-  return result.filter((p) => p.sku.toLowerCase().includes(sku.toLowerCase()));
+  // 同时搜索 sku 和 systemSku 字段
+  const searchTerm = sku.toLowerCase();
+  return result.filter((p) => 
+    p.sku.toLowerCase().includes(searchTerm) || 
+    (p.systemSku && p.systemSku.toLowerCase().includes(searchTerm))
+  );
 }
 
 export async function createProduct(data: InsertProduct) {
