@@ -89,6 +89,11 @@ export default function SkuGeneratorModal({
   // 序列记录
   const [sequences, setSequences] = useState<Record<string, SkuSequence>>({});
 
+  // 历史记录多选模式
+  const [isHistoryEditMode, setIsHistoryEditMode] = useState(false);
+  const [selectedHistorySkus, setSelectedHistorySkus] = useState<Set<string>>(new Set());
+  const [showDeleteHistoryConfirm, setShowDeleteHistoryConfirm] = useState(false);
+
   // 加载数据
   useEffect(() => {
     if (visible) {
@@ -290,6 +295,60 @@ export default function SkuGeneratorModal({
     });
   };
 
+  // 历史记录多选相关函数
+  const toggleHistorySelection = (sku: string) => {
+    setSelectedHistorySkus((prev) => {
+      const newSet = new Set(prev);
+      if (newSet.has(sku)) {
+        newSet.delete(sku);
+      } else {
+        newSet.add(sku);
+      }
+      return newSet;
+    });
+  };
+
+  const toggleSelectAllHistory = () => {
+    if (selectedHistorySkus.size === history.length) {
+      setSelectedHistorySkus(new Set());
+    } else {
+      setSelectedHistorySkus(new Set(history.map((r) => r.sku)));
+    }
+  };
+
+  const exitHistoryEditMode = () => {
+    setIsHistoryEditMode(false);
+    setSelectedHistorySkus(new Set());
+  };
+
+  const handleDeleteSelectedHistory = async () => {
+    setShowDeleteHistoryConfirm(false);
+    try {
+      for (const sku of selectedHistorySkus) {
+        await SkuGenerator.deleteHistoryRecord(sku);
+      }
+      
+      // 刷新历史记录
+      const hist = await SkuGenerator.getHistory();
+      setHistory(hist);
+      
+      if (Platform.OS === 'web') {
+        window.alert(`已删除 ${selectedHistorySkus.size} 条 SKU 记录`);
+      } else {
+        Alert.alert("成功", `已删除 ${selectedHistorySkus.size} 条 SKU 记录`);
+      }
+      
+      exitHistoryEditMode();
+    } catch (error) {
+      console.error("[SkuGenerator] Failed to delete history:", error);
+      if (Platform.OS === 'web') {
+        window.alert("删除失败，请重试");
+      } else {
+        Alert.alert("错误", "删除失败，请重试");
+      }
+    }
+  };
+
   // 渲染段选择器
   const renderSegmentSelector = (segment: SkuSegment) => {
     const isExpanded = expandedSegment === segment.id;
@@ -436,16 +495,111 @@ export default function SkuGeneratorModal({
   // 渲染历史记录视图
   const renderHistoryView = () => (
     <View style={styles.historyContainer}>
-      <Text style={[styles.sectionTitle, isDark && styles.textDark]}>
-        已使用的 SKU ({history.length})
-      </Text>
+      {/* 工具栏 */}
+      <View style={styles.historyToolbar}>
+        <Text style={[styles.sectionTitle, isDark && styles.textDark]}>
+          已使用的 SKU ({history.length})
+        </Text>
+        {history.length > 0 && (
+          <TouchableOpacity
+            style={[
+              styles.historyEditButton,
+              isHistoryEditMode && styles.historyEditButtonActive,
+            ]}
+            onPress={() => {
+              if (isHistoryEditMode) {
+                exitHistoryEditMode();
+              } else {
+                setIsHistoryEditMode(true);
+              }
+            }}
+          >
+            <Text style={[
+              styles.historyEditButtonText,
+              isHistoryEditMode && styles.historyEditButtonTextActive,
+            ]}>
+              {isHistoryEditMode ? "取消" : "编辑"}
+            </Text>
+          </TouchableOpacity>
+        )}
+      </View>
+
+      {/* 编辑模式操作栏 */}
+      {isHistoryEditMode && history.length > 0 && (
+        <View style={styles.historyEditToolbar}>
+          <TouchableOpacity
+            style={styles.selectAllButton}
+            onPress={toggleSelectAllHistory}
+          >
+            <View style={[
+              styles.checkbox,
+              selectedHistorySkus.size === history.length && styles.checkboxChecked,
+            ]}>
+              {selectedHistorySkus.size === history.length && (
+                <Text style={styles.checkboxCheck}>✓</Text>
+              )}
+            </View>
+            <Text style={[styles.selectAllText, isDark && styles.textDark]}>
+              全选
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[
+              styles.deleteSelectedButton,
+              selectedHistorySkus.size === 0 && styles.deleteSelectedButtonDisabled,
+            ]}
+            onPress={() => {
+              if (selectedHistorySkus.size > 0) {
+                setShowDeleteHistoryConfirm(true);
+              }
+            }}
+            disabled={selectedHistorySkus.size === 0}
+          >
+            <Text style={styles.deleteSelectedButtonText}>
+              删除 ({selectedHistorySkus.size})
+            </Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
       {history.length === 0 ? (
         <Text style={[styles.emptyText, isDark && styles.textMuted]}>
           暂无使用记录
         </Text>
       ) : (
         history.slice(0, 50).map((record, index) => (
-          <View key={record.sku} style={[styles.historyItem, isDark && styles.historyItemDark]}>
+          <TouchableOpacity
+            key={record.sku}
+            style={[
+              styles.historyItem,
+              isDark && styles.historyItemDark,
+              isHistoryEditMode && selectedHistorySkus.has(record.sku) && styles.historyItemSelected,
+            ]}
+            onPress={() => {
+              if (isHistoryEditMode) {
+                toggleHistorySelection(record.sku);
+              }
+            }}
+            onLongPress={() => {
+              if (!isHistoryEditMode) {
+                setIsHistoryEditMode(true);
+                setSelectedHistorySkus(new Set([record.sku]));
+              }
+            }}
+            activeOpacity={isHistoryEditMode ? 0.7 : 1}
+          >
+            {isHistoryEditMode && (
+              <View style={styles.historyCheckboxContainer}>
+                <View style={[
+                  styles.checkbox,
+                  selectedHistorySkus.has(record.sku) && styles.checkboxChecked,
+                ]}>
+                  {selectedHistorySkus.has(record.sku) && (
+                    <Text style={styles.checkboxCheck}>✓</Text>
+                  )}
+                </View>
+              </View>
+            )}
             <View style={styles.historyItemLeft}>
               <Text style={[styles.historyItemSku, isDark && styles.textDark]}>
                 {record.sku}
@@ -459,7 +613,7 @@ export default function SkuGeneratorModal({
                 #{record.number.toString().padStart(4, "0")}
               </Text>
             </View>
-          </View>
+          </TouchableOpacity>
         ))
       )}
     </View>
@@ -717,6 +871,50 @@ export default function SkuGeneratorModal({
                 disabled={!newSegmentName}
               >
                 <Text style={styles.subModalConfirmButtonText}>添加</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* 删除历史记录确认弹窗 */}
+      <Modal
+        visible={showDeleteHistoryConfirm}
+        animationType="fade"
+        transparent={true}
+        onRequestClose={() => setShowDeleteHistoryConfirm(false)}
+      >
+        <View style={styles.subModalOverlay}>
+          <View style={[styles.deleteConfirmModal, isDark && styles.subModalContentDark]}>
+            <Text style={[styles.deleteConfirmTitle, isDark && styles.textDark]}>
+              ❗ 确认删除
+            </Text>
+            <Text style={[styles.deleteConfirmMessage, isDark && styles.textMuted]}>
+              您即将删除 {selectedHistorySkus.size} 条 SKU 使用记录。
+            </Text>
+            <View style={styles.deleteConfirmWarning}>
+              <Text style={styles.deleteConfirmWarningText}>
+                ⚠️ 重要警告
+              </Text>
+              <Text style={styles.deleteConfirmWarningDesc}>
+                删除记录后，这些 SKU 编号可能会被重新生成，导致 SKU 重复。
+              </Text>
+              <Text style={styles.deleteConfirmWarningDesc}>
+                请确认这些 SKU 已不再使用，或者对应的产品已被删除。
+              </Text>
+            </View>
+            <View style={styles.subModalButtons}>
+              <TouchableOpacity
+                style={styles.subModalCancelButton}
+                onPress={() => setShowDeleteHistoryConfirm(false)}
+              >
+                <Text style={styles.subModalCancelButtonText}>取消</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.deleteConfirmButton}
+                onPress={handleDeleteSelectedHistory}
+              >
+                <Text style={styles.deleteConfirmButtonText}>确认删除</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -1006,6 +1204,140 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "600",
     color: "#007AFF",
+  },
+  historyItemSelected: {
+    backgroundColor: "rgba(0, 122, 255, 0.15)",
+    borderWidth: 2,
+    borderColor: "#007AFF",
+  },
+  historyToolbar: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 12,
+  },
+  historyEditButton: {
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 6,
+    backgroundColor: "#007AFF",
+  },
+  historyEditButtonActive: {
+    backgroundColor: "#999",
+  },
+  historyEditButtonText: {
+    color: "#fff",
+    fontSize: 13,
+    fontWeight: "600",
+  },
+  historyEditButtonTextActive: {
+    color: "#fff",
+  },
+  historyEditToolbar: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingVertical: 10,
+    paddingHorizontal: 4,
+    marginBottom: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(0, 0, 0, 0.1)",
+  },
+  selectAllButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  selectAllText: {
+    fontSize: 14,
+    color: "#333",
+  },
+  checkbox: {
+    width: 22,
+    height: 22,
+    borderRadius: 4,
+    borderWidth: 2,
+    borderColor: "#ccc",
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "#fff",
+  },
+  checkboxChecked: {
+    backgroundColor: "#007AFF",
+    borderColor: "#007AFF",
+  },
+  checkboxCheck: {
+    color: "#fff",
+    fontSize: 14,
+    fontWeight: "bold",
+  },
+  deleteSelectedButton: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 6,
+    backgroundColor: "#FF3B30",
+  },
+  deleteSelectedButtonDisabled: {
+    opacity: 0.5,
+  },
+  deleteSelectedButtonText: {
+    color: "#fff",
+    fontSize: 13,
+    fontWeight: "600",
+  },
+  historyCheckboxContainer: {
+    marginRight: 12,
+    justifyContent: "center",
+  },
+  deleteConfirmModal: {
+    backgroundColor: "#fff",
+    borderRadius: 16,
+    padding: 20,
+    width: "85%",
+    maxWidth: 340,
+  },
+  deleteConfirmTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#333",
+    textAlign: "center",
+    marginBottom: 12,
+  },
+  deleteConfirmMessage: {
+    fontSize: 14,
+    color: "#666",
+    textAlign: "center",
+    marginBottom: 16,
+  },
+  deleteConfirmWarning: {
+    backgroundColor: "rgba(255, 59, 48, 0.1)",
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 20,
+  },
+  deleteConfirmWarningText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#FF3B30",
+    marginBottom: 8,
+  },
+  deleteConfirmWarningDesc: {
+    fontSize: 13,
+    color: "#FF3B30",
+    lineHeight: 18,
+    marginBottom: 4,
+  },
+  deleteConfirmButton: {
+    flex: 1,
+    backgroundColor: "#FF3B30",
+    borderRadius: 8,
+    paddingVertical: 12,
+    alignItems: "center",
+  },
+  deleteConfirmButtonText: {
+    color: "#fff",
+    fontSize: 15,
+    fontWeight: "600",
   },
   sequencesContainer: {
     flex: 1,
