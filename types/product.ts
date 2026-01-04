@@ -96,6 +96,10 @@ export interface AppSettings {
   lastOperatorId?: number;
   /** 上次选择的操作员名称 */
   lastOperatorName?: string;
+  /** 上次选择的 Box ID */
+  lastBoxId?: string;
+  /** 上次选择的 Box 名称 */
+  lastBoxName?: string;
 }
 
 /**

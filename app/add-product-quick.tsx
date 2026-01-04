@@ -129,7 +129,17 @@ export default function AddProductQuickScreen() {
 
         // 加载 Box 列表
         const allBoxes = await getAllBoxes();
-        setBoxes(allBoxes.filter(b => b.status === 'open')); // 只显示开放中的 Box
+        const openBoxes = allBoxes.filter(b => b.status === 'open'); // 只显示开放中的 Box
+        setBoxes(openBoxes);
+        
+        // 设置上次选择的 Box 为默认值
+        if (settings.lastBoxId) {
+          const lastBox = openBoxes.find(b => b.id === settings.lastBoxId);
+          if (lastBox) {
+            setSelectedBox(lastBox);
+            console.log("[QuickAdd] Restored last selected box:", lastBox.name);
+          }
+        }
       } catch (error) {
         console.error("[QuickAdd] Failed to load defaults:", error);
       }
@@ -388,6 +398,10 @@ export default function AddProductQuickScreen() {
       alert("请输入存储位置");
       return;
     }
+    if (!selectedBox) {
+      alert("请选择 Box");
+      return;
+    }
 
     setSaving(true);
 
@@ -518,6 +532,8 @@ export default function AddProductQuickScreen() {
       await SettingsStorage.update({
         defaultLocation: locationValue,
         lastPrice: price,
+        lastBoxId: selectedBox?.id,
+        lastBoxName: selectedBox?.name,
       });
 
       // 打印条形码
@@ -789,7 +805,7 @@ export default function AddProductQuickScreen() {
                 onPress={() => setShowBoxPicker(true)}
               >
                 <ThemedText style={[styles.formValue, !selectedBox && styles.placeholder, { color: inputColor }]}>
-                  {selectedBox ? selectedBox.name : "点击选择 Box（可选）"}
+                  {selectedBox ? selectedBox.name : "点击选择 Box"}
                 </ThemedText>
                 <ThemedText style={styles.formArrow}>›</ThemedText>
               </Pressable>
@@ -1053,21 +1069,6 @@ export default function AddProductQuickScreen() {
             <ThemedText type="title" style={styles.modalTitle}>📦 选择 Box</ThemedText>
             
             <ScrollView style={styles.boxList}>
-              {/* 不选择 Box 的选项 */}
-              <Pressable
-                style={[
-                  styles.boxItem,
-                  !selectedBox && styles.boxItemSelected
-                ]}
-                onPress={() => {
-                  setSelectedBox(null);
-                  setShowBoxPicker(false);
-                }}
-              >
-                <ThemedText style={styles.boxItemName}>不放入 Box</ThemedText>
-                <ThemedText style={styles.boxItemHint}>产品将不关联任何 Box</ThemedText>
-              </Pressable>
-
               {/* 现有 Box 列表 */}
               {boxes.map((box) => (
                 <View
