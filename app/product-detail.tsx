@@ -83,7 +83,7 @@ export default function ProductDetailScreen() {
       if (found) {
         setProduct(found);
         setEditedProduct(found);
-        setPriceText(found.price?.toString() || '0');
+        setPriceText(typeof found.price === 'number' ? found.price.toString() : (parseFloat(String(found.price)) || 0).toString());
       } else {
         Alert.alert("错误", "产品不存在");
         router.back();
@@ -424,7 +424,7 @@ export default function ProductDetailScreen() {
               />
             ) : (
               <ThemedText style={styles.value}>
-                ${product.price?.toFixed(2) || '0.00'}
+                ${typeof product.price === 'number' ? product.price.toFixed(2) : (parseFloat(String(product.price)) || 0).toFixed(2)}
               </ThemedText>
             )}
           </View>
