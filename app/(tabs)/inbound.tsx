@@ -19,7 +19,7 @@ import { Colors } from "@/constants/theme";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { ProductStorage } from "@/lib/storage";
 import { trpc } from "@/lib/trpc";
-import { AutoSync } from "@/lib/auto-sync";
+import { SyncService } from "@/lib/sync";
 import type { Product, InventoryHistoryEntry } from "@/types/product";
 import { 
   getRecentInboundProducts, 
@@ -149,26 +149,40 @@ export default function InboundScreen() {
     }
   };
 
-  // 下拉同步到云端
+  // 同步到云端
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     try {
-      await AutoSync.uploadToCloud(
-        uploadMutation,
-        () => {
-          Alert.alert("同步成功", "数据已上传到云端");
+      // 构建 trpcClient 对象，与首页数据安全一致
+      const trpcClient = {
+        sync: {
+          upload: {
+            mutate: async (data: any) => {
+              return uploadMutation.mutateAsync(data);
+            },
+          },
         },
-        (error) => {
-          console.error("[Inbound] Sync failed:", error);
-          Alert.alert("同步失败", "请检查网络连接后重试");
+      };
+      const result = await SyncService.uploadToCloud(trpcClient);
+      if (result.success) {
+        const activeCount = result.activeCount || result.count;
+        let msg: string;
+        if (result.count === 0) {
+          msg = `本地数据无变化，无需同步\n共 ${activeCount} 个产品`;
+        } else {
+          msg = `已同步 ${activeCount} 个产品到云端`;
         }
-      );
+        Alert.alert("同步成功", msg);
+      } else {
+        Alert.alert("同步失败", result.error || "未知错误");
+      }
       // 同步后重新加载入库历史
       if (viewMode === "history") {
         await loadInboundHistory();
       }
-    } catch (error) {
-      console.error("[Inbound] Refresh failed:", error);
+    } catch (error: any) {
+      console.error("[Inbound] Sync failed:", error);
+      Alert.alert("同步失败", error.message || "请检查网络连接后重试");
     } finally {
       setRefreshing(false);
     }
