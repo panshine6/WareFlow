@@ -788,7 +788,7 @@ export default function AddProductQuickScreen() {
             <View style={styles.formRow}>
               <ThemedText style={styles.formLabel}>价格</ThemedText>
               <View style={[styles.priceInputContainer, { backgroundColor: inputBg }]}>
-                <ThemedText style={[styles.currencySymbol, { color: inputColor }]}>¥</ThemedText>
+                <ThemedText style={[styles.currencySymbol, { color: inputColor }]}>$</ThemedText>
                 <TextInput
                   style={[styles.priceInput, { color: inputColor }]}
                   value={priceText}

@@ -41,6 +41,7 @@ export default function ProductDetailScreen() {
   const [loading, setLoading] = useState(true);
   const [isEditing, setIsEditing] = useState(false);
   const [editedProduct, setEditedProduct] = useState<Product | null>(null);
+  const [priceText, setPriceText] = useState('0'); // 用于价格输入框显示
   const [saving, setSaving] = useState(false);
   const [printingLabel, setPrintingLabel] = useState(false);
   const [barcodePreview, setBarcodePreview] = useState<string | null>(null);
@@ -79,6 +80,7 @@ export default function ProductDetailScreen() {
       if (found) {
         setProduct(found);
         setEditedProduct(found);
+        setPriceText(found.price?.toString() || '0');
       } else {
         Alert.alert("错误", "产品不存在");
         router.back();
@@ -386,14 +388,23 @@ export default function ProductDetailScreen() {
             <ThemedText style={styles.label}>价格</ThemedText>
             {isEditing ? (
               <TextInput
-                value={editedProduct.price?.toString() || '0'}
+                value={priceText}
                 onChangeText={(text) => {
                   // 允许输入数字和小数点
                   if (/^\d*\.?\d*$/.test(text) || text === '') {
-                    setEditedProduct({
-                      ...editedProduct,
-                      price: parseFloat(text) || 0,
-                    });
+                    setPriceText(text);
+                    const num = parseFloat(text);
+                    if (!isNaN(num)) {
+                      setEditedProduct({
+                        ...editedProduct!,
+                        price: num,
+                      });
+                    } else if (text === '' || text === '.') {
+                      setEditedProduct({
+                        ...editedProduct!,
+                        price: 0,
+                      });
+                    }
                   }
                 }}
                 style={[
@@ -409,7 +420,7 @@ export default function ProductDetailScreen() {
               />
             ) : (
               <ThemedText style={styles.value}>
-                ¥{product.price?.toFixed(2) || '0.00'}
+                ${product.price?.toFixed(2) || '0.00'}
               </ThemedText>
             )}
           </View>
