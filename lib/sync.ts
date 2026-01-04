@@ -158,12 +158,17 @@ export const SyncService = {
       const now = new Date().toISOString();
       await AsyncStorage.setItem(LAST_SYNC_TIME_KEY, now);
       
-      console.log(`[Sync] Download completed: ${localProducts.length} products`);
+      // 6. 统计有效产品数量（未删除的）
+      const activeProducts = localProducts.filter(p => !p.isDeleted);
+      
+      console.log(`[Sync] Download completed: ${activeProducts.length} active products (${localProducts.length} total)`);
       
       return {
         success: true,
         direction: "download",
-        count: localProducts.length,
+        count: activeProducts.length, // 返回有效产品数量
+        totalCount: localProducts.length, // 总数（含已删除）
+        activeCount: activeProducts.length, // 有效数量
       };
     } catch (error: any) {
       console.error("[Sync] Download failed:", error);
