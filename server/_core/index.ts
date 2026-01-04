@@ -4,7 +4,7 @@ import "../../scripts/load-env.js";
 
 import express from "express";
 import { sql } from "drizzle-orm";
-import { db } from "../db";
+import { getDb } from "../db";
 import { createServer } from "http";
 import net from "net";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
@@ -33,6 +33,12 @@ async function findAvailablePort(startPort: number = 3000): Promise<number> {
 
 async function ensureDbColumns() {
   try {
+    const db = await getDb();
+    if (!db) {
+      console.log('[db] Database not available, skipping column check');
+      return;
+    }
+    
     // Check if boxId column exists
     const result = await db.execute(sql`
       SELECT COLUMN_NAME 
@@ -42,10 +48,12 @@ async function ensureDbColumns() {
         AND COLUMN_NAME = 'boxId'
     `);
     
-    if (!result.rows || result.rows.length === 0) {
+    if (!result || (Array.isArray(result) && result.length === 0) || (result[0] && Array.isArray(result[0]) && result[0].length === 0)) {
       console.log('[db] Adding missing boxId column...');
       await db.execute(sql`ALTER TABLE products ADD COLUMN boxId varchar(64) NULL`);
       console.log('[db] boxId column added successfully');
+    } else {
+      console.log('[db] boxId column already exists');
     }
     
     // Check if boxName column exists
@@ -57,10 +65,12 @@ async function ensureDbColumns() {
         AND COLUMN_NAME = 'boxName'
     `);
     
-    if (!result2.rows || result2.rows.length === 0) {
+    if (!result2 || (Array.isArray(result2) && result2.length === 0) || (result2[0] && Array.isArray(result2[0]) && result2[0].length === 0)) {
       console.log('[db] Adding missing boxName column...');
       await db.execute(sql`ALTER TABLE products ADD COLUMN boxName varchar(255) NULL`);
       console.log('[db] boxName column added successfully');
+    } else {
+      console.log('[db] boxName column already exists');
     }
     
     console.log('[db] Database schema check completed');
