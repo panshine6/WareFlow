@@ -179,7 +179,7 @@ export const AutoSync = {
   /**
    * 从云端下载数据 - Web 版本
    * 
-   * 注意：云端存储的是本地 2K 版本的细节图
+   * 策略：完全覆盖本地数据，确保本地与云端完全一致
    */
   async downloadFromCloud(
     downloadQuery: any,
@@ -195,30 +195,23 @@ export const AutoSync = {
       if (result.data?.products) {
         console.log('[AutoSync.Web] Downloaded', result.data.products.length, 'products');
         
-        // 保存到 IndexedDB/AsyncStorage
-        for (const product of result.data.products) {
-          // 转换数据格式
-          const localProduct = {
-            ...product,
-            isDeleted: product.isDeleted === 1,
-            deletedAt: product.deletedAt ? new Date(product.deletedAt).toISOString() : undefined,
-            createdAt: new Date(product.createdAt).toISOString(),
-            updatedAt: new Date(product.updatedAt).toISOString(),
-            history: [], // 历史记录需要单独处理
-          };
-          // 检查产品是否已存在，存在则更新，不存在则添加
-          const existing = await ProductStorage.getById(localProduct.id);
-          if (existing) {
-            await ProductStorage.update(localProduct.id, localProduct);
-          } else {
-            await ProductStorage.add(localProduct);
-          }
-        }
+        // 转换数据格式
+        const localProducts = result.data.products.map((product: any) => ({
+          ...product,
+          isDeleted: product.isDeleted === 1,
+          deletedAt: product.deletedAt ? new Date(product.deletedAt).toISOString() : undefined,
+          createdAt: new Date(product.createdAt).toISOString(),
+          updatedAt: new Date(product.updatedAt).toISOString(),
+          history: [], // 历史记录需要单独处理
+        }));
+        
+        // 完全覆盖本地数据：使用 replaceAll 方法确保本地与云端完全一致
+        await ProductStorage.replaceAll(localProducts);
 
         // 更新同步时间
         await this.setLastSyncTime();
         
-        console.log('[AutoSync.Web] Download completed successfully');
+        console.log('[AutoSync.Web] Download completed successfully, replaced local data with', localProducts.length, 'products');
         onSuccess?.();
       }
     } catch (error) {
