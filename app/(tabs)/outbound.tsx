@@ -78,6 +78,11 @@ export default function OutboundScreen() {
   // 当前用户
   const [currentUser, setCurrentUser] = useState<{ id: number; name: string } | null>(null);
 
+  // 出库记录多选模式
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [selectedRecordIds, setSelectedRecordIds] = useState<Set<string>>(new Set());
+  const [showDeleteConfirmModal, setShowDeleteConfirmModal] = useState(false);
+
   // 加载当前用户
   useEffect(() => {
     const loadUser = async () => {
@@ -467,6 +472,55 @@ export default function OutboundScreen() {
     .filter((p) => p.isSelected)
     .reduce((sum, p) => sum + p.selectedQuantity, 0);
 
+  // 出库记录多选相关函数
+  const toggleRecordSelection = (recordId: string) => {
+    setSelectedRecordIds((prev) => {
+      const newSet = new Set(prev);
+      if (newSet.has(recordId)) {
+        newSet.delete(recordId);
+      } else {
+        newSet.add(recordId);
+      }
+      return newSet;
+    });
+  };
+
+  const toggleSelectAllRecords = () => {
+    if (selectedRecordIds.size === outboundHistory.length) {
+      // 已全选，取消全选
+      setSelectedRecordIds(new Set());
+    } else {
+      // 全选
+      setSelectedRecordIds(new Set(outboundHistory.map((r) => r.id)));
+    }
+  };
+
+  const exitEditMode = () => {
+    setIsEditMode(false);
+    setSelectedRecordIds(new Set());
+  };
+
+  const handleDeleteSelectedRecords = async () => {
+    setShowDeleteConfirmModal(false);
+    try {
+      // 批量删除选中的记录
+      for (const recordId of selectedRecordIds) {
+        await OutboundStorage.delete(recordId);
+      }
+      
+      // 刷新列表
+      await loadOutboundHistory();
+      
+      Alert.alert("成功", `已删除 ${selectedRecordIds.size} 条出库记录`);
+      
+      // 退出编辑模式
+      exitEditMode();
+    } catch (error) {
+      console.error("[Outbound] Failed to delete records:", error);
+      Alert.alert("错误", "删除失败，请重试");
+    }
+  };
+
   // 输入框样式
   const inputBg = colorScheme === "dark" ? "rgba(255, 255, 255, 0.1)" : "rgba(0, 0, 0, 0.05)";
   const inputColor = colorScheme === "dark" ? "#fff" : "#000";
@@ -705,6 +759,56 @@ export default function OutboundScreen() {
       ) : (
         // 出库记录视图
         <View style={styles.historyContainer}>
+          {/* 编辑模式工具栏 */}
+          {outboundHistory.length > 0 && (
+            <View style={styles.editToolbar}>
+              {isEditMode ? (
+                <>
+                  <Pressable
+                    style={styles.selectAllRecordsButton}
+                    onPress={toggleSelectAllRecords}
+                  >
+                    <View style={[styles.checkbox, selectedRecordIds.size === outboundHistory.length && styles.checkboxChecked]}>
+                      {selectedRecordIds.size === outboundHistory.length && (
+                        <ThemedText style={styles.checkmark}>✓</ThemedText>
+                      )}
+                    </View>
+                    <ThemedText style={styles.selectAllText}>全选</ThemedText>
+                  </Pressable>
+                  <ThemedText style={styles.selectionStats}>
+                    已选 {selectedRecordIds.size} 条
+                  </ThemedText>
+                  <View style={styles.editToolbarButtons}>
+                    <Pressable
+                      style={[styles.toolbarButton, styles.deleteToolbarButton, selectedRecordIds.size === 0 && styles.toolbarButtonDisabled]}
+                      onPress={() => {
+                        if (selectedRecordIds.size > 0) {
+                          setShowDeleteConfirmModal(true);
+                        }
+                      }}
+                      disabled={selectedRecordIds.size === 0}
+                    >
+                      <ThemedText style={styles.deleteToolbarButtonText}>删除</ThemedText>
+                    </Pressable>
+                    <Pressable
+                      style={[styles.toolbarButton, styles.cancelToolbarButton]}
+                      onPress={exitEditMode}
+                    >
+                      <ThemedText style={styles.cancelToolbarButtonText}>取消</ThemedText>
+                    </Pressable>
+                  </View>
+                </>
+              ) : (
+                <Pressable
+                  style={styles.editModeButton}
+                  onPress={() => setIsEditMode(true)}
+                >
+                  <ThemedText style={styles.editModeButtonText}>编辑</ThemedText>
+                </Pressable>
+              )}
+            </View>
+          )}
+
           {loadingHistory ? (
             <View style={styles.loadingContainer}>
               <ActivityIndicator size="large" />
@@ -718,53 +822,83 @@ export default function OutboundScreen() {
               data={outboundHistory}
               keyExtractor={(item) => item.id}
               renderItem={({ item }) => (
-                <View style={styles.historyCard}>
-                  <View style={styles.historyHeader}>
-                    <ThemedText style={styles.historyTime}>
-                      {formatTime(item.timestamp)}
-                    </ThemedText>
-                    <ThemedText style={styles.historyOperator}>
-                      {item.operatorName}
+                <Pressable
+                  style={[styles.historyCard, selectedRecordIds.has(item.id) && styles.historyCardSelected]}
+                  onPress={() => {
+                    if (isEditMode) {
+                      toggleRecordSelection(item.id);
+                    }
+                  }}
+                  onLongPress={() => {
+                    if (!isEditMode) {
+                      setIsEditMode(true);
+                      setSelectedRecordIds(new Set([item.id]));
+                    }
+                  }}
+                >
+                  {/* 多选复选框 */}
+                  {isEditMode && (
+                    <View style={styles.recordCheckboxContainer}>
+                      <View style={[styles.checkbox, selectedRecordIds.has(item.id) && styles.checkboxChecked]}>
+                        {selectedRecordIds.has(item.id) && (
+                          <ThemedText style={styles.checkmark}>✓</ThemedText>
+                        )}
+                      </View>
+                    </View>
+                  )}
+                  
+                  <View style={[styles.historyCardContent, isEditMode && styles.historyCardContentWithCheckbox]}>
+                    <View style={styles.historyHeader}>
+                      <ThemedText style={styles.historyTime}>
+                        {formatTime(item.timestamp)}
+                      </ThemedText>
+                      <ThemedText style={styles.historyOperator}>
+                        {item.operatorName}
+                      </ThemedText>
+                    </View>
+
+                    <View style={styles.historyInfo}>
+                      <ThemedText style={styles.historyReason}>
+                        原因: {item.reason}
+                      </ThemedText>
+                      <ThemedText style={styles.historyDestination}>
+                        目的地: {item.destination}
+                      </ThemedText>
+                    </View>
+
+                    <View style={styles.historyItems}>
+                      {item.items.map((outItem, index) => (
+                        <Pressable 
+                          key={index} 
+                          style={styles.historyItem}
+                          onPress={() => {
+                            if (!isEditMode) {
+                              router.push(`/product-detail?id=${outItem.productId}`);
+                            }
+                          }}
+                        >
+                          <Image
+                            source={{ uri: outItem.detailImageUri }}
+                            style={styles.historyItemImage}
+                          />
+                          <View style={styles.historyItemInfo}>
+                            <ThemedText style={styles.historyItemSku}>
+                              {outItem.sku}
+                            </ThemedText>
+                            <ThemedText style={styles.historyItemQuantity}>
+                              -{outItem.quantity} 件
+                            </ThemedText>
+                          </View>
+                        </Pressable>
+                      ))}
+                    </View>
+
+                    <ThemedText style={styles.historyTotal}>
+                      共 {item.items.length} 个产品，
+                      {item.items.reduce((sum, i) => sum + i.quantity, 0)} 件
                     </ThemedText>
                   </View>
-
-                  <View style={styles.historyInfo}>
-                    <ThemedText style={styles.historyReason}>
-                      原因: {item.reason}
-                    </ThemedText>
-                    <ThemedText style={styles.historyDestination}>
-                      目的地: {item.destination}
-                    </ThemedText>
-                  </View>
-
-                  <View style={styles.historyItems}>
-                    {item.items.map((outItem, index) => (
-                      <Pressable 
-                        key={index} 
-                        style={styles.historyItem}
-                        onPress={() => router.push(`/product-detail?id=${outItem.productId}`)}
-                      >
-                        <Image
-                          source={{ uri: outItem.detailImageUri }}
-                          style={styles.historyItemImage}
-                        />
-                        <View style={styles.historyItemInfo}>
-                          <ThemedText style={styles.historyItemSku}>
-                            {outItem.sku}
-                          </ThemedText>
-                          <ThemedText style={styles.historyItemQuantity}>
-                            -{outItem.quantity} 件
-                          </ThemedText>
-                        </View>
-                      </Pressable>
-                    ))}
-                  </View>
-
-                  <ThemedText style={styles.historyTotal}>
-                    共 {item.items.length} 个产品，
-                    {item.items.reduce((sum, i) => sum + i.quantity, 0)} 件
-                  </ThemedText>
-                </View>
+                </Pressable>
               )}
               contentContainerStyle={{ paddingBottom: 100 }}
             />
@@ -874,6 +1008,38 @@ export default function OutboundScreen() {
                 onPress={handleConfirmScanResult}
               >
                 <ThemedText style={styles.modalConfirmText}>确认添加</ThemedText>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* 删除出库记录确认弹窗 */}
+      <Modal
+        visible={showDeleteConfirmModal}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setShowDeleteConfirmModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { backgroundColor: colorScheme === 'dark' ? '#333' : '#fff' }]}>
+            <ThemedText style={styles.modalTitle}>确认删除</ThemedText>
+            <ThemedText style={styles.modalMessage}>
+              确定要删除选中的 {selectedRecordIds.size} 条出库记录吗？{"\n"}
+              此操作不可恢复。
+            </ThemedText>
+            <View style={styles.modalButtons}>
+              <Pressable
+                style={[styles.modalButton, styles.modalCancelButton]}
+                onPress={() => setShowDeleteConfirmModal(false)}
+              >
+                <ThemedText style={styles.modalCancelText}>取消</ThemedText>
+              </Pressable>
+              <Pressable
+                style={[styles.modalButton, styles.modalConfirmButton]}
+                onPress={handleDeleteSelectedRecords}
+              >
+                <ThemedText style={styles.modalConfirmText}>确认删除</ThemedText>
               </Pressable>
             </View>
           </View>
@@ -1103,6 +1269,7 @@ const styles = StyleSheet.create({
     opacity: 0.5,
   },
   historyCard: {
+    flexDirection: "row",
     backgroundColor: "rgba(0, 0, 0, 0.03)",
     borderRadius: 12,
     padding: 16,
@@ -1335,5 +1502,76 @@ const styles = StyleSheet.create({
     color: "#666",
     textAlign: "center",
     fontStyle: "italic",
+  },
+  // 编辑模式工具栏样式
+  editToolbar: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 12,
+    paddingHorizontal: 4,
+    marginBottom: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(0, 0, 0, 0.1)",
+  },
+  editModeButton: {
+    marginLeft: "auto",
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    backgroundColor: "#007AFF",
+    borderRadius: 8,
+  },
+  editModeButtonText: {
+    color: "#fff",
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  selectAllRecordsButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  editToolbarButtons: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  toolbarButton: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  deleteToolbarButton: {
+    backgroundColor: "#FF3B30",
+  },
+  deleteToolbarButtonText: {
+    color: "#fff",
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  cancelToolbarButton: {
+    backgroundColor: "rgba(0, 0, 0, 0.1)",
+  },
+  cancelToolbarButtonText: {
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  toolbarButtonDisabled: {
+    opacity: 0.5,
+  },
+  // 出库记录卡片多选样式
+  historyCardSelected: {
+    backgroundColor: "rgba(0, 122, 255, 0.1)",
+    borderWidth: 2,
+    borderColor: "#007AFF",
+  },
+  recordCheckboxContainer: {
+    justifyContent: "center",
+    paddingRight: 12,
+  },
+  historyCardContent: {
+    flex: 1,
+  },
+  historyCardContentWithCheckbox: {
+    flex: 1,
   },
 });
