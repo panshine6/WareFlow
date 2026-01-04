@@ -25,6 +25,8 @@ import { trpc } from "@/lib/trpc";
 import { AutoSync } from "@/lib/auto-sync";
 import { ProductStorage } from "@/lib/storage";
 import { isMobileWeb, isDesktopWeb } from "@/lib/platform-detect";
+import { getAllBoxes } from "@/lib/box-storage";
+import type { Box } from "@/types/box";
 import type { Product } from "@/types/product";
 
 // 库存筛选类型
@@ -51,6 +53,11 @@ export default function InventoryScreen() {
   const [stockFilter, setStockFilter] = useState<StockFilter>("all");
   const [sortType, setSortType] = useState<SortType>("time_desc");
   const [showSortOptions, setShowSortOptions] = useState(false);
+  
+  // Box 筛选状态
+  const [boxes, setBoxes] = useState<Box[]>([]);
+  const [selectedBoxId, setSelectedBoxId] = useState<string | null>(null); // null 表示全部
+  const [showBoxFilter, setShowBoxFilter] = useState(false);
 
   // 使用 tRPC mutations 和 queries
   const downloadQuery = trpc.sync.download.useQuery(undefined, {
@@ -64,9 +71,13 @@ export default function InventoryScreen() {
       
       // 统一使用 ProductStorage（Web 使用 IndexedDB/AsyncStorage）
       console.log('[InventoryScreen] Loading products from ProductStorage...');
-      const data = await ProductStorage.getActive();
+      const [data, allBoxes] = await Promise.all([
+        ProductStorage.getActive(),
+        getAllBoxes()
+      ]);
       console.log('[InventoryScreen] Loaded', data.length, 'products');
       setProducts(data);
+      setBoxes(allBoxes);
     } catch (error) {
       console.error('[InventoryScreen] Failed to load products:', error);
     } finally {
@@ -177,6 +188,17 @@ export default function InventoryScreen() {
       result = result.filter((p) => p.quantity === 0);
     }
 
+    // Box 筛选
+    if (selectedBoxId !== null) {
+      if (selectedBoxId === "unassigned") {
+        // 筛选未关联 Box 的产品
+        result = result.filter((p) => !p.boxId);
+      } else {
+        // 筛选指定 Box 的产品
+        result = result.filter((p) => p.boxId === selectedBoxId);
+      }
+    }
+
     // 排序
     switch (sortType) {
       case "time_desc":
@@ -194,7 +216,7 @@ export default function InventoryScreen() {
     }
 
     setFilteredProducts(result);
-  }, [searchQuery, products, stockFilter, sortType]);
+  }, [searchQuery, products, stockFilter, sortType, selectedBoxId]);
 
   // 获取排序显示文本
   const getSortText = () => {
@@ -305,6 +327,64 @@ export default function InventoryScreen() {
               排序: {getSortText()}
             </ThemedText>
           </Pressable>
+        </View>
+
+        {/* Box 筛选栏 */}
+        <View style={styles.boxFilterContainer}>
+          <Pressable
+            style={[
+              styles.boxFilterChip,
+              selectedBoxId === null && styles.boxFilterChipActive,
+            ]}
+            onPress={() => setSelectedBoxId(null)}
+          >
+            <ThemedText
+              style={[
+                styles.boxFilterChipText,
+                selectedBoxId === null && styles.boxFilterChipTextActive,
+              ]}
+            >
+              全部 Box
+            </ThemedText>
+          </Pressable>
+          <Pressable
+            style={[
+              styles.boxFilterChip,
+              selectedBoxId === "unassigned" && styles.boxFilterChipActive,
+            ]}
+            onPress={() => setSelectedBoxId("unassigned")}
+          >
+            <ThemedText
+              style={[
+                styles.boxFilterChipText,
+                selectedBoxId === "unassigned" && styles.boxFilterChipTextActive,
+              ]}
+            >
+              未关联
+            </ThemedText>
+          </Pressable>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.boxScrollView}>
+            {boxes.map((box) => (
+              <Pressable
+                key={box.id}
+                style={[
+                  styles.boxFilterChip,
+                  selectedBoxId === box.id && styles.boxFilterChipActive,
+                ]}
+                onPress={() => setSelectedBoxId(box.id)}
+              >
+                <ThemedText
+                  style={[
+                    styles.boxFilterChipText,
+                    selectedBoxId === box.id && styles.boxFilterChipTextActive,
+                  ]}
+                  numberOfLines={1}
+                >
+                  {box.name}
+                </ThemedText>
+              </Pressable>
+            ))}
+          </ScrollView>
         </View>
 
         {/* 排序选项 */}
@@ -555,6 +635,32 @@ const styles = StyleSheet.create({
     fontSize: 13,
   },
   sortOptionTextActive: {
+    color: "#fff",
+  },
+  boxFilterContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 8,
+    gap: 8,
+  },
+  boxScrollView: {
+    flexGrow: 0,
+  },
+  boxFilterChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    backgroundColor: "rgba(0, 0, 0, 0.05)",
+    marginRight: 8,
+  },
+  boxFilterChipActive: {
+    backgroundColor: "#34C759",
+  },
+  boxFilterChipText: {
+    fontSize: 13,
+    fontWeight: "500",
+  },
+  boxFilterChipTextActive: {
     color: "#fff",
   },
   statsRow: {
