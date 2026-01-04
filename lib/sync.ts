@@ -1,8 +1,13 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { ProductStorage } from "./storage";
+import { generateThumbnail } from "./image-utils";
 import type { Product } from "@/types/product";
 
 const LAST_SYNC_TIME_KEY = "lastSyncTime";
+
+// 云端图片压缩设置
+const CLOUD_IMAGE_MAX_SIZE = 512; // 最大边长 512px
+const CLOUD_IMAGE_QUALITY = 0.5; // JPEG 质量 50%
 
 export interface SyncStatus {
   localCount: number;
@@ -21,12 +26,42 @@ export interface SyncResult {
 }
 
 /**
+ * 压缩图片用于云端存储
+ * @param base64OrDataUrl 原始图片（Base64 或 Data URL）
+ * @returns 压缩后的 Base64（不含前缀）
+ */
+async function compressImageForCloud(base64OrDataUrl: string): Promise<string> {
+  if (!base64OrDataUrl) return "";
+  
+  try {
+    // 移除 Data URL 前缀（如果有）
+    let base64 = base64OrDataUrl;
+    if (base64OrDataUrl.startsWith("data:")) {
+      base64 = base64OrDataUrl.split(",")[1] || "";
+    }
+    
+    if (!base64) return "";
+    
+    // 使用 generateThumbnail 压缩图片
+    const compressed = await generateThumbnail(base64, CLOUD_IMAGE_MAX_SIZE, CLOUD_IMAGE_QUALITY);
+    return compressed;
+  } catch (error) {
+    console.warn("[Sync] Failed to compress image, using original:", error);
+    // 压缩失败时返回原图（移除前缀）
+    if (base64OrDataUrl.startsWith("data:")) {
+      return base64OrDataUrl.split(",")[1] || "";
+    }
+    return base64OrDataUrl;
+  }
+}
+
+/**
  * 数据同步服务
  * 
  * 同步策略：
  * - 增量同步：只上传自上次同步后有变化的产品
  * - 不上传全景图（overviewImageUri 设为空）
- * - 细节图直接上传本地 2K 版本，不再二次压缩
+ * - 细节图压缩到 512px、质量 50% 后上传（大幅减少存储占用）
  */
 export const SyncService = {
   /**
@@ -35,7 +70,7 @@ export const SyncService = {
    * 策略：
    * - 上传所有本地产品（服务端使用 upsert 避免重复）
    * - 不上传全景图
-   * - 细节图直接上传本地 2K 版本
+   * - 细节图压缩到 512px、质量 50%（每张约 50-100KB）
    */
   async uploadToCloud(trpcClient: any): Promise<SyncResult> {
     try {
@@ -55,24 +90,35 @@ export const SyncService = {
         };
       }
       
-      // 2. 转换数据格式（直接使用本地 2K 图片，不再压缩）
-      const productsToUpload = allProducts.map((p) => ({
-        id: p.id,
-        detailImageUri: p.detailImageUri, // 直接上传本地 2K 版本
-        overviewImageUri: "", // 不上传全景图
-        sku: p.sku,
-        systemSku: p.systemSku || null, // 系统生成的 SKU（条形码）
-        boxId: p.boxId || null, // 所属 Box ID
-        boxName: p.boxName || null, // 所属 Box 名称
-        quantity: p.quantity,
-        storageLocation: p.storageLocation,
-        operatorId: p.operatorId || 0,
-        operatorName: p.operatorName || "",
-        isDeleted: p.isDeleted ? 1 : 0,
-        deletedAt: p.deletedAt ? new Date(p.deletedAt) : null,
-        createdAt: new Date(p.createdAt),
-        updatedAt: new Date(p.updatedAt || p.createdAt),
-      }));
+      // 2. 压缩图片并转换数据格式
+      console.log(`[Sync] Compressing images for cloud storage (${CLOUD_IMAGE_MAX_SIZE}px, ${CLOUD_IMAGE_QUALITY * 100}% quality)...`);
+      
+      const productsToUpload = await Promise.all(
+        allProducts.map(async (p) => {
+          // 压缩细节图
+          const compressedImage = await compressImageForCloud(p.detailImageUri);
+          
+          return {
+            id: p.id,
+            detailImageUri: compressedImage, // 压缩后的图片
+            overviewImageUri: "", // 不上传全景图
+            sku: p.sku,
+            systemSku: p.systemSku || null, // 系统生成的 SKU（条形码）
+            boxId: p.boxId || null, // 所属 Box ID
+            boxName: p.boxName || null, // 所属 Box 名称
+            quantity: p.quantity,
+            storageLocation: p.storageLocation,
+            operatorId: p.operatorId || 0,
+            operatorName: p.operatorName || "",
+            isDeleted: p.isDeleted ? 1 : 0,
+            deletedAt: p.deletedAt ? new Date(p.deletedAt) : null,
+            createdAt: new Date(p.createdAt),
+            updatedAt: new Date(p.updatedAt || p.createdAt),
+          };
+        })
+      );
+      
+      console.log(`[Sync] Image compression complete`);
       
       // 3. 上传到云端（服务端使用 upsert 增量更新）
       console.log(`[Sync] Uploading ${productsToUpload.length} products...`);
