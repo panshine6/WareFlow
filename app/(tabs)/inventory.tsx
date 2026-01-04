@@ -17,6 +17,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
+import { CloudImage } from "@/components/cloud-image";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { exportToDianxiaomiFormat } from "@/lib/excel-export";
 import { ProductAPI } from "@/lib/api-client";
@@ -422,12 +423,14 @@ export default function InventoryScreen() {
                     <ThemedText style={styles.emptyBadgeText}>库存为0</ThemedText>
                   </View>
                 )}
-                <Image
-                  source={{ uri: item.detailImageUri }}
+                <CloudImage
+                  productId={item.id}
+                  localUri={item.detailImageUri}
                   style={[
                     styles.productImage,
                     item.quantity === 0 && styles.productImageEmpty
                   ]}
+                  imageType="detail"
                 />
                 <View style={styles.productInfo}>
                   <ThemedText type="defaultSemiBold" style={[

@@ -66,9 +66,33 @@ export const appRouter = router({
       }),
     
     // 从云端下载数据到本地（覆盖）
-    download: publicProcedure      .query(async () => {
+    download: publicProcedure.query(async () => {
         const products = await db.getAllProducts();
         return { products };
+      }),
+    
+    // 从云端下载数据（不含图片，用于 Web 端节省存储空间）
+    downloadWithoutImages: publicProcedure.query(async () => {
+        const products = await db.getAllProducts();
+        // 移除图片数据，只保留元数据
+        const productsWithoutImages = products.map(p => ({
+          ...p,
+          detailImageUri: '',  // 清空图片数据
+          overviewImageUri: '', // 清空图片数据
+        }));
+        return { products: productsWithoutImages };
+      }),
+    
+    // 获取单个产品的图片（用于 Web 端按需加载）
+    getProductImage: publicProcedure
+      .input(z.object({ id: z.string() }))
+      .query(async ({ input }) => {
+        const product = await db.getProductById(input.id);
+        if (!product) return { detailImageUri: '', overviewImageUri: '' };
+        return {
+          detailImageUri: product.detailImageUri,
+          overviewImageUri: product.overviewImageUri,
+        };
       }),
     
     // 获取同步状态

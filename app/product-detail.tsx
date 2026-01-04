@@ -14,6 +14,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
+import { CloudImage } from "@/components/cloud-image";
 import { Colors } from "@/constants/theme";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { ProductAPI } from "@/lib/api-client";
@@ -277,7 +278,12 @@ export default function ProductDetailScreen() {
         {/* 产品照片 */}
         <View style={styles.photoContainer}>
           <ThemedText style={styles.photoLabel}>产品照片</ThemedText>
-          <Image source={{ uri: product.detailImageUri }} style={styles.photo} />
+          <CloudImage
+            productId={product.id}
+            localUri={product.detailImageUri}
+            style={styles.photo}
+            imageType="detail"
+          />
         </View>
 
         {/* 产品信息 */}

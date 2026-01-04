@@ -49,6 +49,9 @@ export default function HomeScreen() {
   const downloadQuery = trpc.sync.download.useQuery(undefined, {
     enabled: false, // 手动触发
   });
+  const downloadWithoutImagesQuery = trpc.sync.downloadWithoutImages.useQuery(undefined, {
+    enabled: false, // 手动触发
+  });
   const uploadMutation = trpc.sync.upload.useMutation();
   
   // 上传状态
@@ -529,6 +532,12 @@ export default function HomeScreen() {
                           query: async () => {
                             console.log("[Download] Calling downloadQuery.refetch");
                             return (await downloadQuery.refetch()).data;
+                          },
+                        },
+                        downloadWithoutImages: {
+                          query: async () => {
+                            console.log("[Download] Calling downloadWithoutImagesQuery.refetch (no images)");
+                            return (await downloadWithoutImagesQuery.refetch()).data;
                           },
                         },
                       },

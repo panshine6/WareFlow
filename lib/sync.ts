@@ -104,21 +104,40 @@ export const SyncService = {
   /**
    * 从云端下载数据到本地（覆盖本地数据）
    * 
-   * 注意：云端存储的是本地 2K 版本的细节图
+   * 策略：
+   * - 移动端：下载完整数据（包含图片）
+   * - 电脑 Web 端：下载不含图片的数据（避免 localStorage 超限），图片按需从云端加载
    */
   async downloadFromCloud(trpcClient: any): Promise<SyncResult> {
     try {
       console.log("[Sync] Starting download from cloud...");
       
-      // 1. 从云端获取数据
-      const { products } = await trpcClient.sync.download.query();
+      // 1. 检测是否为电脑 Web 端
+      const isWeb = typeof window !== 'undefined' && typeof document !== 'undefined';
+      const isMobileWeb = isWeb && /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(window.navigator?.userAgent || '');
+      const isDesktopWeb = isWeb && !isMobileWeb;
+      
+      // 2. 根据平台选择不同的下载接口
+      let products;
+      if (isDesktopWeb) {
+        // 电脑 Web 端：使用不含图片的接口，避免 localStorage 超限
+        console.log("[Sync] Desktop Web detected, downloading without images...");
+        const result = await trpcClient.sync.downloadWithoutImages.query();
+        products = result.products;
+      } else {
+        // 移动端：下载完整数据
+        console.log("[Sync] Mobile/Native detected, downloading full data...");
+        const result = await trpcClient.sync.download.query();
+        products = result.products;
+      }
+      
       console.log(`[Sync] Downloaded ${products.length} products from cloud`);
       
-      // 2. 转换数据格式
+      // 3. 转换数据格式
       const localProducts: Product[] = products.map((p: any) => ({
         id: p.id,
-        detailImageUri: p.detailImageUri, // 云端存储的是 2K 版本
-        overviewImageUri: p.overviewImageUri || "", // 云端不存全景图
+        detailImageUri: p.detailImageUri || '',
+        overviewImageUri: p.overviewImageUri || '',
         sku: p.sku,
         quantity: p.quantity,
         storageLocation: p.storageLocation,
@@ -131,11 +150,11 @@ export const SyncService = {
         history: [], // 历史记录需要单独查询
       }));
       
-      // 3. 清空本地数据并保存云端数据
+      // 4. 清空本地数据并保存云端数据
       await AsyncStorage.removeItem("products");
       await AsyncStorage.setItem("products", JSON.stringify(localProducts));
       
-      // 4. 更新最后同步时间
+      // 5. 更新最后同步时间
       const now = new Date().toISOString();
       await AsyncStorage.setItem(LAST_SYNC_TIME_KEY, now);
       

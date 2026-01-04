@@ -15,6 +15,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
+import { CloudImage } from "@/components/cloud-image";
 import { Colors } from "@/constants/theme";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { ProductStorage } from "@/lib/storage";
@@ -62,6 +63,7 @@ export default function InboundScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const uploadMutation = trpc.sync.upload.useMutation();
   const downloadQuery = trpc.sync.download.useQuery(undefined, { enabled: false });
+  const downloadWithoutImagesQuery = trpc.sync.downloadWithoutImages.useQuery(undefined, { enabled: false });
   
   // 检测是否为移动端（手机）
   const isMobile = Platform.OS !== 'web' || (Platform.OS === 'web' && typeof window !== 'undefined' && /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(window.navigator?.userAgent || ''));
@@ -190,6 +192,12 @@ export default function InboundScreen() {
             download: {
               query: async () => {
                 const result = await downloadQuery.refetch();
+                return result.data;
+              },
+            },
+            downloadWithoutImages: {
+              query: async () => {
+                const result = await downloadWithoutImagesQuery.refetch();
                 return result.data;
               },
             },
@@ -553,9 +561,11 @@ export default function InboundScreen() {
                   ]}
                   onPress={() => router.push({ pathname: "/product-detail" as any, params: { id: item.product.id, from: 'inbound' } })}
                 >
-                  <Image
-                    source={{ uri: item.entry.detailImageUri || item.product.detailImageUri }}
+                  <CloudImage
+                    productId={item.product.id}
+                    localUri={item.entry.detailImageUri || item.product.detailImageUri}
                     style={styles.historyImage}
+                    imageType="detail"
                   />
                   <View style={styles.historyInfo}>
                     <ThemedText style={styles.historySku}>{item.product.sku}</ThemedText>
