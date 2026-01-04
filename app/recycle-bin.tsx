@@ -69,82 +69,56 @@ export default function RecycleBinScreen() {
   };
 
   // 恢复产品
-  const handleRestore = async (product: Product) => {
+  const handleRestore = (product: Product) => {
     console.log('[RecycleBin] handleRestore called for product:', product.id, product.sku);
     
-    // Web 平台直接使用 window.confirm
-    if (isWeb) {
-      console.log('[RecycleBin] Web platform detected, using window.confirm');
-      const confirmed = window.confirm(`确认恢复\n\n确定要恢复产品 ${product.sku} 吗？`);
-      console.log('[RecycleBin] User confirmed:', confirmed);
-      if (confirmed) {
-        try {
-          console.log('[RecycleBin] Calling ProductStorage.restore...');
-          await ProductStorage.restore(product.id);
-          console.log('[RecycleBin] Restore successful');
-          window.alert("产品已恢复");
-          await loadProducts();
-        } catch (error: any) {
-          console.error('[RecycleBin] Failed to restore product:', error);
-          window.alert("恢复产品失败: " + (error.message || "未知错误"));
-        }
-      }
-      return;
-    }
-
-    // 原生平台使用 Alert.confirm
+    // 统一使用 Alert.confirm（已内置跨平台处理）
     Alert.confirm(
       "确认恢复",
       `确定要恢复产品 ${product.sku} 吗？`,
       async () => {
         try {
-          await ProductAPI.restore(product.id);
+          console.log('[RecycleBin] Restoring product...');
+          // Web 平台使用 ProductStorage，原生平台使用 ProductAPI
+          if (isWeb) {
+            await ProductStorage.restore(product.id);
+          } else {
+            await ProductAPI.restore(product.id);
+          }
+          console.log('[RecycleBin] Restore successful');
           Alert.alert("成功", "产品已恢复");
           await loadProducts();
-        } catch (error) {
-          console.error("Failed to restore product:", error);
-          Alert.alert("错误", "恢复产品失败");
+        } catch (error: any) {
+          console.error('[RecycleBin] Failed to restore product:', error);
+          Alert.alert("错误", "恢复产品失败: " + (error.message || "未知错误"));
         }
       }
     );
   };
 
   // 永久删除产品
-  const handlePermanentDelete = async (product: Product) => {
+  const handlePermanentDelete = (product: Product) => {
     console.log('[RecycleBin] handlePermanentDelete called for product:', product.id, product.sku);
     
-    // Web 平台直接使用 window.confirm
-    if (isWeb) {
-      console.log('[RecycleBin] Web platform detected, using window.confirm');
-      const confirmed = window.confirm(`确认永久删除\n\n确定要永久删除产品 ${product.sku} 吗？此操作无法撤销！`);
-      console.log('[RecycleBin] User confirmed:', confirmed);
-      if (confirmed) {
-        try {
-          console.log('[RecycleBin] Calling ProductStorage.permanentDelete...');
-          await ProductStorage.permanentDelete(product.id);
-          console.log('[RecycleBin] Permanent delete successful');
-          window.alert("产品已永久删除");
-          await loadProducts();
-        } catch (error: any) {
-          console.error('[RecycleBin] Failed to permanently delete product:', error);
-          window.alert("永久删除失败: " + (error.message || "未知错误"));
-        }
-      }
-      return;
-    }
-
-    // 原生平台使用 Alert.confirm
+    // 统一使用 Alert.confirm（已内置跨平台处理）
     Alert.confirm(
       "确认永久删除",
       `确定要永久删除产品 ${product.sku} 吗？此操作无法撤销！`,
       async () => {
         try {
-          await ProductAPI.permanentDelete(product.id);
+          console.log('[RecycleBin] Permanently deleting product...');
+          // Web 平台使用 ProductStorage，原生平台使用 ProductAPI
+          if (isWeb) {
+            await ProductStorage.permanentDelete(product.id);
+          } else {
+            await ProductAPI.permanentDelete(product.id);
+          }
+          console.log('[RecycleBin] Permanent delete successful');
           Alert.alert("成功", "产品已永久删除");
           await loadProducts();
-        } catch (error) {
-          console.error("Failed to permanently delete product:", error);
-          Alert.alert("错误", "永久删除失败");
+        } catch (error: any) {
+          console.error('[RecycleBin] Failed to permanently delete product:', error);
+          Alert.alert("错误", "永久删除失败: " + (error.message || "未知错误"));
         }
       }
     );
