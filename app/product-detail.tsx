@@ -627,6 +627,49 @@ export default function ProductDetailScreen() {
           </View>
         )}
 
+        {/* 操作按钮 - 放在条形码下面，库存记录之前 */}
+        <View style={styles.actionsContainer}>
+          {isEditing ? (
+            <>
+              <Pressable
+                onPress={handleSave}
+                disabled={saving}
+                style={[styles.button, styles.saveButton]}
+              >
+                {saving ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <ThemedText style={styles.buttonText}>保存</ThemedText>
+                )}
+              </Pressable>
+              <Pressable
+                onPress={handleCancel}
+                disabled={saving}
+                style={[styles.button, styles.cancelButton]}
+              >
+                <ThemedText style={[styles.buttonText, styles.cancelButtonText]}>
+                  取消
+                </ThemedText>
+              </Pressable>
+            </>
+          ) : (
+            <>
+              <Pressable
+                onPress={() => setIsEditing(true)}
+                style={[styles.button, styles.editButton]}
+              >
+                <ThemedText style={styles.buttonText}>编辑</ThemedText>
+              </Pressable>
+              <Pressable
+                onPress={() => setShowDeleteConfirm(true)}
+                style={[styles.button, styles.deleteButton]}
+              >
+                <ThemedText style={styles.buttonText}>删除</ThemedText>
+              </Pressable>
+            </>
+          )}
+        </View>
+
         {/* 库存操作历史记录 */}
         {product.history && product.history.length > 0 && (
           <View style={styles.historyContainer}>
@@ -729,48 +772,6 @@ export default function ProductDetailScreen() {
           </View>
         )}
 
-        {/* 操作按钮 */}
-        <View style={styles.actionsContainer}>
-          {isEditing ? (
-            <>
-              <Pressable
-                onPress={handleSave}
-                disabled={saving}
-                style={[styles.button, styles.saveButton]}
-              >
-                {saving ? (
-                  <ActivityIndicator color="#fff" />
-                ) : (
-                  <ThemedText style={styles.buttonText}>保存</ThemedText>
-                )}
-              </Pressable>
-              <Pressable
-                onPress={handleCancel}
-                disabled={saving}
-                style={[styles.button, styles.cancelButton]}
-              >
-                <ThemedText style={[styles.buttonText, styles.cancelButtonText]}>
-                  取消
-                </ThemedText>
-              </Pressable>
-            </>
-          ) : (
-            <>
-              <Pressable
-                onPress={() => setIsEditing(true)}
-                style={[styles.button, styles.editButton]}
-              >
-                <ThemedText style={styles.buttonText}>编辑</ThemedText>
-              </Pressable>
-              <Pressable
-                onPress={() => setShowDeleteConfirm(true)}
-                style={[styles.button, styles.deleteButton]}
-              >
-                <ThemedText style={styles.buttonText}>删除</ThemedText>
-              </Pressable>
-            </>
-          )}
-        </View>
       </ScrollView>
       
       {/* 删除确认对话框 */}
