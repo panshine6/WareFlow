@@ -23,6 +23,7 @@ import { useColorScheme } from "@/hooks/use-color-scheme";
 import { UserStorage } from "@/lib/user-storage";
 import { ProductAPI } from "@/lib/api-client";
 import { ProductStorage } from "@/lib/storage";
+import { OutboundStorage } from "@/lib/outbound-storage";
 import { AutoSync } from "@/lib/auto-sync";
 import { SyncService } from "@/lib/sync";
 import { trpc } from "@/lib/trpc";
@@ -62,6 +63,13 @@ export default function HomeScreen() {
   const [cloudProductCount, setCloudProductCount] = useState(0);
   const [downloading, setDownloading] = useState(false);
 
+  // 出库统计数据
+  const [outboundStats, setOutboundStats] = useState({
+    totalOutboundQuantity: 0,
+    outboundSkuCount: 0,
+    todayOutboundQuantity: 0,
+  });
+
   // 加载产品列表（Web 使用 AsyncStorage，原生使用 SQLite）
   const loadProducts = async () => {
     try {
@@ -74,6 +82,40 @@ export default function HomeScreen() {
       console.error("Failed to load products:", error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  // 加载出库统计数据
+  const loadOutboundStats = async () => {
+    try {
+      const records = await OutboundStorage.getAll();
+      
+      // 计算总出库数量
+      let totalQuantity = 0;
+      const skuSet = new Set<string>();
+      let todayQuantity = 0;
+      const today = new Date().toDateString();
+      
+      for (const record of records) {
+        for (const item of record.items) {
+          totalQuantity += item.quantity;
+          skuSet.add(item.sku);
+          
+          // 检查是否是今天的记录
+          const recordDate = new Date(record.timestamp).toDateString();
+          if (recordDate === today) {
+            todayQuantity += item.quantity;
+          }
+        }
+      }
+      
+      setOutboundStats({
+        totalOutboundQuantity: totalQuantity,
+        outboundSkuCount: skuSet.size,
+        todayOutboundQuantity: todayQuantity,
+      });
+    } catch (error) {
+      console.error("Failed to load outbound stats:", error);
     }
   };
 
@@ -105,6 +147,7 @@ export default function HomeScreen() {
   useFocusEffect(
     useCallback(() => {
       loadProducts();
+      loadOutboundStats();
       checkAndPromptDownload();
     }, [])
   );
@@ -253,7 +296,7 @@ export default function HomeScreen() {
           </Pressable>
         </View>
 
-        {/* 仓库状态区 - 三个卡片 */}
+        {/* 入库统计区 - 三个卡片 */}
         <View style={styles.statsContainer}>
           <View style={styles.statCard}>
             <ThemedText type="subtitle" style={styles.statNumber}>
@@ -274,6 +317,30 @@ export default function HomeScreen() {
               {totalSKU}
             </ThemedText>
             <ThemedText style={styles.statLabel}>总SKU数</ThemedText>
+          </View>
+        </View>
+
+        {/* 出库统计区 - 三个卡片 */}
+        <View style={styles.statsContainer}>
+          <View style={[styles.statCard, styles.outboundStatCard]}>
+            <ThemedText type="subtitle" style={[styles.statNumber, styles.outboundStatNumber]}>
+              {outboundStats.todayOutboundQuantity}
+            </ThemedText>
+            <ThemedText style={styles.statLabel}>今日出库</ThemedText>
+          </View>
+
+          <View style={[styles.statCard, styles.outboundStatCard]}>
+            <ThemedText type="subtitle" style={[styles.statNumber, styles.outboundStatNumber]}>
+              {outboundStats.totalOutboundQuantity}
+            </ThemedText>
+            <ThemedText style={styles.statLabel}>总出库数</ThemedText>
+          </View>
+
+          <View style={[styles.statCard, styles.outboundStatCard]}>
+            <ThemedText type="subtitle" style={[styles.statNumber, styles.outboundStatNumber]}>
+              {outboundStats.outboundSkuCount}
+            </ThemedText>
+            <ThemedText style={styles.statLabel}>出库SKU</ThemedText>
           </View>
         </View>
 
@@ -724,6 +791,12 @@ const styles = StyleSheet.create({
     lineHeight: 16,
     marginTop: 4,
     opacity: 0.7,
+  },
+  outboundStatCard: {
+    backgroundColor: "rgba(255, 59, 48, 0.1)",
+  },
+  outboundStatNumber: {
+    color: "#FF3B30",
   },
   dataSecurityButton: {
     backgroundColor: "rgba(52, 199, 89, 0.1)",
