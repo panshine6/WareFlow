@@ -29,6 +29,13 @@
       "when": 1735829700000,
       "tag": "0003_change_image_fields_to_mediumtext",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "5",
+      "when": 1736000000000,
+      "tag": "0004_add_systemsku_column",
+      "breakpoints": true
     }
   ]
 }

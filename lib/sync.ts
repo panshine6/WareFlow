@@ -61,6 +61,7 @@ export const SyncService = {
         detailImageUri: p.detailImageUri, // 直接上传本地 2K 版本
         overviewImageUri: "", // 不上传全景图
         sku: p.sku,
+        systemSku: p.systemSku || null, // 系统生成的 SKU（条形码）
         quantity: p.quantity,
         storageLocation: p.storageLocation,
         operatorId: p.operatorId || 0,

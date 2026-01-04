@@ -243,6 +243,7 @@ export async function upsertProduct(productData: InsertProduct) {
       detailImageUri: productData.detailImageUri,
       overviewImageUri: productData.overviewImageUri,
       sku: productData.sku,
+      systemSku: productData.systemSku, // 系统生成的 SKU（条形码）
       quantity: productData.quantity,
       storageLocation: productData.storageLocation,
       operatorId: productData.operatorId,

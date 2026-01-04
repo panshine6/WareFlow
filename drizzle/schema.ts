@@ -34,6 +34,7 @@ export const products = mysqlTable("products", {
   detailImageUri: mediumtext("detailImageUri").notNull(),
   overviewImageUri: mediumtext("overviewImageUri").notNull(),
   sku: varchar("sku", { length: 255 }).notNull(),
+  systemSku: varchar("systemSku", { length: 64 }),  // 系统生成的 SKU（条形码）
   quantity: int("quantity").notNull().default(0),
   storageLocation: varchar("storageLocation", { length: 255 }).notNull(),
   operatorId: int("operatorId").notNull(),

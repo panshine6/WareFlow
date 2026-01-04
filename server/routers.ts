@@ -26,7 +26,7 @@ export const appRouter = router({
     getDeleted: publicProcedure.query(async () => await db.getDeletedProducts()),
     getById: publicProcedure.input(z.object({ id: z.string() })).query(async ({ input }) => await db.getProductById(input.id)),
     search: publicProcedure.input(z.object({ sku: z.string() })).query(async ({ input }) => await db.searchProductsBySku(input.sku)),
-    create: publicProcedure.input(z.object({ id: z.string(), detailImageUri: z.string(), overviewImageUri: z.string(), sku: z.string(), quantity: z.number(), storageLocation: z.string(), operatorId: z.number(), operatorName: z.string() })).mutation(async ({ input }) => {
+    create: publicProcedure.input(z.object({ id: z.string(), detailImageUri: z.string(), overviewImageUri: z.string(), sku: z.string(), systemSku: z.string().optional(), quantity: z.number(), storageLocation: z.string(), operatorId: z.number(), operatorName: z.string() })).mutation(async ({ input }) => {
       console.log('[products.create] Called with input:', { sku: input.sku, quantity: input.quantity });
       return await db.createProduct({ ...input, isDeleted: 0, deletedAt: null, createdAt: new Date(), updatedAt: new Date() });
     }),
@@ -49,6 +49,7 @@ export const appRouter = router({
           detailImageUri: z.string(),
           overviewImageUri: z.string(),
           sku: z.string(),
+          systemSku: z.string().nullable().optional(), // 系统生成的 SKU（条形码）
           quantity: z.number(),
           storageLocation: z.string(),
           operatorId: z.number(),
