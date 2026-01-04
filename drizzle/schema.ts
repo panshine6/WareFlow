@@ -1,4 +1,4 @@
-import { int, mysqlEnum, mysqlTable, text, mediumtext, timestamp, varchar } from "drizzle-orm/mysql-core";
+import { int, mysqlEnum, mysqlTable, text, mediumtext, timestamp, varchar, decimal } from "drizzle-orm/mysql-core";
 
 /**
  * Core user table backing auth flow.
@@ -37,6 +37,7 @@ export const products = mysqlTable("products", {
   systemSku: varchar("systemSku", { length: 64 }),  // 系统生成的 SKU（条形码）
   boxId: varchar("boxId", { length: 64 }),  // 所属 Box ID
   boxName: varchar("boxName", { length: 255 }),  // 所属 Box 名称
+  price: decimal("price", { precision: 10, scale: 2 }),  // 产品价格
   quantity: int("quantity").notNull().default(0),
   storageLocation: varchar("storageLocation", { length: 255 }).notNull(),
   operatorId: int("operatorId").notNull(),

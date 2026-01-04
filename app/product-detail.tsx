@@ -381,13 +381,62 @@ export default function ProductDetailScreen() {
             )}
           </View>
 
+          {/* 价格 */}
+          <View style={styles.infoRow}>
+            <ThemedText style={styles.label}>价格</ThemedText>
+            {isEditing ? (
+              <TextInput
+                value={editedProduct.price?.toString() || '0'}
+                onChangeText={(text) => {
+                  // 允许输入数字和小数点
+                  if (/^\d*\.?\d*$/.test(text) || text === '') {
+                    setEditedProduct({
+                      ...editedProduct,
+                      price: parseFloat(text) || 0,
+                    });
+                  }
+                }}
+                style={[
+                  styles.input,
+                  {
+                    color: Colors[colorScheme ?? "light"].text,
+                    borderColor: Colors[colorScheme ?? "light"].icon,
+                  },
+                ]}
+                keyboardType="decimal-pad"
+                placeholder="0.00"
+                placeholderTextColor={Colors[colorScheme ?? "light"].icon}
+              />
+            ) : (
+              <ThemedText style={styles.value}>
+                ¥{product.price?.toFixed(2) || '0.00'}
+              </ThemedText>
+            )}
+          </View>
+
           {/* Box */}
-          {product.boxName && (
-            <View style={styles.infoRow}>
-              <ThemedText style={styles.label}>Box</ThemedText>
+          <View style={styles.infoRow}>
+            <ThemedText style={styles.label}>Box</ThemedText>
+            {isEditing ? (
+              <TextInput
+                value={editedProduct.boxName || ''}
+                onChangeText={(text) =>
+                  setEditedProduct({ ...editedProduct, boxName: text })
+                }
+                style={[
+                  styles.input,
+                  {
+                    color: Colors[colorScheme ?? "light"].text,
+                    borderColor: Colors[colorScheme ?? "light"].icon,
+                  },
+                ]}
+                placeholder="输入 Box 名称"
+                placeholderTextColor={Colors[colorScheme ?? "light"].icon}
+              />
+            ) : (
               <View style={styles.storageLocationRow}>
-                <ThemedText style={styles.value}>{product.boxName}</ThemedText>
-                {Platform.OS === 'web' && (
+                <ThemedText style={styles.value}>{product.boxName || '未分配'}</ThemedText>
+                {Platform.OS === 'web' && product.boxName && (
                   <Pressable
                     onPress={async () => {
                       try {
@@ -403,8 +452,8 @@ export default function ProductDetailScreen() {
                   </Pressable>
                 )}
               </View>
-            </View>
-          )}
+            )}
+          </View>
 
           {/* 操作员 */}
           <View style={styles.infoRow}>

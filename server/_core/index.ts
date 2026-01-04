@@ -73,6 +73,23 @@ async function ensureDbColumns() {
       console.log('[db] boxName column already exists');
     }
     
+    // Check if price column exists
+    const result3 = await db.execute(sql`
+      SELECT COLUMN_NAME 
+      FROM INFORMATION_SCHEMA.COLUMNS 
+      WHERE TABLE_SCHEMA = DATABASE() 
+        AND TABLE_NAME = 'products' 
+        AND COLUMN_NAME = 'price'
+    `);
+    
+    if (!result3 || (Array.isArray(result3) && result3.length === 0) || (result3[0] && Array.isArray(result3[0]) && result3[0].length === 0)) {
+      console.log('[db] Adding missing price column...');
+      await db.execute(sql`ALTER TABLE products ADD COLUMN price decimal(10,2) NULL`);
+      console.log('[db] price column added successfully');
+    } else {
+      console.log('[db] price column already exists');
+    }
+    
     console.log('[db] Database schema check completed');
   } catch (error) {
     console.error('[db] Error ensuring database columns:', error);

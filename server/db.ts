@@ -246,6 +246,7 @@ export async function upsertProduct(productData: InsertProduct) {
       systemSku: productData.systemSku, // 系统生成的 SKU（条形码）
       boxId: productData.boxId, // 所属 Box ID
       boxName: productData.boxName, // 所属 Box 名称
+      price: productData.price, // 产品价格
       quantity: productData.quantity,
       storageLocation: productData.storageLocation,
       operatorId: productData.operatorId,

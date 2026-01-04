@@ -73,7 +73,8 @@ export default function AddProductQuickScreen() {
   const [sku, setSku] = useState("");
   const [quantity, setQuantity] = useState(1);
   const [location, setLocation] = useState("");
-  const [price, setPrice] = useState(9.9);
+  const [price, setPrice] = useState(7.9);
+  const [priceText, setPriceText] = useState("7.9"); // 用于输入框显示
   const [operatorName, setOperatorName] = useState("");
   const [operatorId, setOperatorId] = useState(1);
 
@@ -119,8 +120,10 @@ export default function AddProductQuickScreen() {
         }
         if (settings.lastPrice !== undefined) {
           setPrice(settings.lastPrice);
+          setPriceText(settings.lastPrice.toString());
         } else {
-          setPrice(9.9); // 默认价格
+          setPrice(7.9); // 默认价格
+          setPriceText("7.9");
         }
         if (user) {
           setOperatorName(user.name || "未知用户");
@@ -788,8 +791,26 @@ export default function AddProductQuickScreen() {
                 <ThemedText style={[styles.currencySymbol, { color: inputColor }]}>¥</ThemedText>
                 <TextInput
                   style={[styles.priceInput, { color: inputColor }]}
-                  value={price.toString()}
-                  onChangeText={(text) => setPrice(parseFloat(text) || 0)}
+                  value={priceText}
+                  onChangeText={(text) => {
+                    // 允许输入数字和小数点
+                    if (/^\d*\.?\d*$/.test(text) || text === '') {
+                      setPriceText(text);
+                      const num = parseFloat(text);
+                      if (!isNaN(num)) {
+                        setPrice(num);
+                      } else if (text === '' || text === '.') {
+                        setPrice(0);
+                      }
+                    }
+                  }}
+                  onBlur={() => {
+                    // 失去焦点时格式化显示
+                    if (priceText === '' || priceText === '.') {
+                      setPriceText('0');
+                      setPrice(0);
+                    }
+                  }}
                   keyboardType="decimal-pad"
                   placeholder="0.00"
                   placeholderTextColor={placeholderColor}

@@ -106,6 +106,7 @@ export const SyncService = {
             systemSku: p.systemSku || null, // 系统生成的 SKU（条形码）
             boxId: p.boxId || null, // 所属 Box ID
             boxName: p.boxName || null, // 所属 Box 名称
+            price: p.price?.toString() || null, // 产品价格
             quantity: p.quantity,
             storageLocation: p.storageLocation,
             operatorId: p.operatorId || 0,
