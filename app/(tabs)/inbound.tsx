@@ -570,7 +570,7 @@ export default function InboundScreen() {
                   <View style={styles.historyInfo}>
                     <ThemedText style={styles.historySku}>{item.product.sku}</ThemedText>
                     <ThemedText style={styles.historyLocation}>
-                      📍 {item.entry.location || item.product.storageLocation}
+                      📦 {item.product.boxName || 'No Box'}
                     </ThemedText>
                     <ThemedText style={styles.historyTime}>
                       {formatTime(item.entry.timestamp)}
