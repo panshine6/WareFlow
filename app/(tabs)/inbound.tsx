@@ -58,9 +58,13 @@ export default function InboundScreen() {
   const [selectedLabelIds, setSelectedLabelIds] = useState<Set<string>>(new Set());
   const [loadingLabels, setLoadingLabels] = useState(false);
 
-  // 下拉同步相关
+  // 同步相关
   const [refreshing, setRefreshing] = useState(false);
   const uploadMutation = trpc.sync.upload.useMutation();
+  const downloadQuery = trpc.sync.download.useQuery(undefined, { enabled: false });
+  
+  // 检测是否为移动端（手机）
+  const isMobile = Platform.OS !== 'web' || (Platform.OS === 'web' && typeof window !== 'undefined' && /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(window.navigator?.userAgent || ''));
 
   // 页面获得焦点时加载入库历史或标签数据
   useFocusEffect(
@@ -149,32 +153,54 @@ export default function InboundScreen() {
     }
   };
 
-  // 同步到云端
+  // 同步按钮点击处理
+  // 手机端：上传数据到云端
+  // 电脑端：从云端下载数据
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     try {
-      // 构建 trpcClient 对象，与首页数据安全一致
-      const trpcClient = {
-        sync: {
-          upload: {
-            mutate: async (data: any) => {
-              return uploadMutation.mutateAsync(data);
+      if (isMobile) {
+        // 手机端：上传数据到云端
+        const trpcClient = {
+          sync: {
+            upload: {
+              mutate: async (data: any) => {
+                return uploadMutation.mutateAsync(data);
+              },
             },
           },
-        },
-      };
-      const result = await SyncService.uploadToCloud(trpcClient);
-      if (result.success) {
-        const activeCount = result.activeCount || result.count;
-        let msg: string;
-        if (result.count === 0) {
-          msg = `本地数据无变化，无需同步\n共 ${activeCount} 个产品`;
+        };
+        const result = await SyncService.uploadToCloud(trpcClient);
+        if (result.success) {
+          const activeCount = result.activeCount || result.count;
+          let msg: string;
+          if (result.count === 0) {
+            msg = `本地数据无变化，无需同步\n共 ${activeCount} 个产品`;
+          } else {
+            msg = `已同步 ${activeCount} 个产品到云端`;
+          }
+          Alert.alert("上传成功", msg);
         } else {
-          msg = `已同步 ${activeCount} 个产品到云端`;
+          Alert.alert("上传失败", result.error || "未知错误");
         }
-        Alert.alert("同步成功", msg);
       } else {
-        Alert.alert("同步失败", result.error || "未知错误");
+        // 电脑端：从云端下载数据
+        const trpcClient = {
+          sync: {
+            download: {
+              query: async () => {
+                const result = await downloadQuery.refetch();
+                return result.data;
+              },
+            },
+          },
+        };
+        const result = await SyncService.downloadFromCloud(trpcClient);
+        if (result.success) {
+          Alert.alert("下载成功", `已从云端下载 ${result.count} 个产品`);
+        } else {
+          Alert.alert("下载失败", result.error || "未知错误");
+        }
       }
       // 同步后重新加载入库历史
       if (viewMode === "history") {
@@ -186,7 +212,7 @@ export default function InboundScreen() {
     } finally {
       setRefreshing(false);
     }
-  }, [viewMode, uploadMutation]);
+  }, [viewMode, uploadMutation, downloadQuery, isMobile]);
 
   // 格式化时间
   const formatTime = (timestamp: string) => {
@@ -501,7 +527,9 @@ export default function InboundScreen() {
             {refreshing ? (
               <ActivityIndicator size="small" color="#fff" />
             ) : (
-              <ThemedText style={styles.syncButtonText}>☁️ 同步到云端</ThemedText>
+              <ThemedText style={styles.syncButtonText}>
+                {isMobile ? '☁️ 同步到云端' : '☁️ 从云端下载'}
+              </ThemedText>
             )}
           </Pressable>
 
