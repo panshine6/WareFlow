@@ -72,11 +72,14 @@ export default function ProductDetailScreen() {
   const loadProduct = async () => {
     try {
       setLoading(true);
+      console.log('[ProductDetail] Loading product with id:', params.id);
       // Web 平台使用本地存储，原生平台使用 API
       const isWeb = Platform.OS === 'web';
+      console.log('[ProductDetail] Platform:', Platform.OS, 'isWeb:', isWeb);
       const found = isWeb 
         ? await ProductStorage.getById(params.id)
         : await ProductAPI.getById(params.id);
+      console.log('[ProductDetail] Product found:', found ? 'yes' : 'no', found);
       if (found) {
         setProduct(found);
         setEditedProduct(found);
@@ -86,8 +89,9 @@ export default function ProductDetailScreen() {
         router.back();
       }
     } catch (error) {
-      console.error("Failed to load product:", error);
-      Alert.alert("错误", "加载产品信息失败");
+      console.error("[ProductDetail] Failed to load product:", error);
+      console.error("[ProductDetail] Error details:", JSON.stringify(error, Object.getOwnPropertyNames(error)));
+      Alert.alert("错误", "加载产品信息失败: " + (error instanceof Error ? error.message : String(error)));
     } finally {
       setLoading(false);
     }
