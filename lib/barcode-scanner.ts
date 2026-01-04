@@ -229,31 +229,15 @@ export async function lookupProductByBarcode(barcodeValue: string): Promise<Prod
 
 /**
  * 根据 Box ID 查找 Box 及其包含的产品
+ * 从本地 IndexedDB 查找
  */
 export async function lookupBoxByBarcode(boxId: string): Promise<BoxLookupResult> {
-  const apiBaseUrl = getApiBaseUrl();
-  
   try {
-    console.log("[Barcode Scanner] Looking up box:", boxId);
+    console.log("[Barcode Scanner] Looking up box from local storage:", boxId);
     
-    const response = await fetch(`${apiBaseUrl}/api/trpc/boxes.getById?input=${encodeURIComponent(JSON.stringify({ json: { id: boxId } }))}`, {
-      method: "GET",
-      headers: {
-        "Content-Type": "application/json",
-      },
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error("[Barcode Scanner] Box API error:", errorText);
-      return {
-        found: false,
-        error: `查询失败: ${response.statusText}`,
-      };
-    }
-
-    const data = await response.json();
-    const box = data.result?.data?.json;
+    // 动态导入 box-storage 以避免循环依赖
+    const { getBoxById } = await import('./box-storage');
+    const box = await getBoxById(boxId);
     
     if (!box) {
       return {
