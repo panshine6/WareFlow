@@ -739,7 +739,11 @@ export default function OutboundScreen() {
 
                   <View style={styles.historyItems}>
                     {item.items.map((outItem, index) => (
-                      <View key={index} style={styles.historyItem}>
+                      <Pressable 
+                        key={index} 
+                        style={styles.historyItem}
+                        onPress={() => router.push(`/product-detail?id=${outItem.productId}`)}
+                      >
                         <Image
                           source={{ uri: outItem.detailImageUri }}
                           style={styles.historyItemImage}
@@ -752,7 +756,7 @@ export default function OutboundScreen() {
                             -{outItem.quantity} 件
                           </ThemedText>
                         </View>
-                      </View>
+                      </Pressable>
                     ))}
                   </View>
 
