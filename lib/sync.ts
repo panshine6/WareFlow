@@ -155,31 +155,18 @@ export const SyncService = {
    * 从云端下载数据到本地（覆盖本地数据）
    * 
    * 策略：
-   * - 移动端：下载完整数据（包含图片）
-   * - 电脑 Web 端：下载不含图片的数据（避免 localStorage 超限），图片按需从云端加载
+   * - 所有平台都下载完整数据（包含图片）
+   * - 之前电脑 Web 端不下载图片是为了节省空间，但由于 Cloudflare Pages 不支持 API 调用，
+   *   无法按需加载图片，所以改为下载完整数据
    */
   async downloadFromCloud(trpcClient: any): Promise<SyncResult> {
     try {
       console.log("[Sync] Starting download from cloud...");
       
-      // 1. 检测是否为电脑 Web 端
-      const isWeb = typeof window !== 'undefined' && typeof document !== 'undefined';
-      const isMobileWeb = isWeb && /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(window.navigator?.userAgent || '');
-      const isDesktopWeb = isWeb && !isMobileWeb;
-      
-      // 2. 根据平台选择不同的下载接口
-      let products;
-      if (isDesktopWeb) {
-        // 电脑 Web 端：使用不含图片的接口，避免 localStorage 超限
-        console.log("[Sync] Desktop Web detected, downloading without images...");
-        const result = await trpcClient.sync.downloadWithoutImages.query();
-        products = result.products;
-      } else {
-        // 移动端：下载完整数据
-        console.log("[Sync] Mobile/Native detected, downloading full data...");
-        const result = await trpcClient.sync.download.query();
-        products = result.products;
-      }
+      // 所有平台都下载完整数据（包含图片）
+      console.log("[Sync] Downloading full data with images...");
+      const result = await trpcClient.sync.download.query();
+      const products = result.products;
       
       console.log(`[Sync] Downloaded ${products.length} products from cloud`);
       
