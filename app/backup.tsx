@@ -72,12 +72,17 @@ export default function BackupScreen() {
         document.body.removeChild(link);
         URL.revokeObjectURL(url);
 
-        // 延迟显示提示，让用户有时间完成下载操作（3秒后显示，确保用户已完成下载确认）
+        // 计算文件大小（MB）
+        const fileSizeMB = (blob.size / (1024 * 1024)).toFixed(1);
+        
+        // 延迟显示提示，让用户有时间完成下载操作
         setTimeout(() => {
           window.alert(
-            `✅ 备份文件已下载完成！\n\n` +
-            `📁 文件名：${filename}\n\n` +
-            `💡 如何找到文件：\n` +
+            `✅ 备份文件已开始下载！\n\n` +
+            `📁 文件名：${filename}\n` +
+            `📊 文件大小：${fileSizeMB} MB\n\n` +
+            `⏳ 如果文件较大，根据网络情况可能需要 2-3 分钟完成下载。\n\n` +
+            `💡 下载完成后如何找到文件：\n` +
             `• iPhone：打开「文件」App → 「下载」文件夹\n` +
             `• Android：打开「下载」或「文件管理器」\n` +
             `• 电脑：查看浏览器下载列表或下载文件夹`
