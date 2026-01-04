@@ -36,6 +36,13 @@
       "when": 1736000000000,
       "tag": "0004_add_systemsku_column",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "5",
+      "when": 1736001000000,
+      "tag": "0005_add_box_columns",
+      "breakpoints": true
     }
   ]
 }

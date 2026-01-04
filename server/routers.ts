@@ -50,6 +50,8 @@ export const appRouter = router({
           overviewImageUri: z.string(),
           sku: z.string(),
           systemSku: z.string().nullable().optional(), // 系统生成的 SKU（条形码）
+          boxId: z.string().nullable().optional(), // 所属 Box ID
+          boxName: z.string().nullable().optional(), // 所属 Box 名称
           quantity: z.number(),
           storageLocation: z.string(),
           operatorId: z.number(),

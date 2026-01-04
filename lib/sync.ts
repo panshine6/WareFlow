@@ -62,6 +62,8 @@ export const SyncService = {
         overviewImageUri: "", // 不上传全景图
         sku: p.sku,
         systemSku: p.systemSku || null, // 系统生成的 SKU（条形码）
+        boxId: p.boxId || null, // 所属 Box ID
+        boxName: p.boxName || null, // 所属 Box 名称
         quantity: p.quantity,
         storageLocation: p.storageLocation,
         operatorId: p.operatorId || 0,
