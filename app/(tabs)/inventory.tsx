@@ -159,13 +159,14 @@ export default function InventoryScreen() {
   useEffect(() => {
     let result = [...products];
 
-    // 搜索筛选
+    // 搜索筛选（支持 SKU、位置、Box 名称）
     if (searchQuery.trim() !== "") {
       const query = searchQuery.toLowerCase();
       result = result.filter((p) =>
         p.sku.toLowerCase().includes(query) ||
         p.systemSku?.toLowerCase().includes(query) ||
-        p.storageLocation.toLowerCase().includes(query)
+        p.storageLocation.toLowerCase().includes(query) ||
+        p.boxName?.toLowerCase().includes(query)
       );
     }
 
@@ -237,7 +238,7 @@ export default function InventoryScreen() {
           ]}
           value={searchQuery}
           onChangeText={setSearchQuery}
-          placeholder="搜索 SKU 或位置..."
+          placeholder="搜索 SKU、位置或 Box..."
           placeholderTextColor={placeholderColor}
         />
 
