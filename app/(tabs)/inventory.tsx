@@ -455,6 +455,11 @@ export default function InventoryScreen() {
                   <ThemedText style={styles.productDetail}>
                     位置：{item.storageLocation}
                   </ThemedText>
+                  {item.boxName && (
+                    <ThemedText style={styles.productDetail}>
+                      Box：{item.boxName}
+                    </ThemedText>
+                  )}
                   <ThemedText style={styles.productTime}>
                     {new Date(item.createdAt).toLocaleString("zh-CN")}
                   </ThemedText>
