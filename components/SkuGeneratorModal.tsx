@@ -350,35 +350,66 @@ export default function SkuGeneratorModal({
   };
 
   // 渲染段选择器
-  const renderSegmentSelector = (segment: SkuSegment) => {
+  // 移动段位置
+  const handleMoveSegment = async (segmentId: string, direction: 'up' | 'down') => {
+    await SkuGenerator.moveSegment(segmentId, direction);
+    const segs = await SkuGenerator.getSegments();
+    setSegments(segs);
+  };
+
+  const renderSegmentSelector = (segment: SkuSegment, index: number, sortedSegments: SkuSegment[]) => {
     const isExpanded = expandedSegment === segment.id;
     const selectedValue = segmentValues[segment.id];
     const selectedOption = segment.options.find(o => o.code === selectedValue);
+    const isFirst = index === 0;
+    const isLast = index === sortedSegments.length - 1;
 
     return (
       <View key={segment.id} style={styles.selectorContainer}>
-        <TouchableOpacity
-          style={[
-            styles.selectorHeader,
-            isDark && styles.selectorHeaderDark,
-            isExpanded && styles.selectorHeaderExpanded,
-          ]}
-          onPress={() => setExpandedSegment(isExpanded ? null : segment.id)}
-        >
-          <View style={styles.selectorHeaderLeft}>
-            <Text style={[styles.selectorLabel, isDark && styles.textDark]}>
-              {segment.name}
-            </Text>
-            {selectedValue ? (
-              <View style={styles.selectedBadge}>
-                <Text style={styles.selectedBadgeText}>{selectedValue}</Text>
-              </View>
-            ) : null}
+        <View style={styles.selectorRow}>
+          {/* 上下移动按钮 */}
+          <View style={styles.moveButtonsContainer}>
+            <TouchableOpacity
+              style={[styles.moveButton, isFirst && styles.moveButtonDisabled]}
+              onPress={() => !isFirst && handleMoveSegment(segment.id, 'up')}
+              disabled={isFirst}
+            >
+              <Text style={[styles.moveButtonText, isFirst && styles.moveButtonTextDisabled]}>\u25b2</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.moveButton, isLast && styles.moveButtonDisabled]}
+              onPress={() => !isLast && handleMoveSegment(segment.id, 'down')}
+              disabled={isLast}
+            >
+              <Text style={[styles.moveButtonText, isLast && styles.moveButtonTextDisabled]}>\u25bc</Text>
+            </TouchableOpacity>
           </View>
-          <Text style={[styles.selectorArrow, isDark && styles.textDark]}>
-            {isExpanded ? "▲" : "▼"}
-          </Text>
-        </TouchableOpacity>
+          
+          {/* 原有的段选择器 */}
+          <TouchableOpacity
+            style={[
+              styles.selectorHeader,
+              styles.selectorHeaderFlex,
+              isDark && styles.selectorHeaderDark,
+              isExpanded && styles.selectorHeaderExpanded,
+            ]}
+            onPress={() => setExpandedSegment(isExpanded ? null : segment.id)}
+          >
+            <View style={styles.selectorHeaderLeft}>
+              <Text style={[styles.selectorLabel, isDark && styles.textDark]}>
+                {segment.name}
+              </Text>
+              {selectedValue ? (
+                <View style={styles.selectedBadge}>
+                  <Text style={styles.selectedBadgeText}>{selectedValue}</Text>
+                </View>
+              ) : null}
+            </View>
+            <Text style={[styles.selectorArrow, isDark && styles.textDark]}>
+              {isExpanded ? "\u25b2" : "\u25bc"}
+            </Text>
+          </TouchableOpacity>
+        </View>
 
         {isExpanded && (
           <View style={[styles.selectorContent, isDark && styles.selectorContentDark]}>
@@ -469,8 +500,11 @@ export default function SkuGeneratorModal({
         )}
       </View>
 
-      {/* 段选择器 */}
-      {segments.map(renderSegmentSelector)}
+      {/* 段选择器 - 按 order 排序 */}
+      {(() => {
+        const sortedSegments = [...segments].sort((a, b) => a.order - b.order);
+        return sortedSegments.map((segment, index) => renderSegmentSelector(segment, index, sortedSegments));
+      })()}
 
       {/* 添加新段按钮 */}
       <TouchableOpacity
@@ -486,7 +520,10 @@ export default function SkuGeneratorModal({
           SKU 格式说明
         </Text>
         <Text style={[styles.formatText, isDark && styles.textMuted]}>
-          {segments.map(s => `${s.name}(${s.codeLength}位)`).join("-")}-流水号(4位)
+          {[...segments].sort((a, b) => a.order - b.order).map(s => `${s.name}(${s.codeLength}位)`).join("-")}-流水号(4位)
+        </Text>
+        <Text style={[styles.formatHint, isDark && styles.textMuted]}>
+          点击左侧 ▲▼ 按钮可调整字段顺序
         </Text>
       </View>
     </>
@@ -1015,6 +1052,37 @@ const styles = StyleSheet.create({
   selectorContainer: {
     marginBottom: 12,
   },
+  selectorRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+  },
+  moveButtonsContainer: {
+    flexDirection: "column",
+    marginRight: 8,
+    gap: 2,
+  },
+  moveButton: {
+    width: 28,
+    height: 22,
+    backgroundColor: "#e8f4ff",
+    borderRadius: 4,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  moveButtonDisabled: {
+    backgroundColor: "#f0f0f0",
+  },
+  moveButtonText: {
+    fontSize: 10,
+    color: "#007AFF",
+    fontWeight: "600",
+  },
+  moveButtonTextDisabled: {
+    color: "#ccc",
+  },
+  selectorHeaderFlex: {
+    flex: 1,
+  },
   selectorHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -1156,6 +1224,12 @@ const styles = StyleSheet.create({
   formatText: {
     fontSize: 12,
     color: "#666",
+  },
+  formatHint: {
+    fontSize: 11,
+    color: "#999",
+    marginTop: 6,
+    fontStyle: "italic",
   },
   sectionTitle: {
     fontSize: 16,

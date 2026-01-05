@@ -189,6 +189,59 @@ export const SkuGenerator = {
   },
 
   /**
+   * 移动段的位置（上移或下移）
+   */
+  async moveSegment(segmentId: string, direction: 'up' | 'down'): Promise<void> {
+    const segments = await this.getSegments();
+    const sortedSegments = [...segments].sort((a, b) => a.order - b.order);
+    const index = sortedSegments.findIndex(s => s.id === segmentId);
+    
+    if (index === -1) return;
+    
+    // 检查边界
+    if (direction === 'up' && index === 0) return;
+    if (direction === 'down' && index === sortedSegments.length - 1) return;
+    
+    // 交换位置
+    const swapIndex = direction === 'up' ? index - 1 : index + 1;
+    const temp = sortedSegments[index];
+    sortedSegments[index] = sortedSegments[swapIndex];
+    sortedSegments[swapIndex] = temp;
+    
+    // 重新设置 order
+    sortedSegments.forEach((s, i) => s.order = i + 1);
+    
+    await this.saveSegments(sortedSegments);
+  },
+
+  /**
+   * 重新排序所有段（根据新的顺序数组）
+   */
+  async reorderSegments(segmentIds: string[]): Promise<void> {
+    const segments = await this.getSegments();
+    const segmentMap = new Map(segments.map(s => [s.id, s]));
+    
+    const reorderedSegments: SkuSegment[] = [];
+    segmentIds.forEach((id, index) => {
+      const segment = segmentMap.get(id);
+      if (segment) {
+        segment.order = index + 1;
+        reorderedSegments.push(segment);
+      }
+    });
+    
+    // 添加未在列表中的段（如果有的话）
+    segments.forEach(s => {
+      if (!segmentIds.includes(s.id)) {
+        s.order = reorderedSegments.length + 1;
+        reorderedSegments.push(s);
+      }
+    });
+    
+    await this.saveSegments(reorderedSegments);
+  },
+
+  /**
    * 更新段
    */
   async updateSegment(segmentId: string, updates: Partial<SkuSegment>): Promise<void> {
