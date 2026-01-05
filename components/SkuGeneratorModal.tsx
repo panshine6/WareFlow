@@ -943,7 +943,7 @@ export default function SkuGeneratorModal({
               placeholderTextColor="#999"
               value={newSegmentCodeLength}
               onChangeText={setNewSegmentCodeLength}
-              keyboardType="number-pad"
+              keyboardType="default"
               maxLength={1}
             />
             <View style={styles.subModalButtons}>
