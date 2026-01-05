@@ -19,7 +19,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
 import { WebCamera } from "@/components/web-camera";
-import { countProductsInImage } from "@/lib/ai-vision";
+import { countProductsInImage, CountResult } from "@/lib/ai-vision";
 
 /**
  * 添加产品流程 - 步骤3：拍摄全景照片并识别数量
@@ -49,10 +49,10 @@ export default function AddProductOverviewScreen() {
 
     try {
       console.log("[Overview Web] Calling AI recognition...");
-      const count = await countProductsInImage(base64);
-      console.log("[Overview Web] AI recognized count:", count);
+      const result = await countProductsInImage(base64);
+      console.log("[Overview Web] AI recognized result:", result);
 
-      setQuantity(count);
+      setQuantity(result.count);
       setShowQuantityModal(true);
     } catch (error) {
       console.error("[Overview Web] AI recognition error:", error);
@@ -105,10 +105,10 @@ export default function AddProductOverviewScreen() {
         try {
           // 调用真实的 AI 识别
           console.log("[Overview] Calling AI recognition...");
-          const count = await countProductsInImage(base64Data);
-          console.log("[Overview] AI recognized count:", count);
+          const result = await countProductsInImage(base64Data);
+          console.log("[Overview] AI recognized result:", result);
 
-          setQuantity(count);
+          setQuantity(result.count);
           setShowQuantityModal(true);
         } catch (error) {
           console.error("[Overview] AI recognition error:", error);

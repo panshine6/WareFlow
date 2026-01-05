@@ -237,14 +237,67 @@ export const appRouter = router({
 
   // AI 视觉识别 API
   ai: router({
-    // 识别图片中的饰品数量
+    // 识别图片中的饰品数量（多次计数取共识）
     countProducts: publicProcedure
       .input(z.object({
         imageBase64: z.string(),
       }))
       .mutation(async ({ input }) => {
-        const count = await aiVision.countProductsInImage(input.imageBase64);
-        return { count };
+        // 第一次计数
+        const count1 = await aiVision.countProductsInImage(input.imageBase64);
+        console.log("[AI Count] First count:", count1);
+        
+        // 第二次计数
+        const count2 = await aiVision.countProductsInImage(input.imageBase64);
+        console.log("[AI Count] Second count:", count2);
+        
+        // 如果两次结果相同，直接返回
+        if (count1 === count2) {
+          console.log("[AI Count] Two counts match:", count1);
+          return { 
+            count: count1, 
+            counts: [count1, count2],
+            confidence: 'high',
+            message: '两次计数结果一致'
+          };
+        }
+        
+        // 如果不同，进行第三次计数
+        const count3 = await aiVision.countProductsInImage(input.imageBase64);
+        console.log("[AI Count] Third count:", count3);
+        
+        const counts = [count1, count2, count3];
+        
+        // 取众数（出现次数最多的结果）
+        const countFrequency: Record<number, number> = {};
+        counts.forEach(c => {
+          countFrequency[c] = (countFrequency[c] || 0) + 1;
+        });
+        
+        // 找出出现次数最多的数值
+        let maxFreq = 0;
+        let consensusCount = count1;
+        for (const [countStr, freq] of Object.entries(countFrequency)) {
+          if (freq > maxFreq) {
+            maxFreq = freq;
+            consensusCount = parseInt(countStr);
+          }
+        }
+        
+        // 判断置信度
+        const confidence = maxFreq >= 2 ? 'medium' : 'low';
+        const message = maxFreq >= 2 
+          ? `三次计数中有${maxFreq}次结果为${consensusCount}`
+          : `三次计数结果均不同，建议手动确认`;
+        
+        console.log("[AI Count] Consensus count:", consensusCount, "confidence:", confidence);
+        
+        return { 
+          count: consensusCount, 
+          counts,
+          confidence,
+          message
+        };
       }),
 
     // 对比两张图片的相似度

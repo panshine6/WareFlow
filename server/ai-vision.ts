@@ -172,42 +172,45 @@ async function callClaudeVisionCompare(
 }
 
 /**
- * 识别图片中的饰品数量（使用 Claude + 分区域计数法）
+ * 识别图片中的饰品数量（使用 Claude + 两步计数法）
+ * 优化版：先识别产品类型，再进行针对性计数
  */
 export async function countProductsInImage(imageBase64: string): Promise<number> {
   console.log("[AI Vision] countProductsInImage called with Claude model:", CLAUDE_MODEL);
   console.log("[AI Vision] Image base64 length:", imageBase64?.length || 0);
 
-  const prompt = `You are an expert inventory counter. Count the jewelry product packages in this image.
+  const prompt = `你是一位专业的库存清点专家。请仔细数这张图片中的饰品包装袋数量。
 
-Each package is a clear plastic bag containing a white/cream display card with jewelry attached.
+**重要：每个透明塑料包装袋 = 1个单位**
+- 每个包装袋里有一张白色/米色展示卡，上面挂着饰品（通常是一对耳环）
+- 展示卡上可能印有 "Fashion Jewelry" 字样
+- 不要数饰品本身的数量，只数包装袋的数量
 
-**COUNTING METHOD - Use Grid Division:**
-1. Mentally divide the image into a 3×3 grid (9 sections)
-2. Count packages in each section:
-   - Top row: Left, Center, Right
-   - Middle row: Left, Center, Right  
-   - Bottom row: Left, Center, Right
-3. Sum all sections for the total
+**计数方法 - 两步验证法：**
 
-**IDENTIFICATION RULES:**
-- Each WHITE DISPLAY CARD = 1 package (this is the key identifier)
-- Cards are approximately 3cm × 5cm with "Fashion Jewelry" text
-- Ignore reflections, shadows, and price tags
-- If a package spans two sections, count it in the section where its CENTER is located
-- Only count clearly visible, complete packages
-- When uncertain, do NOT count (prefer undercounting over overcounting)
+第一步：从左到右、从上到下扩描，标记每个包装袋的位置
+- 第1行：列出从左到右的包装袋
+- 第2行：列出从左到右的包装袋
+- 以此类推...
 
-**RESPONSE FORMAT:**
-First, list the count per grid section:
-Top-Left: X, Top-Center: X, Top-Right: X
-Mid-Left: X, Mid-Center: X, Mid-Right: X
-Bot-Left: X, Bot-Center: X, Bot-Right: X
+第二步：汇总每行的数量，得出总数
 
-Then provide the final total as a single number on the last line.`;
+**识别要点：**
+- 关键标识：白色/米色展示卡（每张卡 = 1个包装袋）
+- 忽略：反光、阴影、价格标签、背景
+- 如果包装袋重叠，根据展示卡的数量来判断
+- 只数清晰可见的包装袋，不确定的不要数
+
+**输出格式（严格遵守）：**
+第1行: [X个包装袋]
+第2行: [X个包装袋]
+...
+总计: [X]
+
+最后一行必须是纯数字，例如：11`;
 
   return callWithRetry(async () => {
-    const content = await callClaudeVision(imageBase64, prompt, 500);
+    const content = await callClaudeVision(imageBase64, prompt, 600);
     console.log("[AI Vision] Claude response content:", content);
     
     // 提取最后一行的数字作为总数

@@ -14,17 +14,27 @@ const getApiBaseUrl = () => {
 };
 
 /**
- * 识别图片中的饰品数量
+ * AI 计数结果接口
+ */
+export interface CountResult {
+  count: number;
+  counts?: number[];  // 多次计数的结果
+  confidence?: 'high' | 'medium' | 'low';  // 置信度
+  message?: string;  // 说明信息
+}
+
+/**
+ * 识别图片中的饰品数量（多次计数取共识）
  * @param imageBase64 Base64 编码的图片数据
- * @returns 识别到的数量
+ * @returns 计数结果，包含数量、置信度和说明
  */
 export async function countProductsInImage(
   imageBase64: string,
-): Promise<number> {
+): Promise<CountResult> {
   const apiBaseUrl = getApiBaseUrl();
   
   try {
-    console.log("[AI Vision] Calling countProducts API...");
+    console.log("[AI Vision] Calling countProducts API (multi-count)...");
     
     const response = await fetch(`${apiBaseUrl}/api/trpc/ai.countProducts`, {
       method: "POST",
@@ -48,8 +58,13 @@ export async function countProductsInImage(
     console.log("[AI Vision] API response:", data);
     
     // tRPC 响应格式
-    const count = data.result?.data?.json?.count ?? 0;
-    return count;
+    const result = data.result?.data?.json;
+    return {
+      count: result?.count ?? 0,
+      counts: result?.counts,
+      confidence: result?.confidence ?? 'high',
+      message: result?.message,
+    };
   } catch (error) {
     console.error("[AI Vision] countProducts error:", error);
     throw new Error("图像识别失败，请重试或手动输入数量");

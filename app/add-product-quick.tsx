@@ -26,7 +26,7 @@ import { SettingsStorage, ProductStorage } from "@/lib/storage";
 import { calculateAndSaveProductHash, imageToBase64, performDuplicateCheck, DuplicateCheckResult } from "@/lib/deduplication";
 import { generateSystemSKU, generateLabelForNiimbotD110, saveToPhotoAlbum } from "@/lib/barcode";
 import { generateLabelForNiimbotB1 } from "@/lib/niimbot-printer";
-import { countProductsInImage } from "@/lib/ai-vision";
+import { countProductsInImage, CountResult } from "@/lib/ai-vision";
 import { scanBarcodeFromImage, detectBarcodeType, lookupProductByBarcode } from "@/lib/barcode-scanner";
 import SkuGeneratorModal from "@/components/SkuGeneratorModal";
 import BoxManagerModal from "@/components/BoxManagerModal";
@@ -67,6 +67,7 @@ export default function AddProductQuickScreen() {
 
   // AI 计数结果和状态
   const [aiCount, setAiCount] = useState<number>(0);
+  const [aiCountResult, setAiCountResult] = useState<CountResult | null>(null);  // 完整的计数结果
   const [showCountModal, setShowCountModal] = useState(false);
   const [countStatus, setCountStatus] = useState<"pending" | "running" | "done">("pending");
 
@@ -235,12 +236,14 @@ export default function AddProductQuickScreen() {
   const runCountInBackground = async (base64: string) => {
     setCountStatus("running");
     try {
-      const count = await countProductsInImage(base64);
-      setAiCount(count);
-      setQuantity(count);
-      console.log("[QuickAdd] AI count:", count);
+      const result = await countProductsInImage(base64);
+      setAiCountResult(result);
+      setAiCount(result.count);
+      setQuantity(result.count);
+      console.log("[QuickAdd] AI count result:", result);
     } catch (error) {
       console.error("[QuickAdd] AI count failed:", error);
+      setAiCountResult(null);
       setAiCount(1);
       setQuantity(1);
     } finally {
@@ -1043,9 +1046,57 @@ export default function AddProductQuickScreen() {
           <View style={styles.modalContent}>
             <ThemedText type="title" style={styles.modalTitle}>AI 计数结果</ThemedText>
 
-            <ThemedText style={styles.modalHint}>
-              {countStatus === "done" ? `AI 识别到的数量: ${aiCount}` : "AI 正在计数..."}
-            </ThemedText>
+            {countStatus === "done" ? (
+              <>
+                <ThemedText style={styles.modalHint}>
+                  AI 识别到的数量: {aiCount}
+                </ThemedText>
+                
+                {/* 置信度指示器 */}
+                {aiCountResult && (
+                  <View style={[
+                    styles.confidenceBadge,
+                    aiCountResult.confidence === 'high' ? styles.confidenceHigh :
+                    aiCountResult.confidence === 'medium' ? styles.confidenceMedium : styles.confidenceLow
+                  ]}>
+                    <ThemedText style={styles.confidenceText}>
+                      {aiCountResult.confidence === 'high' ? '✓ 高置信度' :
+                       aiCountResult.confidence === 'medium' ? '⚠ 中置信度' : '❗ 低置信度'}
+                    </ThemedText>
+                  </View>
+                )}
+                
+                {/* 多次计数结果 */}
+                {aiCountResult?.counts && aiCountResult.counts.length > 1 && (
+                  <View style={styles.countsDetail}>
+                    <ThemedText style={styles.countsDetailTitle}>
+                      多次计数结果: {aiCountResult.counts.join(', ')}
+                    </ThemedText>
+                    {aiCountResult.message && (
+                      <ThemedText style={styles.countsDetailMessage}>
+                        {aiCountResult.message}
+                      </ThemedText>
+                    )}
+                  </View>
+                )}
+                
+                {/* 低置信度警告 */}
+                {aiCountResult?.confidence !== 'high' && (
+                  <View style={styles.warningBox}>
+                    <ThemedText style={styles.warningText}>
+                      ⚠️ AI 计数可能不准确，请手动确认数量
+                    </ThemedText>
+                  </View>
+                )}
+              </>
+            ) : (
+              <View style={styles.countingProgress}>
+                <ActivityIndicator size="small" color="#007AFF" />
+                <ThemedText style={styles.modalHint}>
+                  AI 正在多次计数中...
+                </ThemedText>
+              </View>
+            )}
 
             <View style={styles.countInputContainer}>
               <Pressable
@@ -1839,6 +1890,66 @@ const styles = StyleSheet.create({
     textAlign: "center",
     fontSize: 20,
     fontWeight: "bold",
+  },
+
+  // 计数置信度样式
+  confidenceBadge: {
+    alignSelf: "center",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    marginBottom: 12,
+  },
+  confidenceHigh: {
+    backgroundColor: "rgba(52, 199, 89, 0.15)",
+  },
+  confidenceMedium: {
+    backgroundColor: "rgba(255, 149, 0, 0.15)",
+  },
+  confidenceLow: {
+    backgroundColor: "rgba(255, 59, 48, 0.15)",
+  },
+  confidenceText: {
+    fontSize: 13,
+    fontWeight: "600",
+  },
+  countsDetail: {
+    backgroundColor: "#f5f5f5",
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 12,
+  },
+  countsDetailTitle: {
+    fontSize: 13,
+    color: "#666",
+    textAlign: "center",
+  },
+  countsDetailMessage: {
+    fontSize: 12,
+    color: "#888",
+    textAlign: "center",
+    marginTop: 4,
+  },
+  warningBox: {
+    backgroundColor: "rgba(255, 149, 0, 0.1)",
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: "rgba(255, 149, 0, 0.3)",
+  },
+  warningText: {
+    fontSize: 13,
+    color: "#FF9500",
+    textAlign: "center",
+    fontWeight: "500",
+  },
+  countingProgress: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    marginBottom: 16,
   },
 
   // 条形码扫描结果弹窗样式
