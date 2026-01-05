@@ -172,14 +172,14 @@ export async function compareImageSimilarity(
                 type: "image_url",
                 image_url: {
                   url: `data:image/jpeg;base64,${imageBase64_1}`,
-                  detail: "low", // 使用 low 精度减少 token 消耗
+                  detail: "high", // 使用 high 精度提高准确性
                 },
               },
               {
                 type: "image_url",
                 image_url: {
                   url: `data:image/jpeg;base64,${imageBase64_2}`,
-                  detail: "low", // 使用 low 精度减少 token 消耗
+                  detail: "high", // 使用 high 精度提高准确性
                 },
               },
             ],
@@ -290,12 +290,12 @@ export async function scanBarcodeFromImage(imageBase64: string): Promise<{ barco
 export async function batchCompareImages(
   newImageBase64: string,
   existingImages: Array<{ id: string; base64: string }>,
-  threshold: number = 90
+  threshold: number = 75 // 降低默认阈值，更容易找到相似产品
 ): Promise<Array<{ id: string; similarityScore: number; analysisNote: string }>> {
   console.log(`[AI Vision] Starting batch compare with ${existingImages.length} images, threshold: ${threshold}`);
   
-  // 限制最多对比前 5 个产品（减少 API 调用次数，避免速率限制）
-  const imagesToCompare = existingImages.slice(0, 5);
+  // 限制最多对比前 10 个产品
+  const imagesToCompare = existingImages.slice(0, 10);
   
   if (imagesToCompare.length < existingImages.length) {
     console.log(`[AI Vision] Limited comparison to ${imagesToCompare.length} images (out of ${existingImages.length})`);
