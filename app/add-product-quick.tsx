@@ -33,6 +33,7 @@ import BoxManagerModal from "@/components/BoxManagerModal";
 import { compressImage, base64ToDataUrl } from "@/lib/image-utils";
 import type { Product, InventoryHistoryEntry } from "@/types/product";
 import { getAllBoxes, createBox, deleteBox, Box } from "@/lib/box-storage";
+import { saveLearningRecord } from "@/lib/ai-learning-storage";
 
 // 流程阶段
 type FlowStage = 
@@ -59,6 +60,7 @@ export default function AddProductQuickScreen() {
   const [detailImageUri, setDetailImageUri] = useState("");
   const [detailImageBase64, setDetailImageBase64] = useState("");
   const [overviewImageUri, setOverviewImageUri] = useState("");
+  const [overviewImageBase64, setOverviewImageBase64] = useState("");  // 用于保存AI学习数据
 
   // 查重结果和状态
   const [duplicateResult, setDuplicateResult] = useState<DuplicateCheckResult | null>(null);
@@ -298,6 +300,7 @@ export default function AddProductQuickScreen() {
       } else if (stage === "overview_photo") {
         // 保存全景图
         setOverviewImageUri(dataUrl);
+        setOverviewImageBase64(compressedBase64);  // 保存base64用于AI学习数据
 
         // 后台计数（不等待）
         runCountInBackground(compressedBase64);
@@ -362,10 +365,27 @@ export default function AddProductQuickScreen() {
     setShowCountModal(true);
   };
 
-  // 确认数量
-  const handleConfirmCount = (count: number) => {
+  // 确认数量（同时保存AI学习数据）
+  const handleConfirmCount = async (count: number) => {
     setQuantity(count);
     setShowCountModal(false);
+    
+    // 保存AI学习数据（如果有全景图和AI计数结果）
+    if (overviewImageBase64 && aiCount > 0) {
+      try {
+        await saveLearningRecord({
+          imageBase64: overviewImageBase64,
+          aiCount: aiCount,
+          aiCounts: aiCountResult?.counts,
+          aiConfidence: aiCountResult?.confidence,
+          userCount: count,
+        });
+        console.log('[QuickAdd] AI learning data saved:', { aiCount, userCount: count });
+      } catch (error) {
+        console.error('[QuickAdd] Failed to save AI learning data:', error);
+        // 不影响主流程，静默失败
+      }
+    }
   };
 
   // 创建入库历史记录

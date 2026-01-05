@@ -31,6 +31,7 @@ import { APP_VERSION, APP_BUILD, APP_AUTHOR } from "@/lib/version";
 import { SkuGenerator } from "@/lib/sku-generator";
 import SkuGeneratorModal from "@/components/SkuGeneratorModal";
 import BoxManagerModal from "@/components/BoxManagerModal";
+import { downloadLearningData, getLearningStats } from "@/lib/ai-learning-storage";
 import type { Product } from "@/types/product";
 
 export default function HomeScreen() {
@@ -485,6 +486,52 @@ export default function HomeScreen() {
             >
               <ThemedText style={styles.bottomSheetItemIcon}>💬</ThemedText>
               <ThemedText style={styles.bottomSheetItemText}>反馈与建议</ThemedText>
+              <ThemedText style={styles.bottomSheetItemArrow}>›</ThemedText>
+            </Pressable>
+
+            <Pressable 
+              style={styles.bottomSheetItem}
+              onPress={async () => {
+                try {
+                  const stats = await getLearningStats();
+                  if (stats.totalRecords === 0) {
+                    if (Platform.OS === 'web') {
+                      window.alert('暂无AI学习数据\n\n请先使用AI计数功能并确认数量，系统会自动收集学习数据');
+                    } else {
+                      Alert.alert('暂无AI学习数据', '请先使用AI计数功能并确认数量，系统会自动收集学习数据');
+                    }
+                    return;
+                  }
+                  
+                  // 显示统计信息并确认导出
+                  const confirmMsg = `AI计数学习数据统计\n\n总记录数: ${stats.totalRecords}\n正确数: ${stats.correctCount}\n错误数: ${stats.incorrectCount}\n准确率: ${stats.accuracy}%\n平均偏差: ${stats.avgDeviation}\n\n是否导出学习数据文件？`;
+                  
+                  if (Platform.OS === 'web') {
+                    if (window.confirm(confirmMsg)) {
+                      await downloadLearningData();
+                      window.alert('导出成功\n\n文件已保存到下载文件夹');
+                    }
+                  } else {
+                    Alert.alert('AI计数学习数据', confirmMsg, [
+                      { text: '取消', style: 'cancel' },
+                      { text: '导出', onPress: async () => {
+                        await downloadLearningData();
+                        Alert.alert('导出成功', '文件已保存到下载文件夹');
+                      }}
+                    ]);
+                  }
+                } catch (error) {
+                  console.error('[Settings] Failed to export AI learning data:', error);
+                  if (Platform.OS === 'web') {
+                    window.alert('导出失败\n\n请稍后重试');
+                  } else {
+                    Alert.alert('导出失败', '请稍后重试');
+                  }
+                }
+              }}
+            >
+              <ThemedText style={styles.bottomSheetItemIcon}>🧠</ThemedText>
+              <ThemedText style={styles.bottomSheetItemText}>AI计数学习数据</ThemedText>
               <ThemedText style={styles.bottomSheetItemArrow}>›</ThemedText>
             </Pressable>
 
