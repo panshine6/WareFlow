@@ -651,6 +651,25 @@ export default function AddProductQuickScreen() {
             <ThemedText style={styles.captureLabel}>
               {stage === "detail_photo" ? "拍摄细节图" : "拍摄全景图"}
             </ThemedText>
+            
+            {/* 跳过按钮 - 仅在全景图阶段显示 */}
+            {stage === "overview_photo" && (
+              <Pressable
+                style={({ pressed }) => [
+                  styles.skipButton,
+                  { opacity: pressed ? 0.7 : 1 },
+                ]}
+                onPress={() => {
+                  // 跳过全景图，数量默认为1
+                  setQuantity(1);
+                  setStage("confirm");
+                }}
+                disabled={processing}
+              >
+                <ThemedText style={styles.skipButtonText}>跳过此步 →</ThemedText>
+                <ThemedText style={styles.skipButtonHint}>已手动点数 / 仅查重</ThemedText>
+              </Pressable>
+            )}
           </View>
         </View>
       </ThemedView>
@@ -1351,6 +1370,26 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: 16,
     fontWeight: "500",
+  },
+  skipButton: {
+    marginTop: 30,
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    backgroundColor: "rgba(255, 255, 255, 0.15)",
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.3)",
+    alignItems: "center",
+  },
+  skipButtonText: {
+    color: "#fff",
+    fontSize: 15,
+    fontWeight: "600",
+  },
+  skipButtonHint: {
+    color: "rgba(255, 255, 255, 0.6)",
+    fontSize: 12,
+    marginTop: 4,
   },
 
   // 确认信息阶段样式
