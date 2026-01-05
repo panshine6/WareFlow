@@ -882,17 +882,34 @@ export default function AddProductQuickScreen() {
               )}
             </View>
 
-            {/* 相似产品列表 */}
+            {/* 相似产品列表 - 按相似度排序，最多显示5个 */}
             {duplicateResult?.duplicates && duplicateResult.duplicates.length > 0 ? (
               <ScrollView style={styles.matchList}>
                 <ThemedText style={styles.matchListTitle}>
-                  发现 {duplicateResult.duplicates.length} 个相似产品（点击查看详情）：
+                  发现 {Math.min(duplicateResult.duplicates.length, 5)} 个相似产品（点击查看详情）：
                 </ThemedText>
-                {duplicateResult.duplicates.map((dup, index) => (
+                <ThemedText style={styles.matchLegend}>
+                  🟢 ≥ 85% 高度相似  🟡 75-84% 中度相似  ⚪ 50-74% 低度相似
+                </ThemedText>
+                {duplicateResult.duplicates
+                  .slice() // 创建副本避免修改原数组
+                  .sort((a, b) => b.similarityScore - a.similarityScore) // 按相似度从高到低排序
+                  .slice(0, 5) // 最多显示5个
+                  .map((dup, index) => {
+                    // 根据相似度确定背景色
+                    const getSimilarityBgColor = (score: number) => {
+                      if (score >= 85) return '#d4edda'; // 绿色 - 高度相似
+                      if (score >= 75) return '#fff3cd'; // 黄色 - 中度相似
+                      return '#f5f5f5'; // 无色 - 低度相似
+                    };
+                    const bgColor = getSimilarityBgColor(dup.similarityScore);
+                    
+                    return (
                   <View key={dup.product.id}>
                     <Pressable
                       style={[
                         styles.matchItem,
+                        { backgroundColor: bgColor },
                         selectedSimilarProduct?.id === dup.product.id && styles.matchItemSelected
                       ]}
                       onPress={() => handleViewSimilarProduct(dup.product)}
@@ -903,8 +920,14 @@ export default function AddProductQuickScreen() {
                       />
                       <View style={styles.matchInfo}>
                         <ThemedText style={styles.matchSku}>{dup.product.sku}</ThemedText>
-                        <ThemedText style={styles.matchSimilarity}>
+                        <ThemedText style={[
+                          styles.matchSimilarity,
+                          dup.similarityScore >= 85 && { color: '#155724', fontWeight: '700' },
+                          dup.similarityScore >= 75 && dup.similarityScore < 85 && { color: '#856404', fontWeight: '600' }
+                        ]}>
                           相似度: {dup.similarityScore}%
+                          {dup.similarityScore >= 85 && ' 🟢'}
+                          {dup.similarityScore >= 75 && dup.similarityScore < 85 && ' 🟡'}
                         </ThemedText>
                         <ThemedText style={styles.matchQuantity}>
                           当前库存: {dup.product.quantity}
@@ -930,7 +953,8 @@ export default function AddProductQuickScreen() {
                       </View>
                     )}
                   </View>
-                ))}
+                    );
+                  })}
               </ScrollView>
             ) : (
               <ThemedText style={styles.noMatchText}>
@@ -1529,8 +1553,14 @@ const styles = StyleSheet.create({
   matchListTitle: {
     fontSize: 14,
     fontWeight: "600",
-    marginBottom: 12,
+    marginBottom: 8,
     color: "#000",
+  },
+  matchLegend: {
+    fontSize: 11,
+    color: "#666",
+    marginBottom: 12,
+    textAlign: "center",
   },
   matchItem: {
     flexDirection: "row",
