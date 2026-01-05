@@ -30,6 +30,7 @@ import { trpc } from "@/lib/trpc";
 import { APP_VERSION, APP_BUILD, APP_AUTHOR } from "@/lib/version";
 import { SkuGenerator } from "@/lib/sku-generator";
 import SkuGeneratorModal from "@/components/SkuGeneratorModal";
+import BoxManagerModal from "@/components/BoxManagerModal";
 import type { Product } from "@/types/product";
 
 export default function HomeScreen() {
@@ -45,6 +46,7 @@ export default function HomeScreen() {
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [showDataModal, setShowDataModal] = useState(false);
   const [showSkuGenerator, setShowSkuGenerator] = useState(false);
+  const [showBoxManager, setShowBoxManager] = useState(false);
 
   // 使用 tRPC 同步
   const downloadQuery = trpc.sync.download.useQuery(undefined, {
@@ -375,6 +377,24 @@ export default function HomeScreen() {
             <View style={styles.dataSecurityTextContainer}>
               <ThemedText style={styles.skuGeneratorTitle}>SKU 生成助手</ThemedText>
               <ThemedText style={styles.dataSecurityHint}>元素化生成、序列管理、自动进位</ThemedText>
+            </View>
+            <ThemedText style={styles.dataSecurityArrow}>›</ThemedText>
+          </View>
+        </Pressable>
+
+        {/* Box 管理器按钮 */}
+        <Pressable
+          style={({ pressed }) => [
+            styles.skuGeneratorButton,
+            { opacity: pressed ? 0.8 : 1 },
+          ]}
+          onPress={() => setShowBoxManager(true)}
+        >
+          <View style={styles.dataSecurityContent}>
+            <ThemedText style={styles.skuGeneratorIcon}>📦</ThemedText>
+            <View style={styles.dataSecurityTextContainer}>
+              <ThemedText style={styles.skuGeneratorTitle}>Box 管理器</ThemedText>
+              <ThemedText style={styles.dataSecurityHint}>创建、管理储物箱，关联货架位置</ThemedText>
             </View>
             <ThemedText style={styles.dataSecurityArrow}>›</ThemedText>
           </View>
@@ -729,6 +749,14 @@ export default function HomeScreen() {
             Alert.alert("SKU 已生成", `${sku}\n\n可在新品录入时使用`);
           }
         }}
+      />
+
+      {/* Box 管理器弹窗 */}
+      <BoxManagerModal
+        visible={showBoxManager}
+        onClose={() => setShowBoxManager(false)}
+        products={products}
+        mode="manage"
       />
     </ThemedView>
   );

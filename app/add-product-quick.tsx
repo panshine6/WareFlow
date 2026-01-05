@@ -29,6 +29,7 @@ import { generateLabelForNiimbotB1 } from "@/lib/niimbot-printer";
 import { countProductsInImage } from "@/lib/ai-vision";
 import { scanBarcodeFromImage, detectBarcodeType, lookupProductByBarcode } from "@/lib/barcode-scanner";
 import SkuGeneratorModal from "@/components/SkuGeneratorModal";
+import BoxManagerModal from "@/components/BoxManagerModal";
 import { compressImage, base64ToDataUrl } from "@/lib/image-utils";
 import type { Product, InventoryHistoryEntry } from "@/types/product";
 import { getAllBoxes, createBox, deleteBox, Box } from "@/lib/box-storage";
@@ -104,6 +105,7 @@ export default function AddProductQuickScreen() {
   const [selectedBox, setSelectedBox] = useState<Box | null>(null);
   const [showBoxPicker, setShowBoxPicker] = useState(false);
   const [newBoxName, setNewBoxName] = useState("");
+  const [showBoxManager, setShowBoxManager] = useState(false);
 
   // 加载默认设置
   useEffect(() => {
@@ -840,15 +842,23 @@ export default function AddProductQuickScreen() {
             {/* Box 选择 */}
             <View style={styles.formRow}>
               <ThemedText style={styles.formLabel}>Box</ThemedText>
-              <Pressable
-                style={[styles.formInput, { backgroundColor: inputBg }]}
-                onPress={() => setShowBoxPicker(true)}
-              >
-                <ThemedText style={[styles.formValue, !selectedBox && styles.placeholder, { color: inputColor }]}>
-                  {selectedBox ? selectedBox.name : "点击选择 Box"}
-                </ThemedText>
-                <ThemedText style={styles.formArrow}>›</ThemedText>
-              </Pressable>
+              <View style={styles.boxSelectRow}>
+                <Pressable
+                  style={[styles.formInput, styles.boxSelectInput, { backgroundColor: inputBg }]}
+                  onPress={() => setShowBoxPicker(true)}
+                >
+                  <ThemedText style={[styles.formValue, !selectedBox && styles.placeholder, { color: inputColor }]}>
+                    {selectedBox ? selectedBox.name : "点击选择 Box"}
+                  </ThemedText>
+                  <ThemedText style={styles.formArrow}>›</ThemedText>
+                </Pressable>
+                <Pressable
+                  style={styles.boxManagerButton}
+                  onPress={() => setShowBoxManager(true)}
+                >
+                  <ThemedText style={styles.boxManagerButtonText}>+</ThemedText>
+                </Pressable>
+              </View>
             </View>
           </View>
         </ScrollView>
@@ -1233,6 +1243,31 @@ export default function AddProductQuickScreen() {
           </View>
         </View>
       )}
+
+      {/* Box 管理器弹窗 */}
+      <BoxManagerModal
+        visible={showBoxManager}
+        onClose={() => setShowBoxManager(false)}
+        mode="select"
+        onSelect={(boxCode, shelfLocation) => {
+          // 创建一个临时的 Box 对象用于显示
+          const newBox: Box = {
+            id: `temp_${Date.now()}`,
+            name: boxCode,
+            location: shelfLocation,
+            status: 'open',
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            operatorId,
+            operatorName,
+          };
+          setSelectedBox(newBox);
+          // 自动填充货架位置
+          if (shelfLocation) {
+            setLocation(shelfLocation);
+          }
+        }}
+      />
     </ThemedView>
   );
 }
@@ -1485,6 +1520,27 @@ const styles = StyleSheet.create({
     height: 50,
     borderRadius: 10,
     paddingHorizontal: 16,
+  },
+  boxSelectRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  boxSelectInput: {
+    flex: 1,
+  },
+  boxManagerButton: {
+    width: 50,
+    height: 50,
+    borderRadius: 10,
+    backgroundColor: "#007AFF",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  boxManagerButtonText: {
+    color: "#fff",
+    fontSize: 24,
+    fontWeight: "600",
   },
   formValue: {
     flex: 1,
