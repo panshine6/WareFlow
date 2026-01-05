@@ -19,6 +19,22 @@ interface CloudImageProps {
 }
 
 /**
+ * 将 base64 字符串转换为完整的 Data URL
+ * 如果已经有前缀则直接返回，否则添加 JPEG 前缀
+ */
+function ensureDataUrl(uri: string): string {
+  if (!uri || uri.length === 0) {
+    return '';
+  }
+  // 如果已经是 Data URL 或普通 URL，直接返回
+  if (uri.startsWith('data:') || uri.startsWith('http://') || uri.startsWith('https://') || uri.startsWith('file://')) {
+    return uri;
+  }
+  // 否则添加 JPEG Data URL 前缀（云端存储的图片都是 JPEG 格式）
+  return `data:image/jpeg;base64,${uri}`;
+}
+
+/**
  * 云端图片组件
  * 
  * 功能：
@@ -54,10 +70,11 @@ export function CloudImage({
   useEffect(() => {
     console.log('[CloudImage] useEffect triggered', { productId, localUri: localUri?.substring(0, 50), isDesktopWeb });
     
-    // 如果本地有图片，直接使用
+    // 如果本地有图片，直接使用（确保有正确的 Data URL 前缀）
     if (localUri && localUri.length > 0) {
-      console.log('[CloudImage] Using local URI');
-      setImageUri(localUri);
+      const fullUri = ensureDataUrl(localUri);
+      console.log('[CloudImage] Using local URI, length:', fullUri.length, 'starts with:', fullUri.substring(0, 30));
+      setImageUri(fullUri);
       return;
     }
 
