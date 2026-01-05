@@ -297,3 +297,4 @@ export async function batchCompareImages(
   console.log(`[AI Vision] Batch compare completed: ${results.length} similar images found`);
   return results;
 }
+
