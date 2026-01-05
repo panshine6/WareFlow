@@ -114,6 +114,12 @@ export default function SkuGeneratorModal({
     // 初始化选中值
     const initialValues: Record<string, string> = {};
     segs.forEach(seg => {
+      // 流水号段不需要用户选择，设置为特殊标记
+      if (seg.isSerialNumber) {
+        initialValues[seg.id] = '__SERIAL__';
+        return;
+      }
+      
       if (lastSelection && lastSelection[seg.id]) {
         // 使用上次的选择（如果该选项仍然存在）
         const optionExists = seg.options.some(o => o.code === lastSelection[seg.id]);
@@ -139,8 +145,14 @@ export default function SkuGeneratorModal({
 
   // 更新 SKU 预览
   const updatePreview = useCallback(async () => {
-    const allFilled = segments.every(seg => segmentValues[seg.id]);
-    if (allFilled && segments.length > 0) {
+    // 流水号段不需要用户选择，排除在验证之外
+    const nonSerialSegments = segments.filter(seg => !seg.isSerialNumber);
+    // 检查所有非流水号段是否都有值（空字符串表示“不选择”，也算有值）
+    const allFilled = nonSerialSegments.every(seg => {
+      const value = segmentValues[seg.id];
+      return value !== undefined; // 只要有定义就算填写了（包括空字符串）
+    });
+    if (allFilled && nonSerialSegments.length > 0) {
       const sku = await SkuGenerator.previewSku(segmentValues, segments);
       setPreviewSku(sku);
       
