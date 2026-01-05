@@ -141,11 +141,22 @@ export default function AddProductQuickScreen() {
         setBoxes(openBoxes);
         
         // 设置上次选择的 Box 为默认值
-        if (settings.lastBoxId) {
+        // 优先使用 lastBoxName 匹配，因为 name 是稳定的标识符（如 LB-RF-Box-0001）
+        // lastBoxId 可能是临时 ID（temp_xxx），无法匹配
+        if (settings.lastBoxName) {
+          const lastBox = openBoxes.find(b => b.name === settings.lastBoxName);
+          if (lastBox) {
+            setSelectedBox(lastBox);
+            console.log("[QuickAdd] Restored last selected box by name:", lastBox.name);
+          } else {
+            console.log("[QuickAdd] Last box not found in open boxes:", settings.lastBoxName);
+          }
+        } else if (settings.lastBoxId) {
+          // 向后兼容：尝试用 id 匹配
           const lastBox = openBoxes.find(b => b.id === settings.lastBoxId);
           if (lastBox) {
             setSelectedBox(lastBox);
-            console.log("[QuickAdd] Restored last selected box:", lastBox.name);
+            console.log("[QuickAdd] Restored last selected box by id:", lastBox.name);
           }
         }
       } catch (error) {
@@ -1321,9 +1332,10 @@ export default function AddProductQuickScreen() {
         onClose={() => setShowBoxManager(false)}
         mode="select"
         onSelect={(boxCode, shelfLocation) => {
-          // 创建一个临时的 Box 对象用于显示
+          // 创建一个 Box 对象用于显示
+          // 使用 boxCode 作为 id 和 name，以便后续匹配
           const newBox: Box = {
-            id: `temp_${Date.now()}`,
+            id: boxCode, // 使用 boxCode 作为 id，与 box-storage 中的逻辑一致
             name: boxCode,
             location: shelfLocation,
             status: 'open',
