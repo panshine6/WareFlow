@@ -29,26 +29,29 @@ export async function countProductsInImage(imageBase64: string): Promise<number>
             content: [
               {
                 type: "text",
-                text: `请仔细观察这张图片，计算图片中白色标签的数量。
+                text: `You are counting jewelry product packages for inventory management.
 
-识别要点：
-1. 每个饰品都带有一个白色标签（尺寸约 3cm × 5cm）
-2. 饰品放置在深色背景上，白色标签很容易识别
-3. 饰品是分开摆放的，每个白色标签代表一个饰品
-4. 请数清楚所有白色标签的数量
+Each package is:
+- A clear plastic bag with a white/cream display card inside
+- Display cards are approximately 3cm x 5cm
+- Placed on a dark background
 
-注意事项：
-- 反光、阴影或塑料袋的折痕不是标签，不要计算
-- 每个白色标签只能计算一次
-- 如果不确定，宁可少数不要多数
+CRITICAL RULES:
+1. Count ONLY clearly visible, complete packages
+2. If a package is partially hidden or unclear, do NOT count it
+3. Price tags are attached to packages - do NOT count them separately
+4. Reflections and shadows are NOT packages
+5. When in doubt, DO NOT count
 
-请只返回一个数字，表示白色标签的总数量。`,
+It is better to undercount than overcount. The user can manually add missing items, but removing incorrectly counted items is frustrating.
+
+Scan the image carefully and return ONLY a single number.`,
               },
               {
                 type: "image_url",
                 image_url: {
                   url: `data:image/jpeg;base64,${imageBase64}`,
-                  detail: "low",
+                  detail: "high",
                 },
               },
             ],
