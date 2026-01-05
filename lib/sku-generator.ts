@@ -437,12 +437,40 @@ export const SkuGenerator = {
   // ==================== SKU 生成 ====================
 
   /**
-   * 生成 SKU 前缀（根据选择的段值，排除流水号）
+   * 生成 SKU 前缀（只取流水号之前的段，用于判断流水号递增）
+   * 注意：流水号之后的段（如颜色）不参与前缀计算
+   * 例如：LB-ED-IR-HW-0001-BR 和 LB-ED-IR-HW-0001-SV 的前缀都是 LB-ED-IR-HW
    */
   generatePrefix(segmentValues: Record<string, string>, segments: SkuSegment[]): string {
-    return segments
-      .filter(s => !s.isSerialNumber) // 排除流水号段
-      .sort((a, b) => a.order - b.order)
+    const sortedSegments = [...segments].sort((a, b) => a.order - b.order);
+    const serialIndex = sortedSegments.findIndex(s => s.isSerialNumber);
+    
+    // 只取流水号之前的段
+    const prefixSegments = serialIndex >= 0 
+      ? sortedSegments.slice(0, serialIndex)
+      : sortedSegments.filter(s => !s.isSerialNumber);
+    
+    return prefixSegments
+      .map(s => segmentValues[s.id] || "")
+      .filter(v => v)
+      .join("-");
+  },
+
+  /**
+   * 生成 SKU 后缀（流水号之后的段，如颜色）
+   */
+  generateSuffix(segmentValues: Record<string, string>, segments: SkuSegment[]): string {
+    const sortedSegments = [...segments].sort((a, b) => a.order - b.order);
+    const serialIndex = sortedSegments.findIndex(s => s.isSerialNumber);
+    
+    if (serialIndex < 0 || serialIndex >= sortedSegments.length - 1) {
+      return ""; // 没有流水号或流水号在最后，没有后缀
+    }
+    
+    // 取流水号之后的段
+    const suffixSegments = sortedSegments.slice(serialIndex + 1);
+    
+    return suffixSegments
       .map(s => segmentValues[s.id] || "")
       .filter(v => v)
       .join("-");
@@ -493,6 +521,9 @@ export const SkuGenerator = {
   /**
    * 确认使用 SKU（更新序列和历史）
    * 支持流水号在任意位置
+   * 
+   * 重要：前缀只取流水号之前的部分，流水号之后的部分（如颜色）不参与前缀计算
+   * 例如：LB-ED-IR-HW-0001-BR 和 LB-ED-IR-HW-0001-SV 的前缀都是 LB-ED-IR-HW
    */
   async confirmSku(sku: string, segmentValues: Record<string, string>, segments?: SkuSegment[]): Promise<void> {
     const parts = sku.split("-");
@@ -505,9 +536,8 @@ export const SkuGenerator = {
       const serialPosition = this.getSerialNumberPosition(segments);
       if (serialPosition >= 0 && serialPosition < parts.length) {
         number = parseInt(parts[serialPosition], 10);
-        // 前缀是排除流水号后的部分
-        const prefixParts = parts.filter((_, i) => i !== serialPosition);
-        prefix = prefixParts.join("-");
+        // 前缀只取流水号之前的部分（不包含流水号之后的颜色等）
+        prefix = parts.slice(0, serialPosition).join("-");
       } else {
         // 默认流水号在最后
         number = parseInt(parts[parts.length - 1], 10);
@@ -519,7 +549,7 @@ export const SkuGenerator = {
       prefix = parts.slice(0, -1).join("-");
     }
 
-    // 更新序列
+    // 更新序列（只根据前缀判断）
     const sequences = await this.getAllSequences();
     const currentSequence = sequences[prefix];
     
