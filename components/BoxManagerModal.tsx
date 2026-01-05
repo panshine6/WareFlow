@@ -199,6 +199,19 @@ export default function BoxManagerModal({
     });
   };
 
+  // 重置流水号为0
+  const handleResetSequence = () => {
+    showConfirm(
+      "确认置0",
+      "确定要将 Box 流水号重置为 0 吗？\n\n重置后，下一个创建的 Box 将从 0001 开始编号。",
+      async () => {
+        await BoxGenerator.resetSequence();
+        await updatePreview();
+        showAlert("成功", "Box 流水号已重置为 0");
+      }
+    );
+  };
+
   // 渲染生成器视图
   const renderGeneratorView = () => (
     <>
@@ -310,6 +323,21 @@ export default function BoxManagerModal({
   // 渲染列表视图
   const renderListView = () => (
     <View style={styles.listContainer}>
+      {/* 置0按钮 */}
+      {mode === "manage" && (
+        <View style={styles.resetSection}>
+          <TouchableOpacity
+            style={[styles.resetButton, isDark && styles.resetButtonDark]}
+            onPress={handleResetSequence}
+          >
+            <Text style={styles.resetButtonText}>🔄 流水号置0</Text>
+          </TouchableOpacity>
+          <Text style={[styles.resetHint, isDark && styles.textMuted]}>
+            重置后下一个 Box 将从 0001 开始
+          </Text>
+        </View>
+      )}
+
       {boxes.length === 0 ? (
         <View style={styles.emptyState}>
           <Text style={[styles.emptyText, isDark && styles.textMuted]}>
@@ -791,5 +819,38 @@ const styles = StyleSheet.create({
   },
   textMuted: {
     color: "#999",
+  },
+  resetSection: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 16,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: "#e0e0e0",
+  },
+  resetButton: {
+    backgroundColor: "#fff3e0",
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#ffb74d",
+  },
+  resetButtonDark: {
+    backgroundColor: "#3c3c3e",
+    borderColor: "#ffb74d",
+  },
+  resetButtonText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#f57c00",
+  },
+  resetHint: {
+    fontSize: 11,
+    color: "#999",
+    flex: 1,
+    textAlign: "right",
+    marginLeft: 12,
   },
 });

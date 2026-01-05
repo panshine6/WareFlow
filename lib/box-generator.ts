@@ -98,6 +98,18 @@ export const BoxGenerator = {
   },
 
   /**
+   * 重置全局流水号为0
+   */
+  async resetSequence(): Promise<void> {
+    try {
+      await AsyncStorage.setItem(BOX_SEQUENCE_KEY, "0");
+      console.log("[BoxGenerator] Sequence reset to 0");
+    } catch (error) {
+      console.error("[BoxGenerator] Failed to reset sequence:", error);
+    }
+  },
+
+  /**
    * 获取下一个流水号
    */
   async getNextSequence(): Promise<number> {
