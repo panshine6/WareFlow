@@ -223,34 +223,42 @@ Then provide the final total as a single number on the last line.`;
 
 /**
  * 对比两张图片的相似度（使用 Claude）
+ * 优化版：支持同款不同色识别，提供详细判断理由
  */
 export async function compareImageSimilarity(
   imageBase64_1: string,
   imageBase64_2: string
 ): Promise<{ similarityScore: number; analysisNote: string }> {
-  const prompt = `You are a jewelry product expert. Compare these two product images and determine if they are the SAME product design.
+  const prompt = `你是一位专业的饰品鉴定专家。请对比这两张产品图片，判断它们是否是同一款产品。
 
-**COMPARISON CRITERIA:**
-1. Overall shape and silhouette
-2. Main decorative elements (pendants, charms, beads)
-3. Metal type and color (gold, silver, bronze)
-4. Pattern and texture details
-5. Size and proportions
+**对比重点（按优先级）：**
+1. 整体形状和轮廓（最重要）
+2. 主要装饰元素（吐坠、吃块、珠子的形状和排列）
+3. 图案和纹理细节
+4. 尺寸和比例
+5. 金属类型和颜色（注意：同款可能有不同颜色）
 
-**SCORING GUIDE:**
-- 95-100%: Identical product, same design
-- 85-94%: Same design, different angle/lighting/color variant
-- 70-84%: Similar style but different design
-- Below 70%: Different products
+**评分标准：**
+- 95-100%: 完全相同的产品
+- 90-94%: 同款产品，不同角度/灯光
+- 85-89%: 同款不同色（形状相同，颜色不同）
+- 75-84%: 相似款式，但设计细节有差异
+- 50-74%: 同类产品，不同设计
+- 50%以下: 不同产品
 
-**IMPORTANT:**
-- Focus on the JEWELRY ITEM, not the packaging or background
-- Same design with different photo angles should score 90+
-- Same design in different colors should score 85+
+**特别注意：**
+- 只关注饰品本身，忽略包装、背景、展示卡
+- 同款产品可能有不同颜色版本（如金色/银色/古铜色），形状相同应评 85+
+- 灯光和拍摄角度可能导致颜色看起来不同
+- 形状完全相同但颜色明显不同，应评 85-89%
 
-Return your response in this exact format:
-SCORE: [number 0-100]
-NOTE: [brief comparison in Chinese, max 30 chars]`;
+**返回格式（严格遵守）：**
+SCORE: [数字 0-100]
+NOTE: [中文简要说明，包含判断理由，最多40字]
+
+示例返回：
+SCORE: 87
+NOTE: 形状相同的南瓜耳环，一个银色一个古铜色，可能是同款不同色`;
 
   return callWithRetry(async () => {
     const content = await callClaudeVisionCompare(imageBase64_1, imageBase64_2, prompt, 200);
@@ -262,7 +270,7 @@ NOTE: [brief comparison in Chinese, max 30 chars]`;
     
     return {
       similarityScore: scoreMatch ? parseInt(scoreMatch[1], 10) : 0,
-      analysisNote: noteMatch ? noteMatch[1].trim().substring(0, 30) : "无法分析",
+      analysisNote: noteMatch ? noteMatch[1].trim().substring(0, 50) : "无法分析",
     };
   });
 }

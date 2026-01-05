@@ -929,8 +929,14 @@ export default function AddProductQuickScreen() {
                           {dup.similarityScore >= 85 && ' 🟢'}
                           {dup.similarityScore >= 75 && dup.similarityScore < 85 && ' 🟡'}
                         </ThemedText>
+                        {/* AI 判断理由 */}
+                        {dup.analysisNote && dup.analysisNote !== '无法分析' && (
+                          <ThemedText style={styles.matchAnalysisNote}>
+                            💬 {dup.analysisNote}
+                          </ThemedText>
+                        )}
                         <ThemedText style={styles.matchQuantity}>
-                          当前库存: {dup.product.quantity}
+                          库存: {dup.product.quantity}
                         </ThemedText>
                       </View>
                       <ThemedText style={styles.matchArrow}>›</ThemedText>
@@ -1593,6 +1599,13 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: "#007AFF",
     marginTop: 2,
+  },
+  matchAnalysisNote: {
+    fontSize: 11,
+    color: "#555",
+    marginTop: 4,
+    fontStyle: "italic",
+    lineHeight: 16,
   },
   matchQuantity: {
     fontSize: 12,
