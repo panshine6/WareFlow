@@ -1,5 +1,6 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { ProductStorage } from "./storage";
+import { ProductStorageAdapter } from "./storage-adapter";
 import { generateThumbnail } from "./image-utils";
 import type { Product } from "@/types/product";
 
@@ -187,9 +188,8 @@ export const SyncService = {
         history: [], // 历史记录需要单独查询
       }));
       
-      // 4. 清空本地数据并保存云端数据
-      await AsyncStorage.removeItem("products");
-      await AsyncStorage.setItem("products", JSON.stringify(localProducts));
+      // 4. 清空本地数据并保存云端数据（使用适配器确保 Web 端使用 IndexedDB）
+      await ProductStorageAdapter.replaceAll(localProducts);
       
       // 5. 更新最后同步时间
       const now = new Date().toISOString();
