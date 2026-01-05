@@ -1,16 +1,20 @@
 /**
  * AI 视觉识别服务（后端）
  * 使用 OpenAI Vision API 进行图像识别
+ * 优化版：使用 GPT-4o + 分区域计数法
  */
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const OPENAI_BASE_URL = process.env.OPENAI_BASE_URL || "https://api.openai.com/v1";
 
+// 使用 GPT-4o 模型（更强的视觉理解能力）
+const VISION_MODEL = "gpt-4o";
+
 // 速率限制配置
-const RATE_LIMIT_DELAY = 500; // 每次 API 调用之间的延迟（毫秒）- 减少延迟提高速度
-const MAX_RETRIES = 3; // 最大重试次数
-const RETRY_DELAY = 2000; // 重试延迟（毫秒）
-const MAX_CONCURRENT = 3; // 最大并发数
+const RATE_LIMIT_DELAY = 500;
+const MAX_RETRIES = 3;
+const RETRY_DELAY = 2000;
+const MAX_CONCURRENT = 3;
 
 /**
  * 延迟函数
@@ -34,7 +38,7 @@ async function callWithRetry<T>(
                           error?.message?.includes('rate_limit');
       
       if (isRateLimit && i < retries - 1) {
-        const waitTime = RETRY_DELAY * (i + 1); // 指数退避
+        const waitTime = RETRY_DELAY * (i + 1);
         console.log(`[AI Vision] Rate limited, waiting ${waitTime}ms before retry ${i + 1}/${retries - 1}`);
         await delay(waitTime);
         continue;
@@ -46,15 +50,14 @@ async function callWithRetry<T>(
 }
 
 /**
- * 识别图片中的饰品数量
+ * 识别图片中的饰品数量（优化版：分区域计数法）
  */
 export async function countProductsInImage(imageBase64: string): Promise<number> {
   if (!OPENAI_API_KEY) {
     throw new Error("未配置 OpenAI API 密钥");
   }
 
-  // 添加调试日志
-  console.log("[AI Vision] countProductsInImage called");
+  console.log("[AI Vision] countProductsInImage called with model:", VISION_MODEL);
   console.log("[AI Vision] Image base64 length:", imageBase64?.length || 0);
 
   return callWithRetry(async () => {
@@ -65,30 +68,45 @@ export async function countProductsInImage(imageBase64: string): Promise<number>
         Authorization: `Bearer ${OPENAI_API_KEY}`,
       },
       body: JSON.stringify({
-        model: "gpt-4o-mini",
+        model: VISION_MODEL,
         messages: [
           {
             role: "user",
             content: [
               {
                 type: "text",
-                text: `You are counting jewelry product packages for inventory management.
+                text: `You are an expert inventory counter. Count the jewelry product packages in this image.
 
-Each package is:
-- A clear plastic bag with a white/cream display card inside
-- Display cards are approximately 3cm x 5cm
-- Placed on a dark background
+Each package is a clear plastic bag containing a white/cream display card with jewelry attached.
 
-CRITICAL RULES:
-1. Count ONLY clearly visible, complete packages
-2. If a package is partially hidden or unclear, do NOT count it
-3. Price tags are attached to packages - do NOT count them separately
-4. Reflections and shadows are NOT packages
-5. When in doubt, DO NOT count
+**COUNTING METHOD - Use Grid Division:**
+1. Mentally divide the image into a 3×3 grid (9 sections)
+2. Count packages in each section:
+   - Top row: Left, Center, Right
+   - Middle row: Left, Center, Right  
+   - Bottom row: Left, Center, Right
+3. Sum all sections for the total
 
-It is better to undercount than overcount. The user can manually add missing items, but removing incorrectly counted items is frustrating.
+**IDENTIFICATION RULES:**
+- Each WHITE DISPLAY CARD = 1 package (this is the key identifier)
+- Cards are approximately 3cm × 5cm with "Fashion Jewelry" text
+- Ignore reflections, shadows, and price tags
+- If a package spans two sections, count it in the section where its CENTER is located
+- Only count clearly visible, complete packages
 
-Scan the image carefully and return ONLY a single number.`,
+**RESPONSE FORMAT:**
+First, list the count per grid section:
+Top-Left: X, Top-Center: X, Top-Right: X
+Mid-Left: X, Mid-Center: X, Mid-Right: X
+Bot-Left: X, Bot-Center: X, Bot-Right: X
+
+Then provide the final total as a single number on the last line.
+
+Example response:
+Top-Left: 2, Top-Center: 1, Top-Right: 2
+Mid-Left: 1, Mid-Center: 0, Mid-Right: 1
+Bot-Left: 2, Bot-Center: 1, Bot-Right: 1
+11`,
               },
               {
                 type: "image_url",
@@ -100,7 +118,7 @@ Scan the image carefully and return ONLY a single number.`,
             ],
           },
         ],
-        max_tokens: 10,
+        max_tokens: 300,
       }),
     });
 
@@ -114,7 +132,10 @@ Scan the image carefully and return ONLY a single number.`,
     const content = data.choices[0]?.message?.content || "0";
     console.log("[AI Vision] OpenAI response content:", content);
     
-    const match = content.match(/\d+/);
+    // 提取最后一行的数字作为总数
+    const lines = content.trim().split('\n');
+    const lastLine = lines[lines.length - 1];
+    const match = lastLine.match(/\d+/);
     const count = match ? parseInt(match[0], 10) : 0;
     console.log("[AI Vision] Parsed count:", count);
     
@@ -123,7 +144,7 @@ Scan the image carefully and return ONLY a single number.`,
 }
 
 /**
- * 对比两张图片的相似度（快速版本，使用 low 精度）
+ * 对比两张图片的相似度（优化版：使用 GPT-4o）
  */
 export async function compareImageSimilarity(
   imageBase64_1: string,
@@ -141,49 +162,57 @@ export async function compareImageSimilarity(
         Authorization: `Bearer ${OPENAI_API_KEY}`,
       },
       body: JSON.stringify({
-        model: "gpt-4o-mini",
+        model: VISION_MODEL,
         messages: [
           {
             role: "user",
             content: [
               {
                 type: "text",
-                text: `Compare these two jewelry product images. Are they the SAME product design?
+                text: `You are a jewelry product expert. Compare these two product images and determine if they are the SAME product design.
 
-Focus on:
-1. Shape and silhouette
-2. Main decorative elements (pendants, beads, patterns)
-3. Overall style
+**COMPARISON CRITERIA:**
+1. Overall shape and silhouette
+2. Main decorative elements (pendants, charms, beads)
+3. Metal type and color (gold, silver, bronze)
+4. Pattern and texture details
+5. Size and proportions
 
-Return JSON:
+**SCORING GUIDE:**
+- 95-100%: Identical product, same design
+- 85-94%: Same design, different angle/lighting/color variant
+- 70-84%: Similar style but different design
+- Below 70%: Different products
+
+**IMPORTANT:**
+- Focus on the JEWELRY ITEM, not the packaging or background
+- Same design with different photo angles should score 90+
+- Same design in different colors should score 85+
+
+Return JSON format only:
 {
-  "similarityScore": 0-100 (100=identical, 0=completely different),
-  "analysisNote": "Brief comparison (max 30 chars)"
-}
-
-IMPORTANT:
-- Same design with different angles/lighting = 90+
-- Same design with different colors = 85+
-- Different designs = below 70`,
+  "similarityScore": <number 0-100>,
+  "analysisNote": "<brief comparison in Chinese, max 30 chars>"
+}`,
               },
               {
                 type: "image_url",
                 image_url: {
                   url: `data:image/jpeg;base64,${imageBase64_1}`,
-                  detail: "low", // 使用 low 精度提高速度
+                  detail: "high",
                 },
               },
               {
                 type: "image_url",
                 image_url: {
                   url: `data:image/jpeg;base64,${imageBase64_2}`,
-                  detail: "low", // 使用 low 精度提高速度
+                  detail: "high",
                 },
               },
             ],
           },
         ],
-        max_tokens: 100,
+        max_tokens: 150,
         response_format: { type: "json_object" },
       }),
     });
@@ -221,7 +250,7 @@ export async function scanBarcodeFromImage(imageBase64: string): Promise<{ barco
         Authorization: `Bearer ${OPENAI_API_KEY}`,
       },
       body: JSON.stringify({
-        model: "gpt-4o-mini",
+        model: VISION_MODEL,
         messages: [
           {
             role: "user",
@@ -283,28 +312,25 @@ export async function scanBarcodeFromImage(imageBase64: string): Promise<{ barco
 }
 
 /**
- * 批量对比图片相似度（优化版：有限并行 + 速率限制 + 重试机制）
+ * 批量对比图片相似度（优化版：使用 GPT-4o + 并行处理）
  */
 export async function batchCompareImages(
   newImageBase64: string,
   existingImages: Array<{ id: string; base64: string }>,
-  threshold: number = 70 // 降低默认阈值，更容易找到相似产品
+  threshold: number = 70
 ): Promise<Array<{ id: string; similarityScore: number; analysisNote: string }>> {
-  console.log(`[AI Vision] Starting batch compare with ${existingImages.length} images, threshold: ${threshold}`);
+  console.log(`[AI Vision] Starting batch compare with ${existingImages.length} images, threshold: ${threshold}, model: ${VISION_MODEL}`);
   
-  // 对比所有产品，不再限制数量
   const imagesToCompare = existingImages;
-  
   console.log(`[AI Vision] Will compare ${imagesToCompare.length} images`);
 
   const results: Array<{ id: string; similarityScore: number; analysisNote: string }> = [];
 
-  // 使用有限并行处理，每批次 MAX_CONCURRENT 个
+  // 使用有限并行处理
   for (let i = 0; i < imagesToCompare.length; i += MAX_CONCURRENT) {
     const batch = imagesToCompare.slice(i, i + MAX_CONCURRENT);
     console.log(`[AI Vision] Processing batch ${Math.floor(i / MAX_CONCURRENT) + 1}, images ${i + 1}-${i + batch.length}`);
     
-    // 并行处理当前批次
     const batchPromises = batch.map(async (existingImage) => {
       try {
         console.log(`[AI Vision] Comparing with image ${existingImage.id}...`);
@@ -330,14 +356,12 @@ export async function batchCompareImages(
     
     const batchResults = await Promise.all(batchPromises);
     
-    // 收集有效结果
     for (const result of batchResults) {
       if (result) {
         results.push(result);
       }
     }
     
-    // 批次之间等待，避免触发速率限制
     if (i + MAX_CONCURRENT < imagesToCompare.length) {
       await delay(RATE_LIMIT_DELAY);
     }
