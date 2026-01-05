@@ -7,9 +7,10 @@ const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const OPENAI_BASE_URL = process.env.OPENAI_BASE_URL || "https://api.openai.com/v1";
 
 // 速率限制配置
-const RATE_LIMIT_DELAY = 1000; // 每次 API 调用之间的延迟（毫秒）
+const RATE_LIMIT_DELAY = 500; // 每次 API 调用之间的延迟（毫秒）- 减少延迟提高速度
 const MAX_RETRIES = 3; // 最大重试次数
 const RETRY_DELAY = 2000; // 重试延迟（毫秒）
+const MAX_CONCURRENT = 3; // 最大并发数
 
 /**
  * 延迟函数
@@ -122,7 +123,7 @@ Scan the image carefully and return ONLY a single number.`,
 }
 
 /**
- * 对比两张图片的相似度
+ * 对比两张图片的相似度（快速版本，使用 low 精度）
  */
 export async function compareImageSimilarity(
   imageBase64_1: string,
@@ -147,45 +148,42 @@ export async function compareImageSimilarity(
             content: [
               {
                 type: "text",
-                text: `你是一位专业的时尚饰品鉴定专家。请对比这两张饰品细节图，判断它们是否为同一款产品。
+                text: `Compare these two jewelry product images. Are they the SAME product design?
 
-对比要点：
-1. 材质和质感（金属、塑料、布料等）
-2. 颜色和色调
-3. 形状和尺寸
-4. 图案和纹理
-5. 装饰元素（珠子、吊坠、扣子等）
-6. 整体设计风格
+Focus on:
+1. Shape and silhouette
+2. Main decorative elements (pendants, beads, patterns)
+3. Overall style
 
-请返回 JSON 格式的结果：
+Return JSON:
 {
-  "similarityScore": 0-100 的整数（100 表示完全相同，0 表示完全不同），
-  "analysisNote": "简短的对比分析说明（不超过50字）"
+  "similarityScore": 0-100 (100=identical, 0=completely different),
+  "analysisNote": "Brief comparison (max 30 chars)"
 }
 
-注意：
-- 即使拍摄角度、光线不同，只要款式相同就应该给出高分（≥90）
-- 如果只是颜色不同但款式相同，也应该给出较高分（≥85）
-- 只有在材质、形状、设计明显不同时才给出低分（<80）`,
+IMPORTANT:
+- Same design with different angles/lighting = 90+
+- Same design with different colors = 85+
+- Different designs = below 70`,
               },
               {
                 type: "image_url",
                 image_url: {
                   url: `data:image/jpeg;base64,${imageBase64_1}`,
-                  detail: "high", // 使用 high 精度提高准确性
+                  detail: "low", // 使用 low 精度提高速度
                 },
               },
               {
                 type: "image_url",
                 image_url: {
                   url: `data:image/jpeg;base64,${imageBase64_2}`,
-                  detail: "high", // 使用 high 精度提高准确性
+                  detail: "low", // 使用 low 精度提高速度
                 },
               },
             ],
           },
         ],
-        max_tokens: 200,
+        max_tokens: 100,
         response_format: { type: "json_object" },
       }),
     });
@@ -285,48 +283,63 @@ export async function scanBarcodeFromImage(imageBase64: string): Promise<{ barco
 }
 
 /**
- * 批量对比图片相似度（优化版：串行处理 + 速率限制 + 重试机制）
+ * 批量对比图片相似度（优化版：有限并行 + 速率限制 + 重试机制）
  */
 export async function batchCompareImages(
   newImageBase64: string,
   existingImages: Array<{ id: string; base64: string }>,
-  threshold: number = 75 // 降低默认阈值，更容易找到相似产品
+  threshold: number = 70 // 降低默认阈值，更容易找到相似产品
 ): Promise<Array<{ id: string; similarityScore: number; analysisNote: string }>> {
   console.log(`[AI Vision] Starting batch compare with ${existingImages.length} images, threshold: ${threshold}`);
   
-  // 限制最多对比前 10 个产品
-  const imagesToCompare = existingImages.slice(0, 10);
+  // 对比所有产品，不再限制数量
+  const imagesToCompare = existingImages;
   
-  if (imagesToCompare.length < existingImages.length) {
-    console.log(`[AI Vision] Limited comparison to ${imagesToCompare.length} images (out of ${existingImages.length})`);
-  }
+  console.log(`[AI Vision] Will compare ${imagesToCompare.length} images`);
 
   const results: Array<{ id: string; similarityScore: number; analysisNote: string }> = [];
 
-  // 串行处理，避免并发请求触发速率限制
-  for (const existingImage of imagesToCompare) {
-    try {
-      console.log(`[AI Vision] Comparing with image ${existingImage.id}...`);
-      
-      const comparison = await compareImageSimilarity(newImageBase64, existingImage.base64);
-      
-      if (comparison.similarityScore >= threshold) {
-        console.log(`[AI Vision] Found similar image ${existingImage.id}: ${comparison.similarityScore}%`);
-        results.push({
-          id: existingImage.id,
-          similarityScore: comparison.similarityScore,
-          analysisNote: comparison.analysisNote,
-        });
-      } else {
-        console.log(`[AI Vision] Image ${existingImage.id} similarity: ${comparison.similarityScore}% (below threshold)`);
+  // 使用有限并行处理，每批次 MAX_CONCURRENT 个
+  for (let i = 0; i < imagesToCompare.length; i += MAX_CONCURRENT) {
+    const batch = imagesToCompare.slice(i, i + MAX_CONCURRENT);
+    console.log(`[AI Vision] Processing batch ${Math.floor(i / MAX_CONCURRENT) + 1}, images ${i + 1}-${i + batch.length}`);
+    
+    // 并行处理当前批次
+    const batchPromises = batch.map(async (existingImage) => {
+      try {
+        console.log(`[AI Vision] Comparing with image ${existingImage.id}...`);
+        
+        const comparison = await compareImageSimilarity(newImageBase64, existingImage.base64);
+        
+        if (comparison.similarityScore >= threshold) {
+          console.log(`[AI Vision] Found similar image ${existingImage.id}: ${comparison.similarityScore}%`);
+          return {
+            id: existingImage.id,
+            similarityScore: comparison.similarityScore,
+            analysisNote: comparison.analysisNote,
+          };
+        } else {
+          console.log(`[AI Vision] Image ${existingImage.id} similarity: ${comparison.similarityScore}% (below threshold)`);
+          return null;
+        }
+      } catch (error) {
+        console.error(`[AI Vision] Failed to compare with image ${existingImage.id}:`, error);
+        return null;
       }
-      
-      // 每次 API 调用后等待，避免触发速率限制
+    });
+    
+    const batchResults = await Promise.all(batchPromises);
+    
+    // 收集有效结果
+    for (const result of batchResults) {
+      if (result) {
+        results.push(result);
+      }
+    }
+    
+    // 批次之间等待，避免触发速率限制
+    if (i + MAX_CONCURRENT < imagesToCompare.length) {
       await delay(RATE_LIMIT_DELAY);
-      
-    } catch (error) {
-      console.error(`[AI Vision] Failed to compare with image ${existingImage.id}:`, error);
-      // 继续处理其他图片，不中断整个流程
     }
   }
 
