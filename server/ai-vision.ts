@@ -14,6 +14,10 @@ export async function countProductsInImage(imageBase64: string): Promise<number>
     throw new Error("未配置 OpenAI API 密钥");
   }
 
+  // 添加调试日志
+  console.log("[AI Vision] countProductsInImage called");
+  console.log("[AI Vision] Image base64 length:", imageBase64?.length || 0);
+
   try {
     const response = await fetch(`${OPENAI_BASE_URL}/chat/completions`, {
       method: "POST",
@@ -69,8 +73,13 @@ Scan the image carefully and return ONLY a single number.`,
 
     const data = await response.json();
     const content = data.choices[0]?.message?.content || "0";
+    console.log("[AI Vision] OpenAI response content:", content);
+    
     const match = content.match(/\d+/);
-    return match ? parseInt(match[0], 10) : 0;
+    const count = match ? parseInt(match[0], 10) : 0;
+    console.log("[AI Vision] Parsed count:", count);
+    
+    return count;
   } catch (error) {
     console.error("AI vision count error:", error);
     throw error;
