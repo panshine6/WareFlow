@@ -366,6 +366,7 @@ export default function SkuGeneratorModal({
     const selectedOption = segment.options.find(o => o.code === selectedValue);
     const isFirst = index === 0;
     const isLast = index === sortedSegments.length - 1;
+    const isSerialNumber = segment.isSerialNumber;
 
     return (
       <View key={segment.id} style={styles.selectorContainer}>
@@ -390,30 +391,38 @@ export default function SkuGeneratorModal({
             </View>
           )}
           
-          {/* 原有的段选择器 */}
+          {/* 段选择器 - 流水号段不可展开 */}
           <TouchableOpacity
             style={[
               styles.selectorHeader,
               !isReorderMode && styles.selectorHeaderFull,
               isReorderMode && styles.selectorHeaderFlex,
               isDark && styles.selectorHeaderDark,
-              isExpanded && styles.selectorHeaderExpanded,
+              isExpanded && !isSerialNumber && styles.selectorHeaderExpanded,
+              isSerialNumber && styles.selectorHeaderSerial,
             ]}
-            onPress={() => setExpandedSegment(isExpanded ? null : segment.id)}
+            onPress={() => !isSerialNumber && setExpandedSegment(isExpanded ? null : segment.id)}
+            disabled={isSerialNumber}
           >
             <View style={styles.selectorHeaderLeft}>
-              <Text style={[styles.selectorLabel, isDark && styles.textDark]}>
+              <Text style={[styles.selectorLabel, isDark && styles.textDark, isSerialNumber && styles.serialLabel]}>
                 {segment.name}
               </Text>
-              {selectedValue ? (
-                <View style={styles.selectedBadge}>
-                  <Text style={styles.selectedBadgeText}>{selectedValue}</Text>
+              {isSerialNumber ? (
+                <View style={[styles.selectedBadge, styles.serialBadge]}>
+                  <Text style={styles.selectedBadgeText}>自动</Text>
+                </View>
+              ) : selectedValue ? (
+                <View style={[styles.selectedBadge, selectedValue === '' && styles.emptyBadge]}>
+                  <Text style={styles.selectedBadgeText}>{selectedValue || '无'}</Text>
                 </View>
               ) : null}
             </View>
-            <Text style={[styles.selectorArrow, isDark && styles.textDark]}>
-              {isExpanded ? "\u25B2" : "\u25BC"}
-            </Text>
+            {!isSerialNumber && (
+              <Text style={[styles.selectorArrow, isDark && styles.textDark]}>
+                {isExpanded ? "\u25B2" : "\u25BC"}
+              </Text>
+            )}
           </TouchableOpacity>
         </View>
 
@@ -421,48 +430,55 @@ export default function SkuGeneratorModal({
           <View style={[styles.selectorContent, isDark && styles.selectorContentDark]}>
             {/* 选项网格 */}
             <View style={styles.optionsGrid}>
-              {segment.options.map((option) => (
-                <TouchableOpacity
-                  key={option.code}
-                  style={[
-                    styles.optionButton,
-                    selectedValue === option.code && styles.optionButtonSelected,
-                  ]}
-                  onPress={() => {
-                    setSegmentValues(prev => ({ ...prev, [segment.id]: option.code }));
-                  }}
-                  onLongPress={() => {
-                    if (option.isCustom) {
-                      Alert.alert("删除选项", `确定要删除 ${option.code} 吗？`, [
-                        { text: "取消", style: "cancel" },
-                        {
-                          text: "删除",
-                          style: "destructive",
-                          onPress: () => handleDeleteOption(segment.id, option.code),
-                        },
-                      ]);
-                    }
-                  }}
-                >
-                  <Text
+              {segment.options.map((option) => {
+                const isEmptyOption = option.code === '';
+                const isSelected = selectedValue === option.code;
+                return (
+                  <TouchableOpacity
+                    key={option.code || 'empty'}
                     style={[
-                      styles.optionCode,
-                      selectedValue === option.code && styles.optionTextSelected,
+                      styles.optionButton,
+                      isEmptyOption && styles.optionButtonEmpty,
+                      isSelected && styles.optionButtonSelected,
+                      isSelected && isEmptyOption && styles.optionButtonEmptySelected,
                     ]}
+                    onPress={() => {
+                      setSegmentValues(prev => ({ ...prev, [segment.id]: option.code }));
+                    }}
+                    onLongPress={() => {
+                      if (option.isCustom) {
+                        Alert.alert("删除选项", `确定要删除 ${option.code} 吗？`, [
+                          { text: "取消", style: "cancel" },
+                          {
+                            text: "删除",
+                            style: "destructive",
+                            onPress: () => handleDeleteOption(segment.id, option.code),
+                          },
+                        ]);
+                      }
+                    }}
                   >
-                    {option.code}
-                  </Text>
-                  <Text
-                    style={[
-                      styles.optionName,
-                      selectedValue === option.code && styles.optionTextSelected,
-                    ]}
-                    numberOfLines={1}
-                  >
-                    {option.nameCn}
-                  </Text>
-                </TouchableOpacity>
-              ))}
+                    <Text
+                      style={[
+                        styles.optionCode,
+                        isEmptyOption && styles.optionCodeEmpty,
+                        isSelected && styles.optionTextSelected,
+                      ]}
+                    >
+                      {isEmptyOption ? '∅' : option.code}
+                    </Text>
+                    <Text
+                      style={[
+                        styles.optionName,
+                        isSelected && styles.optionTextSelected,
+                      ]}
+                      numberOfLines={1}
+                    >
+                      {option.nameCn}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
               
               {/* 添加按钮 */}
               <TouchableOpacity
@@ -545,13 +561,16 @@ export default function SkuGeneratorModal({
           SKU 格式说明
         </Text>
         <Text style={[styles.formatText, isDark && styles.textMuted]}>
-          {[...segments].sort((a, b) => a.order - b.order).map(s => `${s.name}(${s.codeLength}位)`).join("-")}-流水号(4位)
+          {[...segments].sort((a, b) => a.order - b.order).map(s => 
+            s.isSerialNumber ? `流水号(${s.codeLength}位)` : `${s.name}(${s.codeLength}位)`
+          ).join("-")}
         </Text>
-        {isReorderMode && (
-          <Text style={[styles.formatHint, isDark && styles.textMuted]}>
-            点击左侧 ▲▼ 按钮可调整字段顺序
-          </Text>
-        )}
+        <Text style={[styles.formatHint, isDark && styles.textMuted]}>
+          {isReorderMode 
+            ? '点击左侧 ▲▼ 按钮可调整字段顺序（包括流水号）'
+            : '选择 ∅ 可省略该字段'
+          }
+        </Text>
       </View>
     </>
   );
@@ -1178,6 +1197,31 @@ const styles = StyleSheet.create({
   },
   optionButtonSelected: {
     backgroundColor: "#007AFF",
+    borderColor: "#007AFF",
+  },
+  optionButtonEmpty: {
+    backgroundColor: "#f8f8f8",
+    borderStyle: "dashed",
+  },
+  optionButtonEmptySelected: {
+    backgroundColor: "#6c757d",
+    borderColor: "#6c757d",
+  },
+  optionCodeEmpty: {
+    fontSize: 18,
+    color: "#999",
+  },
+  selectorHeaderSerial: {
+    backgroundColor: "#e8f4ff",
+  },
+  serialLabel: {
+    color: "#007AFF",
+  },
+  serialBadge: {
+    backgroundColor: "#007AFF",
+  },
+  emptyBadge: {
+    backgroundColor: "#6c757d",
     borderColor: "#007AFF",
   },
   optionCode: {

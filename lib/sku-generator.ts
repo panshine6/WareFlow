@@ -30,6 +30,7 @@ export interface SkuSegment {
   options: CodeOption[]; // 可选项
   isRequired: boolean; // 是否必填
   order: number; // 排序
+  isSerialNumber?: boolean; // 是否是流水号段（特殊段）
 }
 
 // SKU 序列记录
@@ -54,9 +55,10 @@ export const DEFAULT_SEGMENTS: SkuSegment[] = [
     id: "brand",
     name: "品牌代码",
     codeLength: 2,
-    isRequired: true,
+    isRequired: false, // 改为非必填，支持空值
     order: 1,
     options: [
+      { code: "", nameEn: "None", nameCn: "不选择" }, // 空值选项
       { code: "LB", nameEn: "Ladybuty", nameCn: "Ladybuty" },
     ],
   },
@@ -64,9 +66,10 @@ export const DEFAULT_SEGMENTS: SkuSegment[] = [
     id: "category",
     name: "大类代码",
     codeLength: 2,
-    isRequired: true,
+    isRequired: false,
     order: 2,
     options: [
+      { code: "", nameEn: "None", nameCn: "不选择" },
       { code: "RF", nameEn: "Ring Fixed", nameCn: "固定戒指" },
       { code: "RA", nameEn: "Ring Adjustable", nameCn: "可调节戒指" },
       { code: "ES", nameEn: "Earring Stud", nameCn: "耳钉" },
@@ -83,9 +86,10 @@ export const DEFAULT_SEGMENTS: SkuSegment[] = [
     id: "material",
     name: "材料代码",
     codeLength: 2,
-    isRequired: true,
+    isRequired: false,
     order: 3,
     options: [
+      { code: "", nameEn: "None", nameCn: "不选择" },
       { code: "GM", nameEn: "Gold Metal", nameCn: "金色金属" },
       { code: "SM", nameEn: "Silver Metal", nameCn: "银色金属" },
       { code: "DM", nameEn: "Diamond", nameCn: "钻石" },
@@ -106,9 +110,10 @@ export const DEFAULT_SEGMENTS: SkuSegment[] = [
     id: "color",
     name: "颜色代码",
     codeLength: 2,
-    isRequired: true,
+    isRequired: false,
     order: 4,
     options: [
+      { code: "", nameEn: "None", nameCn: "不选择" },
       { code: "RE", nameEn: "Red", nameCn: "红色" },
       { code: "BL", nameEn: "Blue", nameCn: "蓝色" },
       { code: "GR", nameEn: "Green", nameCn: "绿色" },
@@ -124,6 +129,15 @@ export const DEFAULT_SEGMENTS: SkuSegment[] = [
       { code: "MC", nameEn: "Multi-color", nameCn: "多色" },
       { code: "NT", nameEn: "Natural", nameCn: "原色" },
     ],
+  },
+  {
+    id: "serial",
+    name: "流水号",
+    codeLength: 4,
+    isRequired: true,
+    order: 5,
+    isSerialNumber: true,
+    options: [], // 流水号没有选项，自动生成
   },
 ];
 
@@ -365,10 +379,11 @@ export const SkuGenerator = {
   // ==================== SKU 生成 ====================
 
   /**
-   * 生成 SKU 前缀（根据选择的段值）
+   * 生成 SKU 前缀（根据选择的段值，排除流水号）
    */
   generatePrefix(segmentValues: Record<string, string>, segments: SkuSegment[]): string {
     return segments
+      .filter(s => !s.isSerialNumber) // 排除流水号段
       .sort((a, b) => a.order - b.order)
       .map(s => segmentValues[s.id] || "")
       .filter(v => v)
@@ -377,22 +392,74 @@ export const SkuGenerator = {
 
   /**
    * 预览 SKU（不更新序列）
+   * 支持流水号位置可调
    */
   async previewSku(segmentValues: Record<string, string>, segments: SkuSegment[]): Promise<string> {
     const prefix = this.generatePrefix(segmentValues, segments);
     const nextNumber = await this.getNextNumber(prefix);
     const paddedNumber = nextNumber.toString().padStart(4, "0");
-    return `${prefix}-${paddedNumber}`;
+    
+    // 找到流水号段的位置
+    const serialSegment = segments.find(s => s.isSerialNumber);
+    if (!serialSegment) {
+      // 如果没有流水号段，默认放在最后
+      return `${prefix}-${paddedNumber}`;
+    }
+    
+    // 按顺序组装 SKU，流水号放在其 order 位置
+    const sortedSegments = [...segments].sort((a, b) => a.order - b.order);
+    const parts: string[] = [];
+    
+    for (const seg of sortedSegments) {
+      if (seg.isSerialNumber) {
+        parts.push(paddedNumber);
+      } else {
+        const value = segmentValues[seg.id];
+        if (value) {
+          parts.push(value);
+        }
+      }
+    }
+    
+    return parts.join("-");
+  },
+
+  /**
+   * 获取流水号在 SKU 中的位置索引
+   */
+  getSerialNumberPosition(segments: SkuSegment[]): number {
+    const sortedSegments = [...segments].sort((a, b) => a.order - b.order);
+    return sortedSegments.findIndex(s => s.isSerialNumber);
   },
 
   /**
    * 确认使用 SKU（更新序列和历史）
+   * 支持流水号在任意位置
    */
-  async confirmSku(sku: string, segmentValues: Record<string, string>): Promise<void> {
+  async confirmSku(sku: string, segmentValues: Record<string, string>, segments?: SkuSegment[]): Promise<void> {
     const parts = sku.split("-");
-    const numberStr = parts[parts.length - 1];
-    const number = parseInt(numberStr, 10);
-    const prefix = parts.slice(0, -1).join("-");
+    
+    // 如果提供了 segments，根据流水号位置提取
+    let number: number;
+    let prefix: string;
+    
+    if (segments) {
+      const serialPosition = this.getSerialNumberPosition(segments);
+      if (serialPosition >= 0 && serialPosition < parts.length) {
+        number = parseInt(parts[serialPosition], 10);
+        // 前缀是排除流水号后的部分
+        const prefixParts = parts.filter((_, i) => i !== serialPosition);
+        prefix = prefixParts.join("-");
+      } else {
+        // 默认流水号在最后
+        number = parseInt(parts[parts.length - 1], 10);
+        prefix = parts.slice(0, -1).join("-");
+      }
+    } else {
+      // 向后兼容：默认流水号在最后
+      number = parseInt(parts[parts.length - 1], 10);
+      prefix = parts.slice(0, -1).join("-");
+    }
 
     // 更新序列
     const sequences = await this.getAllSequences();
