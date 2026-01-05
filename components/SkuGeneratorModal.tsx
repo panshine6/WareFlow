@@ -105,42 +105,65 @@ export default function SkuGeneratorModal({
   }, [visible]);
 
   const loadData = async () => {
-    const segs = await SkuGenerator.getSegments();
-    setSegments(segs);
-    
-    // 尝试加载上次的选择
-    const lastSelection = await SkuGenerator.getLastSelection();
-    
-    // 初始化选中值
-    const initialValues: Record<string, string> = {};
-    segs.forEach(seg => {
-      // 流水号段不需要用户选择，设置为特殊标记
-      if (seg.isSerialNumber) {
-        initialValues[seg.id] = '__SERIAL__';
-        return;
-      }
+    try {
+      const segs = await SkuGenerator.getSegments();
+      setSegments(segs);
       
-      if (lastSelection && lastSelection[seg.id]) {
-        // 使用上次的选择（如果该选项仍然存在）
-        const optionExists = seg.options.some(o => o.code === lastSelection[seg.id]);
-        if (optionExists) {
-          initialValues[seg.id] = lastSelection[seg.id];
-        } else if (seg.options.length > 0) {
+      // 尝试加载上次的选择
+      const lastSelection = await SkuGenerator.getLastSelection();
+      
+      // 初始化选中值
+      const initialValues: Record<string, string> = {};
+      segs.forEach(seg => {
+        // 流水号段不需要用户选择，设置为特殊标记
+        if (seg.isSerialNumber) {
+          initialValues[seg.id] = '__SERIAL__';
+          return;
+        }
+        
+        if (lastSelection && lastSelection[seg.id]) {
+          // 使用上次的选择（如果该选项仍然存在）
+          const optionExists = seg.options?.some(o => o.code === lastSelection[seg.id]);
+          if (optionExists) {
+            initialValues[seg.id] = lastSelection[seg.id];
+          } else if (seg.options?.length > 0) {
+            initialValues[seg.id] = seg.options[0].code;
+          }
+        } else if (seg.options?.length > 0) {
+          // 没有上次选择，默认选中第一个选项
           initialValues[seg.id] = seg.options[0].code;
         }
-      } else if (seg.options.length > 0) {
-        // 没有上次选择，默认选中第一个选项
-        initialValues[seg.id] = seg.options[0].code;
+      });
+      setSegmentValues(initialValues);
+      
+      // 加载历史和序列，添加错误处理
+      try {
+        const hist = await SkuGenerator.getHistory();
+        // 验证历史记录格式
+        const validHistory = Array.isArray(hist) ? hist.filter(h => 
+          h && typeof h === 'object' && h.sku && h.createdAt
+        ) : [];
+        setHistory(validHistory);
+      } catch (histError) {
+        console.error('[SkuGeneratorModal] Failed to load history:', histError);
+        setHistory([]);
       }
-    });
-    setSegmentValues(initialValues);
-    
-    // 加载历史和序列
-    const hist = await SkuGenerator.getHistory();
-    setHistory(hist);
-    
-    const seqs = await SkuGenerator.getAllSequences();
-    setSequences(seqs);
+      
+      try {
+        const seqs = await SkuGenerator.getAllSequences();
+        // 验证序列记录格式
+        const validSeqs = (seqs && typeof seqs === 'object') ? seqs : {};
+        setSequences(validSeqs);
+      } catch (seqError) {
+        console.error('[SkuGeneratorModal] Failed to load sequences:', seqError);
+        setSequences({});
+      }
+    } catch (error) {
+      console.error('[SkuGeneratorModal] Failed to load data:', error);
+      // 设置默认值防止崩溃
+      setHistory([]);
+      setSequences({});
+    }
   };
 
   // 更新 SKU 预览
@@ -700,12 +723,12 @@ export default function SkuGeneratorModal({
                 {record.sku}
               </Text>
               <Text style={[styles.historyItemDate, isDark && styles.textMuted]}>
-                {new Date(record.createdAt).toLocaleString()}
+                {record.createdAt ? new Date(record.createdAt).toLocaleString() : '未知时间'}
               </Text>
             </View>
             <View style={styles.historyItemRight}>
               <Text style={styles.historyItemNumber}>
-                #{record.number.toString().padStart(4, "0")}
+                #{(record.number ?? 0).toString().padStart(4, "0")}
               </Text>
             </View>
           </TouchableOpacity>
@@ -716,9 +739,13 @@ export default function SkuGeneratorModal({
 
   // 渲染序列管理视图
   const renderSequencesView = () => {
-    const sequenceList = Object.values(sequences).sort((a, b) => 
-      new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
-    );
+    // 安全检查：确保sequences是有效对象
+    const safeSequences = sequences && typeof sequences === 'object' ? sequences : {};
+    const sequenceList = Object.values(safeSequences)
+      .filter(seq => seq && seq.prefix && seq.updatedAt) // 过滤无效数据
+      .sort((a, b) => 
+        new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+      );
 
     return (
       <View style={styles.sequencesContainer}>
@@ -737,7 +764,7 @@ export default function SkuGeneratorModal({
                   {seq.prefix}
                 </Text>
                 <Text style={styles.sequenceItemNumber}>
-                  当前: {seq.lastNumber.toString().padStart(4, "0")}
+                  当前: {(seq.lastNumber ?? 0).toString().padStart(4, "0")}
                 </Text>
               </View>
               <View style={styles.sequenceItemActions}>

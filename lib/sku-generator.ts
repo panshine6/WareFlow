@@ -343,7 +343,21 @@ export const SkuGenerator = {
   async getAllSequences(): Promise<Record<string, SkuSequence>> {
     try {
       const data = await AsyncStorage.getItem(SKU_SEQUENCE_KEY);
-      return data ? JSON.parse(data) : {};
+      if (!data) return {};
+      const parsed = JSON.parse(data);
+      // 验证数据格式
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+        console.warn("[SkuGenerator] Sequences data is not an object, resetting");
+        return {};
+      }
+      // 过滤无效记录
+      const validSequences: Record<string, SkuSequence> = {};
+      for (const [key, value] of Object.entries(parsed)) {
+        if (value && typeof value === 'object' && 'prefix' in value) {
+          validSequences[key] = value as SkuSequence;
+        }
+      }
+      return validSequences;
     } catch (error) {
       console.error("[SkuGenerator] Failed to get sequences:", error);
       return {};
@@ -536,7 +550,19 @@ export const SkuGenerator = {
   async getHistory(): Promise<SkuHistoryRecord[]> {
     try {
       const data = await AsyncStorage.getItem(SKU_HISTORY_KEY);
-      return data ? JSON.parse(data) : [];
+      if (!data) return [];
+      const parsed = JSON.parse(data);
+      // 验证数据格式
+      if (!Array.isArray(parsed)) {
+        console.warn("[SkuGenerator] History data is not an array, resetting");
+        return [];
+      }
+      // 过滤无效记录
+      return parsed.filter(record => 
+        record && 
+        typeof record === 'object' && 
+        typeof record.sku === 'string'
+      );
     } catch (error) {
       console.error("[SkuGenerator] Failed to get history:", error);
       return [];
