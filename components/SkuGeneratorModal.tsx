@@ -89,6 +89,9 @@ export default function SkuGeneratorModal({
   // 序列记录
   const [sequences, setSequences] = useState<Record<string, SkuSequence>>({});
 
+  // 调整字段顺序模式
+  const [isReorderMode, setIsReorderMode] = useState(false);
+
   // 历史记录多选模式
   const [isHistoryEditMode, setIsHistoryEditMode] = useState(false);
   const [selectedHistorySkus, setSelectedHistorySkus] = useState<Set<string>>(new Set());
@@ -367,29 +370,32 @@ export default function SkuGeneratorModal({
     return (
       <View key={segment.id} style={styles.selectorContainer}>
         <View style={styles.selectorRow}>
-          {/* 上下移动按钮 */}
-          <View style={styles.moveButtonsContainer}>
-            <TouchableOpacity
-              style={[styles.moveButton, isFirst && styles.moveButtonDisabled]}
-              onPress={() => !isFirst && handleMoveSegment(segment.id, 'up')}
-              disabled={isFirst}
-            >
-              <Text style={[styles.moveButtonText, isFirst && styles.moveButtonTextDisabled]}>\u25b2</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.moveButton, isLast && styles.moveButtonDisabled]}
-              onPress={() => !isLast && handleMoveSegment(segment.id, 'down')}
-              disabled={isLast}
-            >
-              <Text style={[styles.moveButtonText, isLast && styles.moveButtonTextDisabled]}>\u25bc</Text>
-            </TouchableOpacity>
-          </View>
+          {/* 上下移动按钮 - 只在调整模式下显示 */}
+          {isReorderMode && (
+            <View style={styles.moveButtonsContainer}>
+              <TouchableOpacity
+                style={[styles.moveButton, isFirst && styles.moveButtonDisabled]}
+                onPress={() => !isFirst && handleMoveSegment(segment.id, 'up')}
+                disabled={isFirst}
+              >
+                <Text style={[styles.moveButtonText, isFirst && styles.moveButtonTextDisabled]}>{"\u25B2"}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.moveButton, isLast && styles.moveButtonDisabled]}
+                onPress={() => !isLast && handleMoveSegment(segment.id, 'down')}
+                disabled={isLast}
+              >
+                <Text style={[styles.moveButtonText, isLast && styles.moveButtonTextDisabled]}>{"\u25BC"}</Text>
+              </TouchableOpacity>
+            </View>
+          )}
           
           {/* 原有的段选择器 */}
           <TouchableOpacity
             style={[
               styles.selectorHeader,
-              styles.selectorHeaderFlex,
+              !isReorderMode && styles.selectorHeaderFull,
+              isReorderMode && styles.selectorHeaderFlex,
               isDark && styles.selectorHeaderDark,
               isExpanded && styles.selectorHeaderExpanded,
             ]}
@@ -406,7 +412,7 @@ export default function SkuGeneratorModal({
               ) : null}
             </View>
             <Text style={[styles.selectorArrow, isDark && styles.textDark]}>
-              {isExpanded ? "\u25b2" : "\u25bc"}
+              {isExpanded ? "\u25B2" : "\u25BC"}
             </Text>
           </TouchableOpacity>
         </View>
@@ -506,13 +512,32 @@ export default function SkuGeneratorModal({
         return sortedSegments.map((segment, index) => renderSegmentSelector(segment, index, sortedSegments));
       })()}
 
-      {/* 添加新段按钮 */}
-      <TouchableOpacity
-        style={[styles.addSegmentButton, isDark && styles.addSegmentButtonDark]}
-        onPress={() => setShowAddSegment(true)}
-      >
-        <Text style={styles.addSegmentButtonText}>+ 添加新段（如：设计系列）</Text>
-      </TouchableOpacity>
+      {/* 操作按钮区 */}
+      <View style={styles.actionButtonsRow}>
+        {/* 调整顺序按钮 */}
+        <TouchableOpacity
+          style={[
+            styles.reorderButton,
+            isReorderMode && styles.reorderButtonActive,
+          ]}
+          onPress={() => setIsReorderMode(!isReorderMode)}
+        >
+          <Text style={[
+            styles.reorderButtonText,
+            isReorderMode && styles.reorderButtonTextActive,
+          ]}>
+            {isReorderMode ? "✓ 完成调整" : "↕ 调整顺序"}
+          </Text>
+        </TouchableOpacity>
+
+        {/* 添加新段按钮 */}
+        <TouchableOpacity
+          style={[styles.addSegmentButton, isDark && styles.addSegmentButtonDark]}
+          onPress={() => setShowAddSegment(true)}
+        >
+          <Text style={styles.addSegmentButtonText}>+ 添加新段</Text>
+        </TouchableOpacity>
+      </View>
 
       {/* SKU 格式说明 */}
       <View style={[styles.formatInfo, isDark && styles.formatInfoDark]}>
@@ -522,9 +547,11 @@ export default function SkuGeneratorModal({
         <Text style={[styles.formatText, isDark && styles.textMuted]}>
           {[...segments].sort((a, b) => a.order - b.order).map(s => `${s.name}(${s.codeLength}位)`).join("-")}-流水号(4位)
         </Text>
-        <Text style={[styles.formatHint, isDark && styles.textMuted]}>
-          点击左侧 ▲▼ 按钮可调整字段顺序
-        </Text>
+        {isReorderMode && (
+          <Text style={[styles.formatHint, isDark && styles.textMuted]}>
+            点击左侧 ▲▼ 按钮可调整字段顺序
+          </Text>
+        )}
       </View>
     </>
   );
@@ -1083,6 +1110,9 @@ const styles = StyleSheet.create({
   selectorHeaderFlex: {
     flex: 1,
   },
+  selectorHeaderFull: {
+    width: "100%",
+  },
   selectorHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -1188,12 +1218,38 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#FF3B30",
   },
+  actionButtonsRow: {
+    flexDirection: "row",
+    gap: 10,
+    marginBottom: 16,
+  },
+  reorderButton: {
+    flex: 1,
+    backgroundColor: "#f5f5f5",
+    borderRadius: 10,
+    padding: 14,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#ddd",
+  },
+  reorderButtonActive: {
+    backgroundColor: "#e8f4ff",
+    borderColor: "#007AFF",
+  },
+  reorderButtonText: {
+    fontSize: 14,
+    color: "#666",
+    fontWeight: "500",
+  },
+  reorderButtonTextActive: {
+    color: "#007AFF",
+  },
   addSegmentButton: {
+    flex: 1,
     backgroundColor: "#f0f8ff",
     borderRadius: 10,
     padding: 14,
     alignItems: "center",
-    marginBottom: 16,
     borderWidth: 1,
     borderColor: "#007AFF",
     borderStyle: "dashed",
