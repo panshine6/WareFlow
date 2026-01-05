@@ -1,14 +1,18 @@
 /**
  * AI 视觉识别服务（后端）
- * 使用 OpenAI Vision API 进行图像识别
- * 优化版：使用 GPT-4o + 分区域计数法
+ * 使用 Claude API 进行图像识别
+ * 优化版：使用 Claude Sonnet 4 + 分区域计数法
  */
 
+// Claude API 配置
+const CLAUDE_API_KEY = process.env.CLAUDE_API_KEY;
+const CLAUDE_API_URL = "https://api.anthropic.com/v1/messages";
+const CLAUDE_MODEL = "claude-sonnet-4-20250514";
+
+// 备用 OpenAI 配置（如果 Claude 不可用）
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const OPENAI_BASE_URL = process.env.OPENAI_BASE_URL || "https://api.openai.com/v1";
-
-// 使用 GPT-4o 模型（更强的视觉理解能力）
-const VISION_MODEL = "gpt-4o";
+const OPENAI_MODEL = "gpt-4o";
 
 // 速率限制配置
 const RATE_LIMIT_DELAY = 500;
@@ -35,7 +39,8 @@ async function callWithRetry<T>(
       return await fn();
     } catch (error: any) {
       const isRateLimit = error?.message?.includes('Too Many Requests') || 
-                          error?.message?.includes('rate_limit');
+                          error?.message?.includes('rate_limit') ||
+                          error?.message?.includes('overloaded');
       
       if (isRateLimit && i < retries - 1) {
         const waitTime = RETRY_DELAY * (i + 1);
@@ -50,32 +55,130 @@ async function callWithRetry<T>(
 }
 
 /**
- * 识别图片中的饰品数量（优化版：分区域计数法）
+ * 使用 Claude API 进行图像识别
  */
-export async function countProductsInImage(imageBase64: string): Promise<number> {
-  if (!OPENAI_API_KEY) {
-    throw new Error("未配置 OpenAI API 密钥");
+async function callClaudeVision(
+  imageBase64: string,
+  prompt: string,
+  maxTokens: number = 500
+): Promise<string> {
+  if (!CLAUDE_API_KEY) {
+    throw new Error("未配置 Claude API 密钥");
   }
 
-  console.log("[AI Vision] countProductsInImage called with model:", VISION_MODEL);
+  const response = await fetch(CLAUDE_API_URL, {
+    method: "POST",
+    headers: {
+      "x-api-key": CLAUDE_API_KEY,
+      "anthropic-version": "2023-06-01",
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      model: CLAUDE_MODEL,
+      max_tokens: maxTokens,
+      messages: [
+        {
+          role: "user",
+          content: [
+            {
+              type: "image",
+              source: {
+                type: "base64",
+                media_type: "image/jpeg",
+                data: imageBase64,
+              },
+            },
+            {
+              type: "text",
+              text: prompt,
+            },
+          ],
+        },
+      ],
+    }),
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json();
+    console.error("Claude API error:", errorData);
+    throw new Error(`Claude API request failed: ${response.statusText}`);
+  }
+
+  const data = await response.json();
+  return data.content[0]?.text || "";
+}
+
+/**
+ * 使用 Claude API 对比两张图片
+ */
+async function callClaudeVisionCompare(
+  imageBase64_1: string,
+  imageBase64_2: string,
+  prompt: string,
+  maxTokens: number = 300
+): Promise<string> {
+  if (!CLAUDE_API_KEY) {
+    throw new Error("未配置 Claude API 密钥");
+  }
+
+  const response = await fetch(CLAUDE_API_URL, {
+    method: "POST",
+    headers: {
+      "x-api-key": CLAUDE_API_KEY,
+      "anthropic-version": "2023-06-01",
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      model: CLAUDE_MODEL,
+      max_tokens: maxTokens,
+      messages: [
+        {
+          role: "user",
+          content: [
+            {
+              type: "image",
+              source: {
+                type: "base64",
+                media_type: "image/jpeg",
+                data: imageBase64_1,
+              },
+            },
+            {
+              type: "image",
+              source: {
+                type: "base64",
+                media_type: "image/jpeg",
+                data: imageBase64_2,
+              },
+            },
+            {
+              type: "text",
+              text: prompt,
+            },
+          ],
+        },
+      ],
+    }),
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json();
+    console.error("Claude API error:", errorData);
+    throw new Error(`Claude API request failed: ${response.statusText}`);
+  }
+
+  const data = await response.json();
+  return data.content[0]?.text || "";
+}
+
+/**
+ * 识别图片中的饰品数量（使用 Claude + 分区域计数法）
+ */
+export async function countProductsInImage(imageBase64: string): Promise<number> {
+  console.log("[AI Vision] countProductsInImage called with Claude model:", CLAUDE_MODEL);
   console.log("[AI Vision] Image base64 length:", imageBase64?.length || 0);
 
-  return callWithRetry(async () => {
-    const response = await fetch(`${OPENAI_BASE_URL}/chat/completions`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${OPENAI_API_KEY}`,
-      },
-      body: JSON.stringify({
-        model: VISION_MODEL,
-        messages: [
-          {
-            role: "user",
-            content: [
-              {
-                type: "text",
-                text: `You are an expert inventory counter. Count the jewelry product packages in this image.
+  const prompt = `You are an expert inventory counter. Count the jewelry product packages in this image.
 
 Each package is a clear plastic bag containing a white/cream display card with jewelry attached.
 
@@ -93,6 +196,7 @@ Each package is a clear plastic bag containing a white/cream display card with j
 - Ignore reflections, shadows, and price tags
 - If a package spans two sections, count it in the section where its CENTER is located
 - Only count clearly visible, complete packages
+- When uncertain, do NOT count (prefer undercounting over overcounting)
 
 **RESPONSE FORMAT:**
 First, list the count per grid section:
@@ -100,37 +204,11 @@ Top-Left: X, Top-Center: X, Top-Right: X
 Mid-Left: X, Mid-Center: X, Mid-Right: X
 Bot-Left: X, Bot-Center: X, Bot-Right: X
 
-Then provide the final total as a single number on the last line.
+Then provide the final total as a single number on the last line.`;
 
-Example response:
-Top-Left: 2, Top-Center: 1, Top-Right: 2
-Mid-Left: 1, Mid-Center: 0, Mid-Right: 1
-Bot-Left: 2, Bot-Center: 1, Bot-Right: 1
-11`,
-              },
-              {
-                type: "image_url",
-                image_url: {
-                  url: `data:image/jpeg;base64,${imageBase64}`,
-                  detail: "high",
-                },
-              },
-            ],
-          },
-        ],
-        max_tokens: 300,
-      }),
-    });
-
-    if (!response.ok) {
-      const errorData = await response.json();
-      console.error("OpenAI API error:", errorData);
-      throw new Error(`API request failed: ${response.statusText}`);
-    }
-
-    const data = await response.json();
-    const content = data.choices[0]?.message?.content || "0";
-    console.log("[AI Vision] OpenAI response content:", content);
+  return callWithRetry(async () => {
+    const content = await callClaudeVision(imageBase64, prompt, 500);
+    console.log("[AI Vision] Claude response content:", content);
     
     // 提取最后一行的数字作为总数
     const lines = content.trim().split('\n');
@@ -144,32 +222,13 @@ Bot-Left: 2, Bot-Center: 1, Bot-Right: 1
 }
 
 /**
- * 对比两张图片的相似度（优化版：使用 GPT-4o）
+ * 对比两张图片的相似度（使用 Claude）
  */
 export async function compareImageSimilarity(
   imageBase64_1: string,
   imageBase64_2: string
 ): Promise<{ similarityScore: number; analysisNote: string }> {
-  if (!OPENAI_API_KEY) {
-    throw new Error("未配置 OpenAI API 密钥");
-  }
-
-  return callWithRetry(async () => {
-    const response = await fetch(`${OPENAI_BASE_URL}/chat/completions`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${OPENAI_API_KEY}`,
-      },
-      body: JSON.stringify({
-        model: VISION_MODEL,
-        messages: [
-          {
-            role: "user",
-            content: [
-              {
-                type: "text",
-                text: `You are a jewelry product expert. Compare these two product images and determine if they are the SAME product design.
+  const prompt = `You are a jewelry product expert. Compare these two product images and determine if they are the SAME product design.
 
 **COMPARISON CRITERIA:**
 1. Overall shape and silhouette
@@ -189,75 +248,30 @@ export async function compareImageSimilarity(
 - Same design with different photo angles should score 90+
 - Same design in different colors should score 85+
 
-Return JSON format only:
-{
-  "similarityScore": <number 0-100>,
-  "analysisNote": "<brief comparison in Chinese, max 30 chars>"
-}`,
-              },
-              {
-                type: "image_url",
-                image_url: {
-                  url: `data:image/jpeg;base64,${imageBase64_1}`,
-                  detail: "high",
-                },
-              },
-              {
-                type: "image_url",
-                image_url: {
-                  url: `data:image/jpeg;base64,${imageBase64_2}`,
-                  detail: "high",
-                },
-              },
-            ],
-          },
-        ],
-        max_tokens: 150,
-        response_format: { type: "json_object" },
-      }),
-    });
+Return your response in this exact format:
+SCORE: [number 0-100]
+NOTE: [brief comparison in Chinese, max 30 chars]`;
 
-    if (!response.ok) {
-      const errorData = await response.json();
-      console.error("OpenAI API error:", errorData);
-      throw new Error(`API request failed: ${response.statusText}`);
-    }
-
-    const data = await response.json();
-    const content = data.choices[0]?.message?.content || "{}";
-    const result = JSON.parse(content);
-
+  return callWithRetry(async () => {
+    const content = await callClaudeVisionCompare(imageBase64_1, imageBase64_2, prompt, 200);
+    console.log("[AI Vision] Claude compare response:", content);
+    
+    // 解析响应
+    const scoreMatch = content.match(/SCORE:\s*(\d+)/i);
+    const noteMatch = content.match(/NOTE:\s*(.+)/i);
+    
     return {
-      similarityScore: result.similarityScore || 0,
-      analysisNote: result.analysisNote || "无法分析",
+      similarityScore: scoreMatch ? parseInt(scoreMatch[1], 10) : 0,
+      analysisNote: noteMatch ? noteMatch[1].trim().substring(0, 30) : "无法分析",
     };
   });
 }
 
 /**
- * 从图片中识别条形码
+ * 从图片中识别条形码（使用 Claude）
  */
 export async function scanBarcodeFromImage(imageBase64: string): Promise<{ barcodeValue: string | null; confidence: number }> {
-  if (!OPENAI_API_KEY) {
-    throw new Error("未配置 OpenAI API 密钥");
-  }
-
-  return callWithRetry(async () => {
-    const response = await fetch(`${OPENAI_BASE_URL}/chat/completions`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${OPENAI_API_KEY}`,
-      },
-      body: JSON.stringify({
-        model: VISION_MODEL,
-        messages: [
-          {
-            role: "user",
-            content: [
-              {
-                type: "text",
-                text: `请仔细观察这张图片，识别其中的条形码或二维码。
+  const prompt = `请仔细观察这张图片，识别其中的条形码或二维码。
 
 识别要点：
 1. 查找图片中的条形码（Code 128 格式）或二维码
@@ -267,59 +281,43 @@ export async function scanBarcodeFromImage(imageBase64: string): Promise<{ barco
    - 用户 SKU：如 LB-ER-ME-0006
    - Box ID：如 LB-RF-GM-Box-1
 
-请返回 JSON 格式的结果：
-{
-  "barcodeValue": "识别到的条形码内容，如果未识别到则为 null",
-  "confidence": 0-100 的整数，表示识别置信度
-}
+请返回以下格式：
+BARCODE: [识别到的条形码内容，如果未识别到则写 null]
+CONFIDENCE: [0-100 的整数，表示识别置信度]
 
 注意：
 - 优先读取条形码下方的文字
-- 如果图片中没有条形码，返回 barcodeValue 为 null`,
-              },
-              {
-                type: "image_url",
-                image_url: {
-                  url: `data:image/jpeg;base64,${imageBase64}`,
-                  detail: "high",
-                },
-              },
-            ],
-          },
-        ],
-        max_tokens: 100,
-        response_format: { type: "json_object" },
-      }),
-    });
+- 如果图片中没有条形码，返回 BARCODE: null`;
 
-    if (!response.ok) {
-      const errorData = await response.json();
-      console.error("OpenAI API error:", errorData);
-      throw new Error(`API request failed: ${response.statusText}`);
+  return callWithRetry(async () => {
+    const content = await callClaudeVision(imageBase64, prompt, 150);
+    console.log("[AI Vision] Claude barcode response:", content);
+    
+    // 解析响应
+    const barcodeMatch = content.match(/BARCODE:\s*(.+)/i);
+    const confidenceMatch = content.match(/CONFIDENCE:\s*(\d+)/i);
+    
+    let barcodeValue = barcodeMatch ? barcodeMatch[1].trim() : null;
+    if (barcodeValue === 'null' || barcodeValue === 'NULL') {
+      barcodeValue = null;
     }
-
-    const data = await response.json();
-    const content = data.choices[0]?.message?.content || "{}";
-    const result = JSON.parse(content);
-
-    console.log("[AI Vision] Barcode scan result:", result);
-
+    
     return {
-      barcodeValue: result.barcodeValue || null,
-      confidence: result.confidence || 0,
+      barcodeValue: barcodeValue,
+      confidence: confidenceMatch ? parseInt(confidenceMatch[1], 10) : 0,
     };
   });
 }
 
 /**
- * 批量对比图片相似度（优化版：使用 GPT-4o + 并行处理）
+ * 批量对比图片相似度（使用 Claude + 并行处理）
  */
 export async function batchCompareImages(
   newImageBase64: string,
   existingImages: Array<{ id: string; base64: string }>,
   threshold: number = 70
 ): Promise<Array<{ id: string; similarityScore: number; analysisNote: string }>> {
-  console.log(`[AI Vision] Starting batch compare with ${existingImages.length} images, threshold: ${threshold}, model: ${VISION_MODEL}`);
+  console.log(`[AI Vision] Starting batch compare with ${existingImages.length} images, threshold: ${threshold}, model: ${CLAUDE_MODEL}`);
   
   const imagesToCompare = existingImages;
   console.log(`[AI Vision] Will compare ${imagesToCompare.length} images`);
