@@ -149,12 +149,56 @@ export const SkuGenerator = {
   
   /**
    * 获取所有段定义
+   * 自动迁移旧数据：添加流水号段和空值选项
    */
   async getSegments(): Promise<SkuSegment[]> {
     try {
       const data = await AsyncStorage.getItem(SKU_SEGMENTS_KEY);
       if (data) {
-        return JSON.parse(data);
+        let segments: SkuSegment[] = JSON.parse(data);
+        let needsSave = false;
+        
+        // 迁移1: 检查是否有流水号段，没有则添加
+        const hasSerialSegment = segments.some(s => s.isSerialNumber);
+        if (!hasSerialSegment) {
+          const maxOrder = Math.max(...segments.map(s => s.order), 0);
+          segments.push({
+            id: "serial",
+            name: "流水号",
+            codeLength: 4,
+            isRequired: true,
+            order: maxOrder + 1,
+            isSerialNumber: true,
+            options: [],
+          });
+          needsSave = true;
+        }
+        
+        // 迁移2: 为每个非流水号段添加空值选项（如果没有）
+        segments = segments.map(seg => {
+          if (seg.isSerialNumber) return seg;
+          
+          const hasEmptyOption = seg.options.some(o => o.code === '');
+          if (!hasEmptyOption) {
+            needsSave = true;
+            return {
+              ...seg,
+              isRequired: false, // 改为非必填
+              options: [
+                { code: '', nameEn: 'None', nameCn: '不选择' },
+                ...seg.options,
+              ],
+            };
+          }
+          return seg;
+        });
+        
+        // 如果有迁移，保存更新后的数据
+        if (needsSave) {
+          await this.saveSegments(segments);
+        }
+        
+        return segments;
       }
       // 首次使用，返回默认段并保存
       await this.saveSegments(DEFAULT_SEGMENTS);
