@@ -113,7 +113,7 @@ export const BoxGenerator = {
   async previewBoxCode(brandCode: string, categoryCode: string): Promise<string> {
     const nextSeq = await this.getNextSequence();
     const paddedSeq = nextSeq.toString().padStart(4, "0");
-    return `${brandCode}-${categoryCode}-${paddedSeq}`;
+    return `${brandCode}-${categoryCode}-Box-${paddedSeq}`;
   },
 
   /**
@@ -126,7 +126,7 @@ export const BoxGenerator = {
   ): Promise<BoxRecord> {
     const nextSeq = await this.getNextSequence();
     const paddedSeq = nextSeq.toString().padStart(4, "0");
-    const code = `${brandCode}-${categoryCode}-${paddedSeq}`;
+    const code = `${brandCode}-${categoryCode}-Box-${paddedSeq}`;
 
     const newBox: BoxRecord = {
       id: `box_${Date.now()}`,

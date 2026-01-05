@@ -298,7 +298,7 @@ export default function BoxManagerModal({
       <View style={[styles.formatInfo, isDark && styles.formatInfoDark]}>
         <Text style={[styles.formatTitle, isDark && styles.textDark]}>Box 格式说明</Text>
         <Text style={[styles.formatText, isDark && styles.textMuted]}>
-          品牌代码(2位)-大类代码(2位)-流水号(4位)
+          品牌代码(2位)-大类代码(2位)-Box-流水号(4位)
         </Text>
         <Text style={[styles.formatHint, isDark && styles.textMuted]}>
           流水号全局统一递增
