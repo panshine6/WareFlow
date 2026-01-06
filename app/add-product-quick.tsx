@@ -30,6 +30,7 @@ import { countProductsInImage, CountResult } from "@/lib/ai-vision";
 import { scanBarcodeFromImage, detectBarcodeType, lookupProductByBarcode } from "@/lib/barcode-scanner";
 import SkuGeneratorModal from "@/components/SkuGeneratorModal";
 import BoxManagerModal from "@/components/BoxManagerModal";
+import ColorPickerModal from "@/components/ColorPickerModal";
 import { compressImage, base64ToDataUrl } from "@/lib/image-utils";
 import type { Product, InventoryHistoryEntry } from "@/types/product";
 import { getAllBoxes, createBox, deleteBox } from "@/lib/box-storage";
@@ -127,6 +128,10 @@ export default function AddProductQuickScreen() {
   } | null>(null);
   const [userSimilarityScore, setUserSimilarityScore] = useState(50);
   const [userJudgment, setUserJudgment] = useState<'same' | 'similar' | 'different'>('different');
+
+  // 同款不同色颜色选择器状态
+  const [showColorPicker, setShowColorPicker] = useState(false);
+  const [colorPickerTargetProduct, setColorPickerTargetProduct] = useState<Product | null>(null);
 
   // 加载默认设置
   useEffect(() => {
@@ -387,6 +392,28 @@ export default function AddProductQuickScreen() {
   // 取消合并选择
   const handleCancelMerge = () => {
     setSelectedSimilarProduct(null);
+  };
+
+  // 同款不同色 - 打开颜色选择器
+  const handleSameStyleDifferentColor = (product: Product) => {
+    console.log('[QuickAdd] Same style different color for product:', product.sku);
+    setColorPickerTargetProduct(product);
+    setShowColorPicker(true);
+  };
+
+  // 同款不同色 - 颜色选择完成
+  const handleColorSelected = (newSku: string, colorCode: string, colorName: string) => {
+    console.log('[QuickAdd] Color selected:', { newSku, colorCode, colorName });
+    // 设置新的 SKU
+    setSku(newSku);
+    // 关闭颜色选择器
+    setShowColorPicker(false);
+    setColorPickerTargetProduct(null);
+    // 关闭查重弹窗，回到信息确认页面
+    setShowDuplicateModal(false);
+    setSelectedSimilarProduct(null);
+    // 不设置 mergeToProductId，因为这是新产品
+    setMergeToProductId(null);
   };
 
   // 点击数量字段 - 显示 AI 计数结果
@@ -1054,7 +1081,7 @@ export default function AddProductQuickScreen() {
                       </View>
                       <ThemedText style={styles.matchArrow}>›</ThemedText>
                     </Pressable>
-                    {/* 如果该产品被选中，显示合并按钮 */}
+                    {/* 如果该产品被选中，显示操作按钮 */}
                     {selectedSimilarProduct?.id === dup.product.id && (
                       <View style={styles.mergeButtonsContainer}>
                         <Pressable
@@ -1064,10 +1091,16 @@ export default function AddProductQuickScreen() {
                           <ThemedText style={styles.cancelMergeButtonText}>取消</ThemedText>
                         </Pressable>
                         <Pressable
+                          style={styles.sameStyleButton}
+                          onPress={() => handleSameStyleDifferentColor(dup.product)}
+                        >
+                          <ThemedText style={styles.sameStyleButtonText}>同款不同色</ThemedText>
+                        </Pressable>
+                        <Pressable
                           style={styles.confirmMergeButton}
                           onPress={handleConfirmMerge}
                         >
-                          <ThemedText style={styles.confirmMergeButtonText}>合并到此款式</ThemedText>
+                          <ThemedText style={styles.confirmMergeButtonText}>合并到此款</ThemedText>
                         </Pressable>
                       </View>
                     )}
@@ -1379,6 +1412,17 @@ export default function AddProductQuickScreen() {
           setSku(generatedSku);
           setShowSkuGenerator(false);
         }}
+      />
+
+      {/* 同款不同色颜色选择器 */}
+      <ColorPickerModal
+        visible={showColorPicker}
+        onClose={() => {
+          setShowColorPicker(false);
+          setColorPickerTargetProduct(null);
+        }}
+        onSelect={handleColorSelected}
+        currentSku={colorPickerTargetProduct?.sku || ''}
       />
 
       {/* 条形码扫描结果弹窗 */}
@@ -2035,8 +2079,21 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: "#666",
   },
+  sameStyleButton: {
+    flex: 1.5,
+    height: 40,
+    borderRadius: 8,
+    backgroundColor: "#FF9500",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  sameStyleButtonText: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#fff",
+  },
   confirmMergeButton: {
-    flex: 2,
+    flex: 1.5,
     height: 40,
     borderRadius: 8,
     backgroundColor: "#34C759",
@@ -2044,7 +2101,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   confirmMergeButtonText: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: "600",
     color: "#fff",
   },
