@@ -389,23 +389,89 @@ export default function AddProductQuickScreen() {
   };
 
   // 选择新建 SKU（确认弹窗中输入的 SKU）
-  const handleNewSku = () => {
+  const handleNewSku = async () => {
+    // 保存查重学习数据：用户选择新建，说明认为所有 AI 结果都是“不同”
+    if (duplicateResult?.duplicates && duplicateResult.duplicates.length > 0) {
+      try {
+        const newImageBase64 = detailImageBase64 || (detailImageUri.startsWith('data:') 
+          ? detailImageUri.split(',')[1] 
+          : await imageToBase64(detailImageUri));
+        
+        // 为每个 AI 结果保存学习数据
+        for (const dup of duplicateResult.duplicates) {
+          const existingImageBase64 = dup.product.detailImageUri.startsWith('data:')
+            ? dup.product.detailImageUri.split(',')[1]
+            : await imageToBase64(dup.product.detailImageUri);
+          
+          await saveSimilarityLearningRecord({
+            newImageBase64,
+            existingImageBase64,
+            existingProductSku: dup.product.sku,
+            aiSimilarityScore: dup.similarityScore,
+            aiScores: dup.scores || [dup.similarityScore],
+            aiConfidence: dup.confidence || 'medium',
+            aiAnalysisNote: dup.analysisNote || '',
+            userSimilarityScore: 0, // 用户认为不相似
+            userJudgment: 'different',
+          });
+        }
+        console.log('[QuickAdd] Saved similarity learning data for new SKU:', duplicateResult.duplicates.length, 'records');
+      } catch (error) {
+        console.error('[QuickAdd] Failed to save similarity learning data:', error);
+      }
+    }
+    
     // 不清空 SKU，保留用户在弹窗中输入的值
     setMergeToProductId(null);
     setShowDuplicateModal(false);
   };
 
-  // 查看相似产品详情（跳转到详情页）
+  // 选择相似产品（只选中，不跳转）
   const handleViewSimilarProduct = (product: Product) => {
-    // 设置选中的产品，用于返回后显示合并按钮
-    setSelectedSimilarProduct(product);
-    // 跳转到产品详情页
+    // 如果已经选中同一个产品，则取消选择
+    if (selectedSimilarProduct?.id === product.id) {
+      setSelectedSimilarProduct(null);
+    } else {
+      setSelectedSimilarProduct(product);
+    }
+  };
+
+  // 跳转到产品详情页
+  const handleGoToProductDetail = (product: Product) => {
     router.push({ pathname: "/product-detail" as any, params: { id: product.id } });
   };
 
   // 确认合并到选中的产品
-  const handleConfirmMerge = () => {
+  const handleConfirmMerge = async () => {
     if (selectedSimilarProduct) {
+      // 保存查重学习数据：用户选择合并，说明认为是“相同”产品
+      try {
+        const newImageBase64 = detailImageBase64 || (detailImageUri.startsWith('data:') 
+          ? detailImageUri.split(',')[1] 
+          : await imageToBase64(detailImageUri));
+        const existingImageBase64 = selectedSimilarProduct.detailImageUri.startsWith('data:')
+          ? selectedSimilarProduct.detailImageUri.split(',')[1]
+          : await imageToBase64(selectedSimilarProduct.detailImageUri);
+        
+        // 查找该产品在 AI 结果中的相似度
+        const aiResult = duplicateResult?.duplicates?.find(d => d.product.id === selectedSimilarProduct.id);
+        
+        await saveSimilarityLearningRecord({
+          newImageBase64,
+          existingImageBase64,
+          existingProductSku: selectedSimilarProduct.sku,
+          aiSimilarityScore: aiResult?.similarityScore || 0,
+          aiScores: aiResult?.scores || [aiResult?.similarityScore || 0],
+          aiConfidence: aiResult?.confidence || 'medium',
+          aiAnalysisNote: aiResult?.analysisNote || '手动选择',
+          userSimilarityScore: 100, // 用户认为完全相同
+          userJudgment: 'same',
+        });
+        console.log('[QuickAdd] Saved similarity learning data for merge:', selectedSimilarProduct.sku);
+      } catch (error) {
+        console.error('[QuickAdd] Failed to save similarity learning data:', error);
+      }
+      
       setMergeToProductId(selectedSimilarProduct.id);
       setSku(selectedSimilarProduct.sku);
       setSelectedSimilarProduct(null);
@@ -448,8 +514,39 @@ export default function AddProductQuickScreen() {
   };
 
   // 同款不同色 - 颜色选择完成
-  const handleColorSelected = (newSku: string, colorCode: string, colorName: string) => {
+  const handleColorSelected = async (newSku: string, colorCode: string, colorName: string) => {
     console.log('[QuickAdd] Color selected:', { newSku, colorCode, colorName });
+    
+    // 保存查重学习数据：用户选择同款不同色，说明认为是“相似”产品
+    if (colorPickerTargetProduct) {
+      try {
+        const newImageBase64 = detailImageBase64 || (detailImageUri.startsWith('data:') 
+          ? detailImageUri.split(',')[1] 
+          : await imageToBase64(detailImageUri));
+        const existingImageBase64 = colorPickerTargetProduct.detailImageUri.startsWith('data:')
+          ? colorPickerTargetProduct.detailImageUri.split(',')[1]
+          : await imageToBase64(colorPickerTargetProduct.detailImageUri);
+        
+        // 查找该产品在 AI 结果中的相似度
+        const aiResult = duplicateResult?.duplicates?.find(d => d.product.id === colorPickerTargetProduct.id);
+        
+        await saveSimilarityLearningRecord({
+          newImageBase64,
+          existingImageBase64,
+          existingProductSku: colorPickerTargetProduct.sku,
+          aiSimilarityScore: aiResult?.similarityScore || 0,
+          aiScores: aiResult?.scores || [aiResult?.similarityScore || 0],
+          aiConfidence: aiResult?.confidence || 'medium',
+          aiAnalysisNote: aiResult?.analysisNote || '手动选择',
+          userSimilarityScore: 85, // 用户认为相似（同款不同色）
+          userJudgment: 'similar',
+        });
+        console.log('[QuickAdd] Saved similarity learning data for same style different color:', colorPickerTargetProduct.sku);
+      } catch (error) {
+        console.error('[QuickAdd] Failed to save similarity learning data:', error);
+      }
+    }
+    
     // 设置新的 SKU
     setSku(newSku);
     // 关闭颜色选择器
@@ -1172,13 +1269,21 @@ export default function AddProductQuickScreen() {
             {selectedSimilarProduct && (
               <View style={styles.selectedProductActions}>
                 <View style={styles.selectedProductInfo}>
-                  <Image
-                    source={{ uri: selectedSimilarProduct.detailImageUri }}
-                    style={styles.selectedProductImage}
-                  />
+                  <Pressable onPress={() => handleGoToProductDetail(selectedSimilarProduct)}>
+                    <Image
+                      source={{ uri: selectedSimilarProduct.detailImageUri }}
+                      style={styles.selectedProductImage}
+                    />
+                  </Pressable>
                   <View style={styles.selectedProductText}>
                     <ThemedText style={styles.selectedProductSku}>已选择: {selectedSimilarProduct.sku}</ThemedText>
                     <ThemedText style={styles.selectedProductQuantity}>库存: {selectedSimilarProduct.quantity}</ThemedText>
+                    <Pressable 
+                      style={styles.viewDetailLink}
+                      onPress={() => handleGoToProductDetail(selectedSimilarProduct)}
+                    >
+                      <ThemedText style={styles.viewDetailLinkText}>查看详情 ›</ThemedText>
+                    </Pressable>
                   </View>
                 </View>
                 <View style={styles.mergeButtonsContainer}>
@@ -2256,6 +2361,13 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: "#666",
     marginTop: 2,
+  },
+  viewDetailLink: {
+    marginTop: 4,
+  },
+  viewDetailLinkText: {
+    fontSize: 13,
+    color: "#007AFF",
   },
   skuInputContainer: {
     marginBottom: 16,
