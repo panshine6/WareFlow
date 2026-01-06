@@ -113,6 +113,9 @@ export default function AddProductQuickScreen() {
   const [newBoxName, setNewBoxName] = useState("");
   const [showBoxManager, setShowBoxManager] = useState(false);
 
+  // AI学习数据保存状态
+  const [aiLearningSaved, setAiLearningSaved] = useState(false);
+
   // 查重反馈相关状态
   const [showFeedbackModal, setShowFeedbackModal] = useState(false);
   const [feedbackDuplicate, setFeedbackDuplicate] = useState<{
@@ -396,8 +399,8 @@ export default function AddProductQuickScreen() {
     setQuantity(count);
     setShowCountModal(false);
     
-    // 保存AI学习数据（如果有全景图和AI计数结果）
-    if (overviewImageBase64 && aiCount > 0) {
+    // 保存AI学习数据（如果有全景图和AI计数结果，且尚未保存）
+    if (overviewImageBase64 && aiCount > 0 && !aiLearningSaved) {
       try {
         await saveLearningRecord({
           imageBase64: overviewImageBase64,
@@ -406,7 +409,8 @@ export default function AddProductQuickScreen() {
           aiConfidence: aiCountResult?.confidence,
           userCount: count,
         });
-        console.log('[QuickAdd] AI learning data saved:', { aiCount, userCount: count });
+        setAiLearningSaved(true);  // 标记已保存
+        console.log('[QuickAdd] AI learning data saved on count confirm:', { aiCount, userCount: count });
       } catch (error) {
         console.error('[QuickAdd] Failed to save AI learning data:', error);
         // 不影响主流程，静默失败
@@ -601,6 +605,24 @@ export default function AddProductQuickScreen() {
         } catch (error) {
           console.error("[QuickAdd] Failed to generate barcode:", error);
           alert("条形码生成失败，但产品已保存");
+        }
+      }
+
+      // 保存AI学习数据（如果有全景图和AI计数结果，且尚未保存）
+      if (overviewImageBase64 && aiCount > 0 && !aiLearningSaved) {
+        try {
+          await saveLearningRecord({
+            imageBase64: overviewImageBase64,
+            aiCount: aiCount,
+            aiCounts: aiCountResult?.counts,
+            aiConfidence: aiCountResult?.confidence,
+            userCount: quantity,
+          });
+          setAiLearningSaved(true);  // 标记已保存
+          console.log('[QuickAdd] AI learning data saved on product save:', { aiCount, userCount: quantity });
+        } catch (error) {
+          console.error('[QuickAdd] Failed to save AI learning data:', error);
+          // 不影响主流程，静默失败
         }
       }
 
