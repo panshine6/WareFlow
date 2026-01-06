@@ -271,36 +271,26 @@ NOTE: [中文简要说明，包含判断理由，最多40字]`;
 
 /**
  * 对比两张图片的相似度（使用 GPT-4o）
- * 优化版：3次查重取平均值，提高准确性
+ * 优化版：单次查重，提高速度
  */
 export async function compareImageSimilarity(
   imageBase64_1: string,
   imageBase64_2: string
 ): Promise<{ similarityScore: number; analysisNote: string; scores: number[]; confidence: 'high' | 'medium' | 'low' }> {
-  console.log("[AI Vision] Starting 3-round similarity comparison with GPT-4o...");
+  console.log("[AI Vision] Starting single-round similarity comparison with GPT-4o...");
   
-  const results: { similarityScore: number; analysisNote: string }[] = [];
-  
-  // 进行3次查重
-  for (let i = 0; i < 3; i++) {
-    try {
-      console.log(`[AI Vision] Round ${i + 1}/3...`);
-      const result = await compareImageSimilaritySingle(imageBase64_1, imageBase64_2);
-      results.push(result);
-      console.log(`[AI Vision] Round ${i + 1} score: ${result.similarityScore}`);
-      
-      // 每次查重之间稍微延迟，避免速率限制
-      if (i < 2) {
-        await delay(300);
-      }
-    } catch (error) {
-      console.error(`[AI Vision] Round ${i + 1} failed:`, error);
-      // 如果失败，继续尝试
-    }
-  }
-  
-  // 如果没有成功的结果，返回默认值
-  if (results.length === 0) {
+  try {
+    const result = await compareImageSimilaritySingle(imageBase64_1, imageBase64_2);
+    console.log(`[AI Vision] Comparison score: ${result.similarityScore}`);
+    
+    return {
+      similarityScore: result.similarityScore,
+      analysisNote: result.analysisNote,
+      scores: [result.similarityScore],
+      confidence: 'medium',  // 单次查重默认中等置信度
+    };
+  } catch (error) {
+    console.error("[AI Vision] Comparison failed:", error);
     return {
       similarityScore: 0,
       analysisNote: "查重失败",
@@ -308,36 +298,6 @@ export async function compareImageSimilarity(
       confidence: 'low',
     };
   }
-  
-  // 计算平均值
-  const scores = results.map(r => r.similarityScore);
-  const avgScore = Math.round(scores.reduce((a, b) => a + b, 0) / scores.length);
-  
-  // 计算标准差来判断置信度
-  const variance = scores.reduce((sum, score) => sum + Math.pow(score - avgScore, 2), 0) / scores.length;
-  const stdDev = Math.sqrt(variance);
-  
-  // 置信度判断：标准差越小，置信度越高
-  let confidence: 'high' | 'medium' | 'low';
-  if (stdDev <= 5) {
-    confidence = 'high';  // 3次结果很接近
-  } else if (stdDev <= 10) {
-    confidence = 'medium';  // 3次结果有一定差异
-  } else {
-    confidence = 'low';  // 3次结果差异较大
-  }
-  
-  // 使用最后一次的分析说明（或者可以选择中间值对应的说明）
-  const lastNote = results[results.length - 1]?.analysisNote || "无法分析";
-  
-  console.log(`[AI Vision] 3-round comparison complete: scores=${scores.join(',')}, avg=${avgScore}, stdDev=${stdDev.toFixed(1)}, confidence=${confidence}`);
-  
-  return {
-    similarityScore: avgScore,
-    analysisNote: lastNote,
-    scores,
-    confidence,
-  };
 }
 
 /**
