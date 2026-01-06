@@ -540,12 +540,62 @@ export default function SkuGeneratorModal({
   };
 
   // 渲染生成器视图
-  const renderGeneratorView = () => (
+  // 生成“当前正在用”的SKU（流水号减1）
+  const getCurrentUsingSku = () => {
+    if (!previewSku || nextNumber <= 1) return null;
+    // 找到流水号部分并减1
+    const currentNumber = nextNumber - 1;
+    const paddedCurrentNumber = currentNumber.toString().padStart(4, "0");
+    const paddedNextNumber = nextNumber.toString().padStart(4, "0");
+    // 替换预览SKU中的流水号
+    return previewSku.replace(paddedNextNumber, paddedCurrentNumber);
+  };
+
+  // 复制到剪贴板
+  const copyToClipboard = async (text: string) => {
+    if (Platform.OS === 'web') {
+      try {
+        await navigator.clipboard?.writeText(text);
+        window.alert(`已复制: ${text}`);
+      } catch (e) {
+        console.error('Failed to copy:', e);
+      }
+    } else {
+      // React Native 环境
+      Alert.alert("已复制", text);
+    }
+  };
+
+  const renderGeneratorView = () => {
+    const currentUsingSku = getCurrentUsingSku();
+    
+    return (
     <>
       {/* SKU 预览 */}
       <View style={[styles.previewContainer, isDark && styles.previewContainerDark]}>
+        {/* 当前正在用的 SKU */}
+        {currentUsingSku && (
+          <View style={styles.currentUsingContainer}>
+            <Text style={[styles.currentUsingLabel, isDark && styles.textMuted]}>
+              当前正在用:
+            </Text>
+            <View style={styles.currentUsingRow}>
+              <Text style={[styles.currentUsingSku, isDark && styles.textDark]}>
+                {currentUsingSku}
+              </Text>
+              <TouchableOpacity
+                style={styles.copyButton}
+                onPress={() => copyToClipboard(currentUsingSku)}
+              >
+                <Text style={styles.copyButtonText}>📋 复制</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
+        
+        {/* 即将生成的 SKU */}
         <Text style={[styles.previewLabel, isDark && styles.textDark]}>
-          生成的 SKU:
+          {currentUsingSku ? "即将生成:" : "生成的 SKU:"}
         </Text>
         <Text style={[styles.previewSku, isDark && styles.textDark]}>
           {previewSku || "请选择所有选项"}
@@ -608,7 +658,8 @@ export default function SkuGeneratorModal({
         </Text>
       </View>
     </>
-  );
+    );
+  };
 
   // 渲染历史记录视图
   const renderHistoryView = () => (
@@ -1117,6 +1168,42 @@ const styles = StyleSheet.create({
   },
   previewContainerDark: {
     backgroundColor: "#2c2c2e",
+  },
+  // 当前正在用的 SKU 样式
+  currentUsingContainer: {
+    width: "100%",
+    marginBottom: 12,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: "#ddd",
+    alignItems: "center",
+  },
+  currentUsingLabel: {
+    fontSize: 12,
+    color: "#888",
+    marginBottom: 4,
+  },
+  currentUsingRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  currentUsingSku: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#666",
+    fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace",
+  },
+  copyButton: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    backgroundColor: "#007AFF",
+    borderRadius: 4,
+  },
+  copyButtonText: {
+    color: "#fff",
+    fontSize: 12,
+    fontWeight: "500",
   },
   previewLabel: {
     fontSize: 14,
