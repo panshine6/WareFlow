@@ -687,26 +687,26 @@ export default function AddProductQuickScreen() {
             <ThemedText style={styles.captureLabel}>
               {stage === "detail_photo" ? "拍摄细节图" : "拍摄全景图"}
             </ThemedText>
-            
-            {/* 跳过按钮 - 仅在全景图阶段显示 */}
-            {stage === "overview_photo" && (
-              <Pressable
-                style={({ pressed }) => [
-                  styles.skipButton,
-                  { opacity: pressed ? 0.7 : 1 },
-                ]}
-                onPress={() => {
-                  // 跳过全景图，数量默认为1
-                  setQuantity(1);
-                  setStage("confirm");
-                }}
-                disabled={processing}
-              >
-                <ThemedText style={styles.skipButtonText}>跳过此步 →</ThemedText>
-                <ThemedText style={styles.skipButtonHint}>已手动点数 / 仅查重</ThemedText>
-              </Pressable>
-            )}
           </View>
+
+          {/* 跳过按钮 - 仅在全景图阶段显示，放在右下角防止误触 */}
+          {stage === "overview_photo" && (
+            <Pressable
+              style={({ pressed }) => [
+                styles.skipButtonCorner,
+                { opacity: pressed ? 0.7 : 1 },
+              ]}
+              onPress={() => {
+                // 跳过全景图，数量默认为1
+                setQuantity(1);
+                setStage("confirm");
+              }}
+              disabled={processing}
+            >
+              <ThemedText style={styles.skipButtonText}>跳过此步 →</ThemedText>
+              <ThemedText style={styles.skipButtonHint}>已手动点数 / 仅查重</ThemedText>
+            </Pressable>
+          )
         </View>
       </ThemedView>
     );
@@ -1462,7 +1462,7 @@ const styles = StyleSheet.create({
   },
   captureArea: {
     position: "absolute",
-    bottom: 50,
+    bottom: 120,
     left: 0,
     right: 0,
     alignItems: "center",
@@ -1498,6 +1498,19 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "rgba(255, 255, 255, 0.3)",
     alignItems: "center",
+  },
+  skipButtonCorner: {
+    position: "absolute",
+    bottom: 40,
+    right: 20,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    backgroundColor: "rgba(255, 255, 255, 0.15)",
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.3)",
+    alignItems: "center",
+    zIndex: 10,
   },
   skipButtonText: {
     color: "#fff",
