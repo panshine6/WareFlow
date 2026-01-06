@@ -25,8 +25,7 @@ import { trpc } from "@/lib/trpc";
 import { AutoSync } from "@/lib/auto-sync";
 import { ProductStorage } from "@/lib/storage";
 import { isMobileWeb, isDesktopWeb } from "@/lib/platform-detect";
-import { getAllBoxes } from "@/lib/box-storage";
-import type { Box } from "@/types/box";
+import { BoxGenerator, BoxRecord } from "@/lib/box-generator";
 import type { Product } from "@/types/product";
 
 // 库存筛选类型
@@ -55,7 +54,7 @@ export default function InventoryScreen() {
   const [showSortOptions, setShowSortOptions] = useState(false);
   
   // Box 筛选状态
-  const [boxes, setBoxes] = useState<Box[]>([]);
+  const [boxes, setBoxes] = useState<BoxRecord[]>([]);
   const [selectedBoxId, setSelectedBoxId] = useState<string | null>(null); // null 表示全部
   const [showBoxFilter, setShowBoxFilter] = useState(false);
 
@@ -73,7 +72,7 @@ export default function InventoryScreen() {
       console.log('[InventoryScreen] Loading products from ProductStorage...');
       const [data, allBoxes] = await Promise.all([
         ProductStorage.getActive(),
-        getAllBoxes()
+        BoxGenerator.getAllBoxes()
       ]);
       console.log('[InventoryScreen] Loaded', data.length, 'products');
       setProducts(data);
@@ -195,12 +194,12 @@ export default function InventoryScreen() {
         result = result.filter((p) => !p.boxId && !p.boxName);
       } else {
         // 筛选指定 Box 的产品（同时支持 boxId 和 boxName）
-        // 找到选中的 Box 信息
-        const selectedBox = boxes.find(b => b.id === selectedBoxId);
+        // 找到选中的 Box 信息（BoxRecord 使用 code 字段）
+        const selectedBox = boxes.find(b => b.code === selectedBoxId);
         result = result.filter((p) => 
           p.boxId === selectedBoxId || 
           p.boxName === selectedBoxId ||
-          (selectedBox && (p.boxId === selectedBox.name || p.boxName === selectedBox.name))
+          (selectedBox && (p.boxId === selectedBox.code || p.boxName === selectedBox.code))
         );
       }
     }
@@ -372,21 +371,21 @@ export default function InventoryScreen() {
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.boxScrollView}>
             {boxes.map((box) => (
               <Pressable
-                key={box.id}
+                key={box.code}
                 style={[
                   styles.boxFilterChip,
-                  selectedBoxId === box.id && styles.boxFilterChipActive,
+                  selectedBoxId === box.code && styles.boxFilterChipActive,
                 ]}
-                onPress={() => setSelectedBoxId(box.id)}
+                onPress={() => setSelectedBoxId(box.code)}
               >
                 <ThemedText
                   style={[
                     styles.boxFilterChipText,
-                    selectedBoxId === box.id && styles.boxFilterChipTextActive,
+                    selectedBoxId === box.code && styles.boxFilterChipTextActive,
                   ]}
                   numberOfLines={1}
                 >
-                  {box.name}
+                  {box.code}
                 </ThemedText>
               </Pressable>
             ))}
