@@ -2,7 +2,7 @@
  * 版本检测和缓存清除模块
  * 
  * 功能：
- * 1. 检测应用版本变化
+ * 1. 检测应用版本变化（从动态 version.json 获取）
  * 2. 版本变化时自动清除浏览器缓存
  * 3. 可通过开关控制是否启用
  * 
@@ -12,6 +12,7 @@
  */
 
 import { Platform } from 'react-native';
+import { fetchVersionInfo, getVersionIdentifier } from './dynamic-version';
 import { APP_VERSION, APP_BUILD } from './version';
 
 // ============================================
@@ -24,10 +25,16 @@ const VERSION_KEY = 'wareflow_app_version';
 const BUILD_KEY = 'wareflow_app_build';
 
 /**
- * 获取完整版本标识
+ * 获取完整版本标识（优先使用动态版本）
  */
-function getVersionIdentifier(): string {
-  return `${APP_VERSION}-${APP_BUILD}`;
+async function getFullVersionIdentifier(): Promise<string> {
+  try {
+    const dynamicVersion = await getVersionIdentifier();
+    return dynamicVersion;
+  } catch (error) {
+    console.warn('[CacheBuster] Failed to get dynamic version, using static:', error);
+    return `${APP_VERSION}-${APP_BUILD}`;
+  }
 }
 
 /**
@@ -105,11 +112,19 @@ export async function checkVersionAndClearCache(): Promise<boolean> {
     return false;
   }
 
-  const currentVersion = getVersionIdentifier();
+  // 获取当前版本（优先使用动态版本）
+  const currentVersion = await getFullVersionIdentifier();
   const storedVersion = localStorage.getItem(VERSION_KEY);
 
   console.log(`[CacheBuster] Current version: ${currentVersion}`);
   console.log(`[CacheBuster] Stored version: ${storedVersion}`);
+
+  // 获取动态版本信息用于显示
+  const versionInfo = await fetchVersionInfo();
+  if (versionInfo) {
+    console.log(`[CacheBuster] Build time: ${versionInfo.buildTime}`);
+    console.log(`[CacheBuster] Commit hash: ${versionInfo.commitHash}`);
+  }
 
   // 如果版本相同，不需要清除
   if (storedVersion === currentVersion) {
@@ -224,8 +239,30 @@ export async function forceClearCache(): Promise<void> {
   window.location.reload();
 }
 
+/**
+ * 获取当前版本信息（用于显示）
+ */
+export async function getCurrentVersionInfo() {
+  const versionInfo = await fetchVersionInfo();
+  if (versionInfo) {
+    return {
+      version: versionInfo.version,
+      buildTime: versionInfo.buildTime,
+      commitHash: versionInfo.commitHash,
+      source: 'dynamic'
+    };
+  }
+  return {
+    version: `${APP_VERSION}-${APP_BUILD}`,
+    buildTime: new Date().toISOString(),
+    commitHash: 'unknown',
+    source: 'static'
+  };
+}
+
 // 将强制清除函数暴露到全局，方便调试
 if (Platform.OS === 'web' && typeof window !== 'undefined') {
   (window as any).forceClearCache = forceClearCache;
   (window as any).checkVersionAndClearCache = checkVersionAndClearCache;
+  (window as any).getCurrentVersionInfo = getCurrentVersionInfo;
 }
