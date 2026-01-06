@@ -1276,9 +1276,14 @@ export default function AddProductQuickScreen() {
                   <Pressable
                     style={styles.goToInventoryButton}
                     onPress={() => {
-                      // 关闭弹窗并跳转到库存页面
-                      setShowDuplicateModal(false);
-                      router.push('/inventory');
+                      // 在新窗口打开库存页面，保持当前弹窗不关闭
+                      if (typeof window !== 'undefined') {
+                        window.open('/inventory', '_blank');
+                      } else {
+                        // 移动端回退方案：关闭弹窗并跳转
+                        setShowDuplicateModal(false);
+                        router.push('/inventory');
+                      }
                     }}
                   >
                     <ThemedText style={styles.goToInventoryButtonText}>📦 浏览库存</ThemedText>
@@ -1295,26 +1300,45 @@ export default function AddProductQuickScreen() {
                 {manualSearchResults.length > 0 && (
                   <View style={styles.manualSearchResults}>
                     {manualSearchResults.map((product) => (
-                      <Pressable
-                        key={product.id}
-                        style={[
-                          styles.matchItem,
-                          selectedSimilarProduct?.id === product.id && styles.matchItemSelected
-                        ]}
-                        onPress={() => handleManualSelectProduct(product)}
-                      >
-                        <Image
-                          source={{ uri: product.detailImageUri }}
-                          style={styles.matchImage}
-                        />
-                        <View style={styles.matchInfo}>
-                          <ThemedText style={styles.matchSku}>{product.sku}</ThemedText>
-                          <ThemedText style={styles.matchQuantity}>
-                            库存: {product.quantity}
-                          </ThemedText>
+                      <View key={product.id} style={styles.manualSearchResultItem}>
+                        <Pressable
+                          style={[
+                            styles.matchItem,
+                            selectedSimilarProduct?.id === product.id && styles.matchItemSelected
+                          ]}
+                          onPress={() => handleManualSelectProduct(product)}
+                        >
+                          <Image
+                            source={{ uri: product.detailImageUri }}
+                            style={styles.matchImage}
+                          />
+                          <View style={styles.matchInfo}>
+                            <ThemedText style={styles.matchSku}>{product.sku}</ThemedText>
+                            <ThemedText style={styles.matchQuantity}>
+                              库存: {product.quantity}
+                            </ThemedText>
+                          </View>
+                          <ThemedText style={styles.matchArrow}>›</ThemedText>
+                        </Pressable>
+                        {/* 每个搜索结果下方显示操作按钮 */}
+                        <View style={styles.manualSearchActionButtons}>
+                          <Pressable
+                            style={styles.manualSameStyleButton}
+                            onPress={() => handleSameStyleDifferentColor(product)}
+                          >
+                            <ThemedText style={styles.manualSameStyleButtonText}>同款不同色</ThemedText>
+                          </Pressable>
+                          <Pressable
+                            style={styles.manualMergeButton}
+                            onPress={() => {
+                              setSelectedSimilarProduct(product);
+                              handleConfirmMerge();
+                            }}
+                          >
+                            <ThemedText style={styles.manualMergeButtonText}>合并到此款</ThemedText>
+                          </Pressable>
                         </View>
-                        <ThemedText style={styles.matchArrow}>›</ThemedText>
-                      </Pressable>
+                      </View>
                     ))}
                   </View>
                 )}
@@ -2428,6 +2452,38 @@ const styles = StyleSheet.create({
   },
   manualSearchResults: {
     marginTop: 8,
+  },
+  manualSearchResultItem: {
+    marginBottom: 12,
+  },
+  manualSearchActionButtons: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    gap: 8,
+    marginTop: 6,
+    paddingRight: 4,
+  },
+  manualSameStyleButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    backgroundColor: "#FF9500",
+    borderRadius: 6,
+  },
+  manualSameStyleButtonText: {
+    color: "#fff",
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  manualMergeButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    backgroundColor: "#34C759",
+    borderRadius: 6,
+  },
+  manualMergeButtonText: {
+    color: "#fff",
+    fontSize: 12,
+    fontWeight: "600",
   },
   // 选中产品操作区域样式
   selectedProductActions: {
