@@ -1229,13 +1229,13 @@ export default function AddProductQuickScreen() {
               )}
             </View>
 
-            {/* 相似产品列表 - 按相似度排序，最多显示5个 */}
-            <ScrollView style={styles.matchList}>
-              {duplicateResult?.duplicates && duplicateResult.duplicates.length > 0 && (
-                <>
-                  <ThemedText style={styles.matchListTitle}>
-                    AI 发现 {Math.min(duplicateResult.duplicates.length, 5)} 个相似产品（点击选择）：
-                  </ThemedText>
+            {/* AI 查重结果区域 */}
+            {duplicateResult?.duplicates && duplicateResult.duplicates.length > 0 && (
+              <View style={styles.aiResultSection}>
+                <ThemedText style={styles.matchListTitle}>
+                  AI 发现 {Math.min(duplicateResult.duplicates.length, 5)} 个相似产品（点击选择）：
+                </ThemedText>
+                <ScrollView style={styles.aiResultList} nestedScrollEnabled={true}>
                   {duplicateResult.duplicates
                     .slice()
                     .sort((a, b) => b.similarityScore - a.similarityScore)
@@ -1281,90 +1281,89 @@ export default function AddProductQuickScreen() {
                         </Pressable>
                       );
                     })}
-                </>
-              )}
-
-              {/* 手动搜索区域 - 始终显示 */}
-              <View style={styles.manualSearchSection}>
-                <ThemedText style={styles.manualSearchTitle}>
-                  🔍 手动搜索现有产品：
-                </ThemedText>
-                <TextInput
-                  style={[styles.manualSearchInput, { backgroundColor: inputBg, color: inputColor }]}
-                  value={manualSearchQuery}
-                  onChangeText={handleManualSearch}
-                  onFocus={handleSearchInputFocus}
-                  placeholder="点击浏览库存，或输入 SKU 筛选..."
-                  placeholderTextColor={placeholderColor}
-                />
-                {/* 产品下拉列表 - 点击输入框后显示 */}
-                {showProductDropdown && manualSearchResults.length > 0 && (
-                  <View style={styles.productDropdownContainer}>
-                    <ScrollView 
-                      style={styles.productDropdownList}
-                      nestedScrollEnabled={true}
-                      showsVerticalScrollIndicator={true}
-                    >
-                      {manualSearchResults.map((product) => (
-                        <View key={product.id} style={styles.dropdownProductItem}>
-                          <Pressable
-                            style={[
-                              styles.dropdownProductRow,
-                              selectedSimilarProduct?.id === product.id && styles.dropdownProductRowSelected
-                            ]}
-                            onPress={() => handleManualSelectProduct(product)}
-                          >
-                            <Image
-                              source={{ uri: product.detailImageUri }}
-                              style={styles.dropdownProductImage}
-                            />
-                            <ThemedText style={styles.dropdownProductSku}>{product.sku}</ThemedText>
-                          </Pressable>
-                          {/* 每个产品下方显示操作按钮 */}
-                          <View style={styles.dropdownActionButtons}>
-                            <Pressable
-                              style={styles.dropdownSameStyleButton}
-                              onPress={() => handleSameStyleDifferentColor(product)}
-                            >
-                              <ThemedText style={styles.dropdownButtonText}>同款不同色</ThemedText>
-                            </Pressable>
-                            <Pressable
-                              style={styles.dropdownMergeButton}
-                              onPress={() => {
-                                setSelectedSimilarProduct(product);
-                                handleConfirmMerge();
-                              }}
-                            >
-                              <ThemedText style={styles.dropdownButtonText}>合并到此款</ThemedText>
-                            </Pressable>
-                          </View>
-                        </View>
-                      ))}
-                    </ScrollView>
-                    {/* 关闭下拉列表按钮 */}
-                    <Pressable
-                      style={styles.closeDropdownButton}
-                      onPress={() => setShowProductDropdown(false)}
-                    >
-                      <ThemedText style={styles.closeDropdownButtonText}>收起列表</ThemedText>
-                    </Pressable>
-                  </View>
-                )}
+                </ScrollView>
               </View>
+            )}
 
-              {/* 如果没有 AI 结果也没有搜索结果，显示提示 */}
-              {(!duplicateResult?.duplicates || duplicateResult.duplicates.length === 0) && 
-               manualSearchResults.length === 0 && 
-               !manualSearchQuery && (
-                <ThemedText style={styles.noMatchText}>
-                  {duplicateCheckStatus === "done" 
-                    ? "AI 未发现相似产品，可以手动搜索或直接新建" 
-                    : duplicateCheckStatus === "running"
-                      ? "正在查重..."
-                      : "等待查重..."}
-                </ThemedText>
+            {/* 手动搜索区域 - 与 AI 查重结果同级 */}
+            <View style={styles.manualSearchSection}>
+              <ThemedText style={styles.manualSearchTitle}>
+                🔍 手动搜索现有产品：
+              </ThemedText>
+              <TextInput
+                style={[styles.manualSearchInput, { backgroundColor: inputBg, color: inputColor }]}
+                value={manualSearchQuery}
+                onChangeText={handleManualSearch}
+                onFocus={handleSearchInputFocus}
+                placeholder="点击浏览库存，或输入 SKU 筛选..."
+                placeholderTextColor={placeholderColor}
+              />
+              {/* 产品下拉列表 - 点击输入框后显示 */}
+              {showProductDropdown && manualSearchResults.length > 0 && (
+                <View style={styles.productDropdownContainer}>
+                  <ScrollView 
+                    style={styles.productDropdownList}
+                    nestedScrollEnabled={true}
+                    showsVerticalScrollIndicator={true}
+                  >
+                    {manualSearchResults.map((product) => (
+                      <View key={product.id} style={styles.dropdownProductItem}>
+                        <Pressable
+                          style={[
+                            styles.dropdownProductRow,
+                            selectedSimilarProduct?.id === product.id && styles.dropdownProductRowSelected
+                          ]}
+                          onPress={() => handleManualSelectProduct(product)}
+                        >
+                          <Image
+                            source={{ uri: product.detailImageUri }}
+                            style={styles.dropdownProductImage}
+                          />
+                          <ThemedText style={styles.dropdownProductSku}>{product.sku}</ThemedText>
+                        </Pressable>
+                        {/* 每个产品下方显示操作按钮 */}
+                        <View style={styles.dropdownActionButtons}>
+                          <Pressable
+                            style={styles.dropdownSameStyleButton}
+                            onPress={() => handleSameStyleDifferentColor(product)}
+                          >
+                            <ThemedText style={styles.dropdownButtonText}>同款不同色</ThemedText>
+                          </Pressable>
+                          <Pressable
+                            style={styles.dropdownMergeButton}
+                            onPress={() => {
+                              setSelectedSimilarProduct(product);
+                              handleConfirmMerge();
+                            }}
+                          >
+                            <ThemedText style={styles.dropdownButtonText}>合并到此款</ThemedText>
+                          </Pressable>
+                        </View>
+                      </View>
+                    ))}
+                  </ScrollView>
+                  {/* 关闭下拉列表按钮 */}
+                  <Pressable
+                    style={styles.closeDropdownButton}
+                    onPress={() => setShowProductDropdown(false)}
+                  >
+                    <ThemedText style={styles.closeDropdownButtonText}>收起列表</ThemedText>
+                  </Pressable>
+                </View>
               )}
-            </ScrollView>
+            </View>
+
+            {/* 如果没有 AI 结果也没有搜索结果，显示提示 */}
+            {(!duplicateResult?.duplicates || duplicateResult.duplicates.length === 0) && 
+             !showProductDropdown && (
+              <ThemedText style={styles.noMatchText}>
+                {duplicateCheckStatus === "done" 
+                  ? "AI 未发现相似产品，可以手动搜索或直接新建" 
+                  : duplicateCheckStatus === "running"
+                    ? "正在查重..."
+                    : "等待查重..."}
+              </ThemedText>
+            )}
 
             {/* 选中产品后显示操作按钮 */}
             {selectedSimilarProduct && (
@@ -2309,6 +2308,16 @@ const styles = StyleSheet.create({
   matchList: {
     maxHeight: 250,
     marginBottom: 16,
+  },
+  // AI 查重结果区域样式
+  aiResultSection: {
+    marginBottom: 16,
+    paddingBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e0e0e0',
+  },
+  aiResultList: {
+    maxHeight: 200,
   },
   matchListTitle: {
     fontSize: 14,
