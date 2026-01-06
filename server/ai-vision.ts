@@ -1,15 +1,9 @@
 /**
  * AI 视觉识别服务（后端）
- * 使用 Claude API 进行图像识别
- * 优化版：使用 Claude Sonnet 4 + 分区域计数法
+ * 使用 OpenAI GPT-4o API 进行图像识别
  */
 
-// Claude API 配置
-const CLAUDE_API_KEY = process.env.CLAUDE_API_KEY;
-const CLAUDE_API_URL = "https://api.anthropic.com/v1/messages";
-const CLAUDE_MODEL = "claude-sonnet-4-20250514";
-
-// 备用 OpenAI 配置（如果 Claude 不可用）
+// OpenAI API 配置
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const OPENAI_BASE_URL = process.env.OPENAI_BASE_URL || "https://api.openai.com/v1";
 const OPENAI_MODEL = "gpt-4o";
@@ -40,7 +34,8 @@ async function callWithRetry<T>(
     } catch (error: any) {
       const isRateLimit = error?.message?.includes('Too Many Requests') || 
                           error?.message?.includes('rate_limit') ||
-                          error?.message?.includes('overloaded');
+                          error?.message?.includes('overloaded') ||
+                          error?.message?.includes('429');
       
       if (isRateLimit && i < retries - 1) {
         const waitTime = RETRY_DELAY * (i + 1);
@@ -55,37 +50,35 @@ async function callWithRetry<T>(
 }
 
 /**
- * 使用 Claude API 进行图像识别
+ * 使用 OpenAI GPT-4o API 进行图像识别
  */
-async function callClaudeVision(
+async function callOpenAIVision(
   imageBase64: string,
   prompt: string,
   maxTokens: number = 500
 ): Promise<string> {
-  if (!CLAUDE_API_KEY) {
-    throw new Error("未配置 Claude API 密钥");
+  if (!OPENAI_API_KEY) {
+    throw new Error("未配置 OpenAI API 密钥");
   }
 
-  const response = await fetch(CLAUDE_API_URL, {
+  const response = await fetch(`${OPENAI_BASE_URL}/chat/completions`, {
     method: "POST",
     headers: {
-      "x-api-key": CLAUDE_API_KEY,
-      "anthropic-version": "2023-06-01",
-      "content-type": "application/json",
+      "Authorization": `Bearer ${OPENAI_API_KEY}`,
+      "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      model: CLAUDE_MODEL,
+      model: OPENAI_MODEL,
       max_tokens: maxTokens,
       messages: [
         {
           role: "user",
           content: [
             {
-              type: "image",
-              source: {
-                type: "base64",
-                media_type: "image/jpeg",
-                data: imageBase64,
+              type: "image_url",
+              image_url: {
+                url: `data:image/jpeg;base64,${imageBase64}`,
+                detail: "high",
               },
             },
             {
@@ -100,55 +93,52 @@ async function callClaudeVision(
 
   if (!response.ok) {
     const errorData = await response.json();
-    console.error("Claude API error:", errorData);
-    throw new Error(`Claude API request failed: ${response.statusText}`);
+    console.error("OpenAI API error:", errorData);
+    throw new Error(`OpenAI API request failed: ${response.statusText} - ${JSON.stringify(errorData)}`);
   }
 
   const data = await response.json();
-  return data.content[0]?.text || "";
+  return data.choices?.[0]?.message?.content || "";
 }
 
 /**
- * 使用 Claude API 对比两张图片
+ * 使用 OpenAI GPT-4o API 对比两张图片
  */
-async function callClaudeVisionCompare(
+async function callOpenAIVisionCompare(
   imageBase64_1: string,
   imageBase64_2: string,
   prompt: string,
   maxTokens: number = 300
 ): Promise<string> {
-  if (!CLAUDE_API_KEY) {
-    throw new Error("未配置 Claude API 密钥");
+  if (!OPENAI_API_KEY) {
+    throw new Error("未配置 OpenAI API 密钥");
   }
 
-  const response = await fetch(CLAUDE_API_URL, {
+  const response = await fetch(`${OPENAI_BASE_URL}/chat/completions`, {
     method: "POST",
     headers: {
-      "x-api-key": CLAUDE_API_KEY,
-      "anthropic-version": "2023-06-01",
-      "content-type": "application/json",
+      "Authorization": `Bearer ${OPENAI_API_KEY}`,
+      "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      model: CLAUDE_MODEL,
+      model: OPENAI_MODEL,
       max_tokens: maxTokens,
       messages: [
         {
           role: "user",
           content: [
             {
-              type: "image",
-              source: {
-                type: "base64",
-                media_type: "image/jpeg",
-                data: imageBase64_1,
+              type: "image_url",
+              image_url: {
+                url: `data:image/jpeg;base64,${imageBase64_1}`,
+                detail: "high",
               },
             },
             {
-              type: "image",
-              source: {
-                type: "base64",
-                media_type: "image/jpeg",
-                data: imageBase64_2,
+              type: "image_url",
+              image_url: {
+                url: `data:image/jpeg;base64,${imageBase64_2}`,
+                detail: "high",
               },
             },
             {
@@ -163,20 +153,20 @@ async function callClaudeVisionCompare(
 
   if (!response.ok) {
     const errorData = await response.json();
-    console.error("Claude API error:", errorData);
-    throw new Error(`Claude API request failed: ${response.statusText}`);
+    console.error("OpenAI API error:", errorData);
+    throw new Error(`OpenAI API request failed: ${response.statusText} - ${JSON.stringify(errorData)}`);
   }
 
   const data = await response.json();
-  return data.content[0]?.text || "";
+  return data.choices?.[0]?.message?.content || "";
 }
 
 /**
- * 识别图片中的饰品数量（使用 Claude + 两步计数法）
+ * 识别图片中的饰品数量（使用 GPT-4o + 两步计数法）
  * 优化版：先识别产品类型，再进行针对性计数
  */
 export async function countProductsInImage(imageBase64: string): Promise<number> {
-  console.log("[AI Vision] countProductsInImage called with Claude model:", CLAUDE_MODEL);
+  console.log("[AI Vision] countProductsInImage called with OpenAI model:", OPENAI_MODEL);
   console.log("[AI Vision] Image base64 length:", imageBase64?.length || 0);
 
   const prompt = `你是一位专业的库存清点专家。请仔细数这张图片中的饰品包装袋数量。
@@ -210,8 +200,8 @@ export async function countProductsInImage(imageBase64: string): Promise<number>
 最后一行必须是纯数字，例如：11`;
 
   return callWithRetry(async () => {
-    const content = await callClaudeVision(imageBase64, prompt, 600);
-    console.log("[AI Vision] Claude response content:", content);
+    const content = await callOpenAIVision(imageBase64, prompt, 600);
+    console.log("[AI Vision] OpenAI response content:", content);
     
     // 提取最后一行的数字作为总数
     const lines = content.trim().split('\n');
@@ -265,8 +255,8 @@ SCORE: [数字 0-100]
 NOTE: [中文简要说明，包含判断理由，最多40字]`;
 
   return callWithRetry(async () => {
-    const content = await callClaudeVisionCompare(imageBase64_1, imageBase64_2, prompt, 200);
-    console.log("[AI Vision] Claude compare response:", content);
+    const content = await callOpenAIVisionCompare(imageBase64_1, imageBase64_2, prompt, 200);
+    console.log("[AI Vision] OpenAI compare response:", content);
     
     // 解析响应
     const scoreMatch = content.match(/SCORE:\s*(\d+)/i);
@@ -280,14 +270,14 @@ NOTE: [中文简要说明，包含判断理由，最多40字]`;
 }
 
 /**
- * 对比两张图片的相似度（使用 Claude）
+ * 对比两张图片的相似度（使用 GPT-4o）
  * 优化版：3次查重取平均值，提高准确性
  */
 export async function compareImageSimilarity(
   imageBase64_1: string,
   imageBase64_2: string
 ): Promise<{ similarityScore: number; analysisNote: string; scores: number[]; confidence: 'high' | 'medium' | 'low' }> {
-  console.log("[AI Vision] Starting 3-round similarity comparison...");
+  console.log("[AI Vision] Starting 3-round similarity comparison with GPT-4o...");
   
   const results: { similarityScore: number; analysisNote: string }[] = [];
   
@@ -351,7 +341,7 @@ export async function compareImageSimilarity(
 }
 
 /**
- * 从图片中识别条形码（使用 Claude）
+ * 从图片中识别条形码（使用 GPT-4o）
  */
 export async function scanBarcodeFromImage(imageBase64: string): Promise<{ barcodeValue: string | null; confidence: number }> {
   const prompt = `请仔细观察这张图片，识别其中的条形码或二维码。
@@ -373,8 +363,8 @@ CONFIDENCE: [0-100 的整数，表示识别置信度]
 - 如果图片中没有条形码，返回 BARCODE: null`;
 
   return callWithRetry(async () => {
-    const content = await callClaudeVision(imageBase64, prompt, 150);
-    console.log("[AI Vision] Claude barcode response:", content);
+    const content = await callOpenAIVision(imageBase64, prompt, 150);
+    console.log("[AI Vision] OpenAI barcode response:", content);
     
     // 解析响应
     const barcodeMatch = content.match(/BARCODE:\s*(.+)/i);
@@ -393,14 +383,14 @@ CONFIDENCE: [0-100 的整数，表示识别置信度]
 }
 
 /**
- * 批量对比图片相似度（使用 Claude + 并行处理）
+ * 批量对比图片相似度（使用 GPT-4o + 并行处理）
  */
 export async function batchCompareImages(
   newImageBase64: string,
   existingImages: Array<{ id: string; base64: string }>,
   threshold: number = 70
 ): Promise<Array<{ id: string; similarityScore: number; analysisNote: string }>> {
-  console.log(`[AI Vision] Starting batch compare with ${existingImages.length} images, threshold: ${threshold}, model: ${CLAUDE_MODEL}`);
+  console.log(`[AI Vision] Starting batch compare with ${existingImages.length} images, threshold: ${threshold}, model: ${OPENAI_MODEL}`);
   
   const imagesToCompare = existingImages;
   console.log(`[AI Vision] Will compare ${imagesToCompare.length} images`);
