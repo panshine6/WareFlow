@@ -544,9 +544,25 @@ export const SkuGenerator = {
         prefix = parts.slice(0, -1).join("-");
       }
     } else {
-      // 向后兼容：默认流水号在最后
-      number = parseInt(parts[parts.length - 1], 10);
-      prefix = parts.slice(0, -1).join("-");
+      // 智能识别流水号位置：从后往前找第一个纯数字部分
+      // 例如：LB-ED-IR-0002-RE 中，RE 不是数字，0002 是数字
+      let serialIndex = parts.length - 1;
+      for (let i = parts.length - 1; i >= 0; i--) {
+        if (/^\d+$/.test(parts[i])) {
+          serialIndex = i;
+          break;
+        }
+      }
+      
+      number = parseInt(parts[serialIndex], 10);
+      // 前缀只取流水号之前的部分
+      prefix = parts.slice(0, serialIndex).join("-");
+      
+      // 如果解析失败（没有找到数字部分），使用默认值
+      if (isNaN(number)) {
+        number = 0;
+        prefix = parts.slice(0, -1).join("-");
+      }
     }
 
     // 更新序列（只根据前缀判断）
@@ -655,6 +671,7 @@ export const SkuGenerator = {
 
   /**
    * 从现有产品同步序列（兼容旧版本）
+   * 支持带颜色后缀的 SKU，如 LB-ED-IR-0002-RE
    */
   async syncFromProducts(skus: string[]): Promise<void> {
     const sequences: Record<string, SkuSequence> = {};
@@ -663,11 +680,22 @@ export const SkuGenerator = {
       const parts = sku.split("-");
       if (parts.length < 2) continue;
 
-      const numberStr = parts[parts.length - 1];
-      const number = parseInt(numberStr, 10);
+      // 智能识别流水号位置：从后往前找第一个纯数字部分
+      let serialIndex = -1;
+      for (let i = parts.length - 1; i >= 0; i--) {
+        if (/^\d+$/.test(parts[i])) {
+          serialIndex = i;
+          break;
+        }
+      }
+      
+      if (serialIndex < 0) continue; // 没有找到数字部分，跳过
+      
+      const number = parseInt(parts[serialIndex], 10);
       if (isNaN(number)) continue;
 
-      const prefix = parts.slice(0, -1).join("-");
+      // 前缀只取流水号之前的部分
+      const prefix = parts.slice(0, serialIndex).join("-");
       const current = sequences[prefix];
       if (!current || number > current.lastNumber) {
         sequences[prefix] = {
