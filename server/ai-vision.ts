@@ -9,10 +9,10 @@ const OPENAI_BASE_URL = process.env.OPENAI_BASE_URL || "https://api.openai.com/v
 const OPENAI_MODEL = "gpt-4o";
 
 // 速率限制配置
-const RATE_LIMIT_DELAY = 500;
+const RATE_LIMIT_DELAY = 200; // 减少批次间延迟，提高速度
 const MAX_RETRIES = 3;
 const RETRY_DELAY = 2000;
-const MAX_CONCURRENT = 3;
+const MAX_CONCURRENT = 6; // 增加并行数量，提高查重速度
 
 /**
  * 延迟函数

@@ -71,7 +71,8 @@ export default function AddProductQuickScreen() {
   // 查重结果和状态
   const [duplicateResult, setDuplicateResult] = useState<DuplicateCheckResult | null>(null);
   const [showDuplicateModal, setShowDuplicateModal] = useState(false);
-  const [duplicateCheckStatus, setDuplicateCheckStatus] = useState<"pending" | "running" | "done">("pending");
+  const [duplicateCheckStatus, setDuplicateCheckStatus] = useState<"pending" | "running" | "done" | "cancelled">("pending");
+  const duplicateCheckCancelledRef = useRef(false); // 用于取消查重
 
   // AI 计数结果和状态
   const [aiCount, setAiCount] = useState<number>(0);
@@ -229,13 +230,28 @@ export default function AddProductQuickScreen() {
   // 后台查重（在细节图拍摄后触发）
   const runDuplicateCheckInBackground = async (dataUrl: string, base64: string) => {
     console.log("[QuickAdd] Starting background duplicate check...");
+    duplicateCheckCancelledRef.current = false; // 重置取消标志
     setDuplicateCheckStatus("running");
     try {
       console.log("[QuickAdd] Calling performDuplicateCheck with dataUrl length:", dataUrl.length, "base64 length:", base64.length);
       const dupResult = await performDuplicateCheck(dataUrl, base64);
+      
+      // 检查是否已取消
+      if (duplicateCheckCancelledRef.current) {
+        console.log("[QuickAdd] Duplicate check was cancelled, ignoring result");
+        return;
+      }
+      
       console.log("[QuickAdd] Duplicate check completed:", JSON.stringify(dupResult, null, 2));
       setDuplicateResult(dupResult);
+      setDuplicateCheckStatus("done");
     } catch (error: any) {
+      // 检查是否已取消
+      if (duplicateCheckCancelledRef.current) {
+        console.log("[QuickAdd] Duplicate check was cancelled during error");
+        return;
+      }
+      
       console.error("[QuickAdd] Duplicate check failed:", error.message, error.stack);
       // 即使失败也设置一个结果，让用户知道查重已完成
       setDuplicateResult({
@@ -249,9 +265,26 @@ export default function AddProductQuickScreen() {
           durationMs: 0,
         },
       });
-    } finally {
       setDuplicateCheckStatus("done");
     }
+  };
+
+  // 取消查重，转为人工识别
+  const handleCancelDuplicateCheck = () => {
+    console.log("[QuickAdd] User cancelled duplicate check");
+    duplicateCheckCancelledRef.current = true;
+    setDuplicateCheckStatus("cancelled");
+    setDuplicateResult({
+      hasDuplicates: false,
+      duplicates: [],
+      error: "用户取消查重，转为人工识别",
+      stats: {
+        totalProducts: 0,
+        pHashFiltered: 0,
+        aiCompared: 0,
+        durationMs: 0,
+      },
+    });
   };
 
   // 后台条形码扫描（在细节图拍摄后触发）
@@ -986,13 +1019,24 @@ export default function AddProductQuickScreen() {
             <View style={[
               styles.statusBadge,
               duplicateCheckStatus === "done" ? styles.statusBadgeDone : 
+              duplicateCheckStatus === "cancelled" ? styles.statusBadgeCancelled :
               duplicateCheckStatus === "running" ? styles.statusBadgeRunning : styles.statusBadgePending
             ]}>
               {duplicateCheckStatus === "running" && <ActivityIndicator size="small" color="#007AFF" style={styles.statusSpinner} />}
               <ThemedText style={styles.statusText}>
                 {duplicateCheckStatus === "pending" ? "⏳ 查重待开始" :
-                 duplicateCheckStatus === "running" ? "查重中..." : "✓ 查重已完成"}
+                 duplicateCheckStatus === "running" ? "查重中..." : 
+                 duplicateCheckStatus === "cancelled" ? "❌ 已取消查重" : "✓ 查重已完成"}
               </ThemedText>
+              {/* 查重进行中时显示取消按钮 */}
+              {duplicateCheckStatus === "running" && (
+                <Pressable
+                  style={styles.cancelCheckButton}
+                  onPress={handleCancelDuplicateCheck}
+                >
+                  <ThemedText style={styles.cancelCheckButtonText}>取消</ThemedText>
+                </Pressable>
+              )}
             </View>
             <View style={[
               styles.statusBadge,
@@ -1225,9 +1269,21 @@ export default function AddProductQuickScreen() {
 
               {/* 手动搜索区域 - 始终显示 */}
               <View style={styles.manualSearchSection}>
-                <ThemedText style={styles.manualSearchTitle}>
-                  🔍 手动搜索现有产品：
-                </ThemedText>
+                <View style={styles.manualSearchHeader}>
+                  <ThemedText style={styles.manualSearchTitle}>
+                    🔍 手动搜索现有产品：
+                  </ThemedText>
+                  <Pressable
+                    style={styles.goToInventoryButton}
+                    onPress={() => {
+                      // 关闭弹窗并跳转到库存页面
+                      setShowDuplicateModal(false);
+                      router.push('/inventory');
+                    }}
+                  >
+                    <ThemedText style={styles.goToInventoryButtonText}>📦 浏览库存</ThemedText>
+                  </Pressable>
+                </View>
                 <TextInput
                   style={[styles.manualSearchInput, { backgroundColor: inputBg, color: inputColor }]}
                   value={manualSearchQuery}
@@ -2050,12 +2106,27 @@ const styles = StyleSheet.create({
   statusBadgeNotFound: {
     backgroundColor: "rgba(255, 149, 0, 0.15)",
   },
+  statusBadgeCancelled: {
+    backgroundColor: "rgba(255, 59, 48, 0.15)",
+  },
   statusSpinner: {
     marginRight: 6,
   },
   statusText: {
     fontSize: 13,
     fontWeight: "500",
+  },
+  cancelCheckButton: {
+    marginLeft: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    backgroundColor: "#FF3B30",
+    borderRadius: 4,
+  },
+  cancelCheckButtonText: {
+    color: "#fff",
+    fontSize: 12,
+    fontWeight: "600",
   },
 
   // 表单样式
@@ -2325,11 +2396,27 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: "#e0e0e0",
   },
+  manualSearchHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 8,
+  },
   manualSearchTitle: {
     fontSize: 14,
     fontWeight: "600",
     color: "#333",
-    marginBottom: 8,
+  },
+  goToInventoryButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    backgroundColor: "#007AFF",
+    borderRadius: 6,
+  },
+  goToInventoryButtonText: {
+    color: "#fff",
+    fontSize: 13,
+    fontWeight: "600",
   },
   manualSearchInput: {
     height: 44,
