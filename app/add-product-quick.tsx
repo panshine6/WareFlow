@@ -32,7 +32,8 @@ import SkuGeneratorModal from "@/components/SkuGeneratorModal";
 import BoxManagerModal from "@/components/BoxManagerModal";
 import { compressImage, base64ToDataUrl } from "@/lib/image-utils";
 import type { Product, InventoryHistoryEntry } from "@/types/product";
-import { getAllBoxes, createBox, deleteBox, Box } from "@/lib/box-storage";
+import { getAllBoxes, createBox, deleteBox } from "@/lib/box-storage";
+import type { Box } from "@/types/box";
 import { saveLearningRecord } from "@/lib/ai-learning-storage";
 import { saveLearningRecord as saveSimilarityLearningRecord } from "@/lib/similarity-learning-storage";
 
@@ -40,7 +41,8 @@ import { saveLearningRecord as saveSimilarityLearningRecord } from "@/lib/simila
 type FlowStage = 
   | "detail_photo"      // 拍细节图
   | "overview_photo"    // 拍全景图
-  | "confirm_info";     // 确认信息
+  | "confirm_info"      // 确认信息
+  | "confirm";          // 确认信息（别名）
 
 // 图片压缩配置
 const IMAGE_MAX_SIZE = 2048;
@@ -719,7 +721,7 @@ export default function AddProductQuickScreen() {
               <ThemedText style={styles.skipButtonText}>跳过此步 →</ThemedText>
               <ThemedText style={styles.skipButtonHint}>已手动点数 / 仅查重</ThemedText>
             </Pressable>
-          )
+          )}
         </View>
       </ThemedView>
     );
@@ -1526,6 +1528,7 @@ export default function AddProductQuickScreen() {
             updatedAt: new Date().toISOString(),
             operatorId,
             operatorName,
+            items: [],
           };
           setSelectedBox(newBox);
           // 自动填充货架位置
