@@ -4,7 +4,7 @@
  */
 
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { ProductStorage } from "./product-storage";
+import { ProductStorage } from "./storage";
 
 const DUPLICATE_WARNING_KEY = "sku_duplicate_warnings";
 
