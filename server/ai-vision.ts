@@ -225,14 +225,13 @@ export async function countProductsInImage(imageBase64: string): Promise<number>
 }
 
 /**
- * 对比两张图片的相似度（使用 Claude）
- * 优化版：支持同款不同色识别，提供详细判断理由
+ * 对比两张图片的相似度（单次调用）
  */
-export async function compareImageSimilarity(
+async function compareImageSimilaritySingle(
   imageBase64_1: string,
   imageBase64_2: string
 ): Promise<{ similarityScore: number; analysisNote: string }> {
-  const prompt = `你是一位专业的饰品鉴定专家。请对比这两张产品图片，判断它们是否是同一款饰品。
+  const prompt = `你是一位严格的饰品鉴定专家。请对比这两张产品图片，判断它们是否是同一款饰品。
 
 **重要：只对比饰品主体，忽略以下干扰因素：**
 - 透明塑料袋及其反光、折痕
@@ -240,37 +239,30 @@ export async function compareImageSimilarity(
 - 品牌标签（如"Fashion Jewelry"）
 - 价格标签、条形码
 - 背景、桌面、灯光反射
-- 塑料薄膜的反光和折射差异
 这些包装差异不应影响相似度评分！
 
 **对比重点（按优先级）：**
 1. 饰品的整体形状和轮廓（最重要）
-2. 主要装饰元素（吐坠、吃块、珠子的形状和排列）
-3. 图案和纹理细节
-4. 尺寸和比例
-5. 金属类型和颜色（注意：同款可能有不同颜色）
+2. 主要装饰元素的形状、图案、纹理
+3. 尺寸和比例
+4. 金属类型和颜色
 
-**评分标准：**
-- 95-100%: 完全相同的饰品
-- 90-94%: 同款饰品，不同角度/灯光
-- 85-89%: 同款不同色（形状相同，颜色不同）
-- 75-84%: 相似款式，但设计细节有差异
-- 50-74%: 同类饰品，不同设计
-- 50%以下: 不同饰品
+**严格评分标准：**
+- 95-100%: 完全相同的饰品（同一产品的不同拍摄）
+- 85-94%: 同款不同色（形状、图案完全相同，仅颜色不同）
+- 70-84%: 相似款式（同类型饰品，设计元素相似但有明显差异）
+- 50-69%: 同类饰品（如都是耳环，但设计完全不同）
+- 50%以下: 不同类型的饰品
 
-**特别注意：**
-- 同款饰品可能有不同颜色版本（如金色/银色/古铜色），形状相同应评 85+
-- 灯光和拍摄角度可能导致颜色看起来不同
-- 形状完全相同但颜色明显不同，应评 85-89%
-- 包装不同但饰品相同，应评 90+
+**关键判断规则：**
+- 形状不同 = 不是同款，即使都是同一主题（如都是骷髅）
+- 图案细节不同 = 不是同款（如镳空图案 vs 实心图案）
+- 只有形状、图案、纹理都相同，才能评 85+
+- 不要因为主题相似就给高分（如都是蛛蛛网主题但设计不同）
 
 **返回格式（严格遵守）：**
 SCORE: [数字 0-100]
-NOTE: [中文简要说明，包含判断理由，最多40字]
-
-示例返回：
-SCORE: 87
-NOTE: 形状相同的南瓜耳环，一个银色一个古铜色，可能是同款不同色`;
+NOTE: [中文简要说明，包含判断理由，最多40字]`;
 
   return callWithRetry(async () => {
     const content = await callClaudeVisionCompare(imageBase64_1, imageBase64_2, prompt, 200);
@@ -285,6 +277,77 @@ NOTE: 形状相同的南瓜耳环，一个银色一个古铜色，可能是同�
       analysisNote: noteMatch ? noteMatch[1].trim().substring(0, 50) : "无法分析",
     };
   });
+}
+
+/**
+ * 对比两张图片的相似度（使用 Claude）
+ * 优化版：3次查重取平均值，提高准确性
+ */
+export async function compareImageSimilarity(
+  imageBase64_1: string,
+  imageBase64_2: string
+): Promise<{ similarityScore: number; analysisNote: string; scores: number[]; confidence: 'high' | 'medium' | 'low' }> {
+  console.log("[AI Vision] Starting 3-round similarity comparison...");
+  
+  const results: { similarityScore: number; analysisNote: string }[] = [];
+  
+  // 进行3次查重
+  for (let i = 0; i < 3; i++) {
+    try {
+      console.log(`[AI Vision] Round ${i + 1}/3...`);
+      const result = await compareImageSimilaritySingle(imageBase64_1, imageBase64_2);
+      results.push(result);
+      console.log(`[AI Vision] Round ${i + 1} score: ${result.similarityScore}`);
+      
+      // 每次查重之间稍微延迟，避免速率限制
+      if (i < 2) {
+        await delay(300);
+      }
+    } catch (error) {
+      console.error(`[AI Vision] Round ${i + 1} failed:`, error);
+      // 如果失败，继续尝试
+    }
+  }
+  
+  // 如果没有成功的结果，返回默认值
+  if (results.length === 0) {
+    return {
+      similarityScore: 0,
+      analysisNote: "查重失败",
+      scores: [],
+      confidence: 'low',
+    };
+  }
+  
+  // 计算平均值
+  const scores = results.map(r => r.similarityScore);
+  const avgScore = Math.round(scores.reduce((a, b) => a + b, 0) / scores.length);
+  
+  // 计算标准差来判断置信度
+  const variance = scores.reduce((sum, score) => sum + Math.pow(score - avgScore, 2), 0) / scores.length;
+  const stdDev = Math.sqrt(variance);
+  
+  // 置信度判断：标准差越小，置信度越高
+  let confidence: 'high' | 'medium' | 'low';
+  if (stdDev <= 5) {
+    confidence = 'high';  // 3次结果很接近
+  } else if (stdDev <= 10) {
+    confidence = 'medium';  // 3次结果有一定差异
+  } else {
+    confidence = 'low';  // 3次结果差异较大
+  }
+  
+  // 使用最后一次的分析说明（或者可以选择中间值对应的说明）
+  const lastNote = results[results.length - 1]?.analysisNote || "无法分析";
+  
+  console.log(`[AI Vision] 3-round comparison complete: scores=${scores.join(',')}, avg=${avgScore}, stdDev=${stdDev.toFixed(1)}, confidence=${confidence}`);
+  
+  return {
+    similarityScore: avgScore,
+    analysisNote: lastNote,
+    scores,
+    confidence,
+  };
 }
 
 /**

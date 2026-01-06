@@ -64,6 +64,8 @@ export interface DuplicateCheckResult {
     product: Product;
     similarityScore: number;
     analysisNote: string;
+    scores?: number[];  // 3次查重的分数
+    confidence?: 'high' | 'medium' | 'low';  // 置信度
   }>;
   error?: string;
   /** 统计信息 */

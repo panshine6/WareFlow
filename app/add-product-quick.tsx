@@ -34,6 +34,7 @@ import { compressImage, base64ToDataUrl } from "@/lib/image-utils";
 import type { Product, InventoryHistoryEntry } from "@/types/product";
 import { getAllBoxes, createBox, deleteBox, Box } from "@/lib/box-storage";
 import { saveLearningRecord } from "@/lib/ai-learning-storage";
+import { saveLearningRecord as saveSimilarityLearningRecord } from "@/lib/similarity-learning-storage";
 
 // 流程阶段
 type FlowStage = 
@@ -109,6 +110,18 @@ export default function AddProductQuickScreen() {
   const [showBoxPicker, setShowBoxPicker] = useState(false);
   const [newBoxName, setNewBoxName] = useState("");
   const [showBoxManager, setShowBoxManager] = useState(false);
+
+  // 查重反馈相关状态
+  const [showFeedbackModal, setShowFeedbackModal] = useState(false);
+  const [feedbackDuplicate, setFeedbackDuplicate] = useState<{
+    product: Product;
+    similarityScore: number;
+    analysisNote: string;
+    scores?: number[];
+    confidence?: 'high' | 'medium' | 'low';
+  } | null>(null);
+  const [userSimilarityScore, setUserSimilarityScore] = useState(50);
+  const [userJudgment, setUserJudgment] = useState<'same' | 'similar' | 'different'>('different');
 
   // 加载默认设置
   useEffect(() => {
@@ -1001,6 +1014,19 @@ export default function AddProductQuickScreen() {
                         <ThemedText style={styles.matchQuantity}>
                           库存: {dup.product.quantity}
                         </ThemedText>
+                        {/* 查重反馈按钮 */}
+                        <Pressable
+                          style={styles.feedbackButton}
+                          onPress={(e) => {
+                            e.stopPropagation();
+                            setFeedbackDuplicate(dup);
+                            setUserSimilarityScore(dup.similarityScore);
+                            setUserJudgment(dup.similarityScore >= 85 ? 'same' : dup.similarityScore >= 70 ? 'similar' : 'different');
+                            setShowFeedbackModal(true);
+                          }}
+                        >
+                          <ThemedText style={styles.feedbackButtonText}>📝 反馈</ThemedText>
+                        </Pressable>
                       </View>
                       <ThemedText style={styles.matchArrow}>›</ThemedText>
                     </Pressable>
@@ -1065,6 +1091,163 @@ export default function AddProductQuickScreen() {
                 onPress={handleNewSku}
               >
                 <ThemedText style={styles.confirmButtonText}>确认新建</ThemedText>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      )}
+
+      {/* 查重反馈弹窗 */}
+      {showFeedbackModal && feedbackDuplicate && (
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <ThemedText type="title" style={styles.modalTitle}>查重反馈</ThemedText>
+            
+            {/* 显示对比的两张图片 */}
+            <View style={styles.feedbackImageCompare}>
+              <View style={styles.feedbackImageContainer}>
+                <ThemedText style={styles.feedbackImageLabel}>新图片</ThemedText>
+                <Image source={{ uri: detailImageUri }} style={styles.feedbackImage} />
+              </View>
+              <ThemedText style={styles.feedbackVs}>VS</ThemedText>
+              <View style={styles.feedbackImageContainer}>
+                <ThemedText style={styles.feedbackImageLabel}>库存图片</ThemedText>
+                <Image source={{ uri: feedbackDuplicate.product.detailImageUri }} style={styles.feedbackImage} />
+              </View>
+            </View>
+            
+            {/* AI 结果 */}
+            <View style={styles.feedbackAiResult}>
+              <ThemedText style={styles.feedbackAiLabel}>AI 判断：</ThemedText>
+              <ThemedText style={styles.feedbackAiScore}>
+                相似度 {feedbackDuplicate.similarityScore}%
+                {feedbackDuplicate.scores && ` (三次: ${feedbackDuplicate.scores.join(', ')})`}
+              </ThemedText>
+              {feedbackDuplicate.analysisNote && (
+                <ThemedText style={styles.feedbackAiNote}>💬 {feedbackDuplicate.analysisNote}</ThemedText>
+              )}
+            </View>
+            
+            {/* 用户判断 */}
+            <View style={styles.feedbackUserSection}>
+              <ThemedText style={styles.feedbackSectionTitle}>您的判断：</ThemedText>
+              
+              {/* 判断按钮 */}
+              <View style={styles.feedbackJudgmentButtons}>
+                <Pressable
+                  style={[
+                    styles.feedbackJudgmentButton,
+                    userJudgment === 'same' && styles.feedbackJudgmentButtonActive
+                  ]}
+                  onPress={() => {
+                    setUserJudgment('same');
+                    setUserSimilarityScore(95);
+                  }}
+                >
+                  <ThemedText style={[
+                    styles.feedbackJudgmentText,
+                    userJudgment === 'same' && styles.feedbackJudgmentTextActive
+                  ]}>✅ 相同</ThemedText>
+                </Pressable>
+                <Pressable
+                  style={[
+                    styles.feedbackJudgmentButton,
+                    userJudgment === 'similar' && styles.feedbackJudgmentButtonActive
+                  ]}
+                  onPress={() => {
+                    setUserJudgment('similar');
+                    setUserSimilarityScore(75);
+                  }}
+                >
+                  <ThemedText style={[
+                    styles.feedbackJudgmentText,
+                    userJudgment === 'similar' && styles.feedbackJudgmentTextActive
+                  ]}>🟡 相似</ThemedText>
+                </Pressable>
+                <Pressable
+                  style={[
+                    styles.feedbackJudgmentButton,
+                    userJudgment === 'different' && styles.feedbackJudgmentButtonActive
+                  ]}
+                  onPress={() => {
+                    setUserJudgment('different');
+                    setUserSimilarityScore(30);
+                  }}
+                >
+                  <ThemedText style={[
+                    styles.feedbackJudgmentText,
+                    userJudgment === 'different' && styles.feedbackJudgmentTextActive
+                  ]}>❌ 不同</ThemedText>
+                </Pressable>
+              </View>
+              
+              {/* 相似度滑块 */}
+              <View style={styles.feedbackSliderContainer}>
+                <ThemedText style={styles.feedbackSliderLabel}>
+                  您认为的相似度: {userSimilarityScore}%
+                </ThemedText>
+                <View style={styles.feedbackSliderRow}>
+                  <ThemedText style={styles.feedbackSliderMin}>0%</ThemedText>
+                  <TextInput
+                    style={[styles.feedbackSliderInput, { backgroundColor: inputBg, color: inputColor }]}
+                    value={userSimilarityScore.toString()}
+                    onChangeText={(text) => {
+                      const val = parseInt(text) || 0;
+                      setUserSimilarityScore(Math.min(100, Math.max(0, val)));
+                    }}
+                    keyboardType="number-pad"
+                    maxLength={3}
+                  />
+                  <ThemedText style={styles.feedbackSliderMax}>100%</ThemedText>
+                </View>
+              </View>
+            </View>
+            
+            {/* 按钮 */}
+            <View style={styles.modalButtons}>
+              <Pressable
+                style={[styles.modalButton, styles.cancelButton]}
+                onPress={() => {
+                  setShowFeedbackModal(false);
+                  setFeedbackDuplicate(null);
+                }}
+              >
+                <ThemedText style={styles.cancelButtonText}>取消</ThemedText>
+              </Pressable>
+              <Pressable
+                style={[styles.modalButton, styles.confirmButton]}
+                onPress={async () => {
+                  try {
+                    // 保存学习数据
+                    const newImageBase64 = detailImageUri.startsWith('data:') 
+                      ? detailImageUri.split(',')[1] 
+                      : await imageToBase64(detailImageUri);
+                    const existingImageBase64 = feedbackDuplicate.product.detailImageUri.startsWith('data:')
+                      ? feedbackDuplicate.product.detailImageUri.split(',')[1]
+                      : await imageToBase64(feedbackDuplicate.product.detailImageUri);
+                    
+                    await saveSimilarityLearningRecord({
+                      newImageBase64,
+                      existingImageBase64,
+                      existingProductSku: feedbackDuplicate.product.sku,
+                      aiSimilarityScore: feedbackDuplicate.similarityScore,
+                      aiScores: feedbackDuplicate.scores || [feedbackDuplicate.similarityScore],
+                      aiConfidence: feedbackDuplicate.confidence || 'medium',
+                      aiAnalysisNote: feedbackDuplicate.analysisNote,
+                      userSimilarityScore,
+                      userJudgment,
+                    });
+                    
+                    alert('反馈已保存，感谢您的贡献！');
+                    setShowFeedbackModal(false);
+                    setFeedbackDuplicate(null);
+                  } catch (error) {
+                    console.error('Failed to save feedback:', error);
+                    alert('保存失败，请重试');
+                  }
+                }}
+              >
+                <ThemedText style={styles.confirmButtonText}>提交反馈</ThemedText>
               </Pressable>
             </View>
           </View>
@@ -2147,5 +2330,132 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: "600",
     color: "#fff",
+  },
+
+  // 查重反馈按钮样式
+  feedbackButton: {
+    marginTop: 6,
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    backgroundColor: "rgba(0, 122, 255, 0.1)",
+    borderRadius: 4,
+    alignSelf: "flex-start",
+  },
+  feedbackButtonText: {
+    fontSize: 11,
+    color: "#007AFF",
+  },
+
+  // 查重反馈弹窗样式
+  feedbackImageCompare: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 16,
+    gap: 8,
+  },
+  feedbackImageContainer: {
+    alignItems: "center",
+  },
+  feedbackImageLabel: {
+    fontSize: 12,
+    color: "#666",
+    marginBottom: 4,
+  },
+  feedbackImage: {
+    width: 100,
+    height: 100,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#ddd",
+  },
+  feedbackVs: {
+    fontSize: 16,
+    fontWeight: "bold",
+    color: "#999",
+  },
+  feedbackAiResult: {
+    backgroundColor: "#f5f5f5",
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 16,
+  },
+  feedbackAiLabel: {
+    fontSize: 13,
+    color: "#666",
+    marginBottom: 4,
+  },
+  feedbackAiScore: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#007AFF",
+    marginBottom: 4,
+  },
+  feedbackAiNote: {
+    fontSize: 12,
+    color: "#888",
+  },
+  feedbackUserSection: {
+    marginBottom: 16,
+  },
+  feedbackSectionTitle: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#000",
+    marginBottom: 12,
+  },
+  feedbackJudgmentButtons: {
+    flexDirection: "row",
+    gap: 8,
+    marginBottom: 16,
+  },
+  feedbackJudgmentButton: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 8,
+    backgroundColor: "#f0f0f0",
+    alignItems: "center",
+  },
+  feedbackJudgmentButtonActive: {
+    backgroundColor: "#007AFF",
+  },
+  feedbackJudgmentText: {
+    fontSize: 14,
+    fontWeight: "500",
+    color: "#333",
+  },
+  feedbackJudgmentTextActive: {
+    color: "#fff",
+  },
+  feedbackSliderContainer: {
+    marginBottom: 8,
+  },
+  feedbackSliderLabel: {
+    fontSize: 13,
+    color: "#666",
+    marginBottom: 8,
+    textAlign: "center",
+  },
+  feedbackSliderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 12,
+  },
+  feedbackSliderMin: {
+    fontSize: 12,
+    color: "#999",
+  },
+  feedbackSliderMax: {
+    fontSize: 12,
+    color: "#999",
+  },
+  feedbackSliderInput: {
+    width: 80,
+    height: 40,
+    borderRadius: 8,
+    textAlign: "center",
+    fontSize: 18,
+    fontWeight: "600",
   },
 });

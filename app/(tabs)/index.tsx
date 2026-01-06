@@ -33,6 +33,7 @@ import { SkuGenerator } from "@/lib/sku-generator";
 import SkuGeneratorModal from "@/components/SkuGeneratorModal";
 import BoxManagerModal from "@/components/BoxManagerModal";
 import { downloadLearningData, getLearningStats } from "@/lib/ai-learning-storage";
+import { downloadLearningData as downloadSimilarityLearningData, getLearningStats as getSimilarityLearningStats } from "@/lib/similarity-learning-storage";
 import type { Product } from "@/types/product";
 
 export default function HomeScreen() {
@@ -539,6 +540,54 @@ export default function HomeScreen() {
             >
               <ThemedText style={styles.bottomSheetItemIcon}>🧠</ThemedText>
               <ThemedText style={styles.bottomSheetItemText}>AI计数学习数据</ThemedText>
+              <ThemedText style={styles.bottomSheetItemArrow}>›</ThemedText>
+            </Pressable>
+
+            {/* AI查重学习数据 */}
+            <Pressable 
+              style={styles.bottomSheetItem}
+              onPress={async () => {
+                try {
+                  const stats = await getSimilarityLearningStats();
+                  
+                  if (stats.totalRecords === 0) {
+                    if (Platform.OS === 'web') {
+                      window.alert('暂无学习数据\n\n请先在查重结果中点击"反馈"按钮收集数据');
+                    } else {
+                      Alert.alert('暂无学习数据', '请先在查重结果中点击"反馈"按钮收集数据');
+                    }
+                    return;
+                  }
+                  
+                  // 显示统计信息并确认导出
+                  const confirmMsg = `AI查重学习数据统计\n\n总记录数: ${stats.totalRecords}\n相同判断: ${stats.sameCount}\n相似判断: ${stats.similarCount}\n不同判断: ${stats.differentCount}\n平均偏差: ${stats.avgDeviation}\nAI高估率: ${stats.overEstimateRate}%\nAI低估率: ${stats.underEstimateRate}%\n\n是否导出学习数据文件？`;
+                  
+                  if (Platform.OS === 'web') {
+                    if (window.confirm(confirmMsg)) {
+                      await downloadSimilarityLearningData();
+                      window.alert('导出成功\n\n文件已保存到下载文件夹');
+                    }
+                  } else {
+                    Alert.alert('AI查重学习数据', confirmMsg, [
+                      { text: '取消', style: 'cancel' },
+                      { text: '导出', onPress: async () => {
+                        await downloadSimilarityLearningData();
+                        Alert.alert('导出成功', '文件已保存到下载文件夹');
+                      }}
+                    ]);
+                  }
+                } catch (error) {
+                  console.error('[Settings] Failed to export similarity learning data:', error);
+                  if (Platform.OS === 'web') {
+                    window.alert('导出失败\n\n请稍后重试');
+                  } else {
+                    Alert.alert('导出失败', '请稍后重试');
+                  }
+                }
+              }}
+            >
+              <ThemedText style={styles.bottomSheetItemIcon}>🔍</ThemedText>
+              <ThemedText style={styles.bottomSheetItemText}>AI查重学习数据</ThemedText>
               <ThemedText style={styles.bottomSheetItemArrow}>›</ThemedText>
             </Pressable>
 
