@@ -440,7 +440,9 @@ export default function AddProductQuickScreen() {
     setShowCountModal(false);
     
     // 保存AI学习数据（如果有全景图和AI计数结果，且尚未保存）
-    if (overviewImageBase64 && aiCount > 0 && !aiLearningSaved) {
+    // 注意：aiCount >= 0 而不是 > 0，因为 AI 返回 0 也是有效结果
+    // 使用 countStatus === 'done' 来判断 AI 是否已经完成计数
+    if (overviewImageBase64 && countStatus === 'done' && !aiLearningSaved) {
       try {
         await saveLearningRecord({
           imageBase64: overviewImageBase64,
@@ -649,7 +651,8 @@ export default function AddProductQuickScreen() {
       }
 
       // 保存AI学习数据（如果有全景图和AI计数结果，且尚未保存）
-      if (overviewImageBase64 && aiCount > 0 && !aiLearningSaved) {
+      // 注意：使用 countStatus === 'done' 来判断 AI 是否已经完成计数
+      if (overviewImageBase64 && countStatus === 'done' && !aiLearningSaved) {
         try {
           await saveLearningRecord({
             imageBase64: overviewImageBase64,
