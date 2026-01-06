@@ -134,6 +134,12 @@ export default function AddProductQuickScreen() {
   const [showColorPicker, setShowColorPicker] = useState(false);
   const [colorPickerTargetProduct, setColorPickerTargetProduct] = useState<Product | null>(null);
 
+  // 手动搜索产品相关状态
+  const [manualSearchQuery, setManualSearchQuery] = useState("");
+  const [manualSearchResults, setManualSearchResults] = useState<Product[]>([]);
+  const [allProducts, setAllProducts] = useState<Product[]>([]);
+  const [showManualSearch, setShowManualSearch] = useState(false);
+
   // 加载默认设置
   useEffect(() => {
     const loadDefaults = async () => {
@@ -195,6 +201,11 @@ export default function AddProductQuickScreen() {
             console.log("[QuickAdd] Restored last selected box by id:", lastBox.name);
           }
         }
+
+        // 加载所有产品（用于手动搜索）
+        const products = await ProductStorage.getActive();
+        setAllProducts(products);
+        console.log("[QuickAdd] Loaded", products.length, "products for manual search");
       } catch (error) {
         console.error("[QuickAdd] Failed to load defaults:", error);
       }
@@ -405,6 +416,28 @@ export default function AddProductQuickScreen() {
   // 取消合并选择
   const handleCancelMerge = () => {
     setSelectedSimilarProduct(null);
+  };
+
+  // 手动搜索产品
+  const handleManualSearch = (query: string) => {
+    setManualSearchQuery(query);
+    if (query.trim() === "") {
+      setManualSearchResults([]);
+      return;
+    }
+    // 按 SKU 搜索，不区分大小写
+    const results = allProducts.filter(p => 
+      p.sku.toLowerCase().includes(query.toLowerCase())
+    ).slice(0, 10); // 最多显示 10 个结果
+    setManualSearchResults(results);
+  };
+
+  // 手动选择产品（用于合并或同款不同色）
+  const handleManualSelectProduct = (product: Product) => {
+    setSelectedSimilarProduct(product);
+    setShowManualSearch(false);
+    setManualSearchQuery("");
+    setManualSearchResults([]);
   };
 
   // 同款不同色 - 打开颜色选择器
@@ -1026,108 +1059,149 @@ export default function AddProductQuickScreen() {
             </View>
 
             {/* 相似产品列表 - 按相似度排序，最多显示5个 */}
-            {duplicateResult?.duplicates && duplicateResult.duplicates.length > 0 ? (
-              <ScrollView style={styles.matchList}>
-                <ThemedText style={styles.matchListTitle}>
-                  发现 {Math.min(duplicateResult.duplicates.length, 5)} 个相似产品（点击查看详情）：
+            <ScrollView style={styles.matchList}>
+              {duplicateResult?.duplicates && duplicateResult.duplicates.length > 0 && (
+                <>
+                  <ThemedText style={styles.matchListTitle}>
+                    AI 发现 {Math.min(duplicateResult.duplicates.length, 5)} 个相似产品（点击选择）：
+                  </ThemedText>
+                  {duplicateResult.duplicates
+                    .slice()
+                    .sort((a, b) => b.similarityScore - a.similarityScore)
+                    .slice(0, 5)
+                    .map((dup, index) => {
+                      const getSimilarityBgColor = (score: number) => {
+                        if (score >= 85) return '#d4edda';
+                        if (score >= 75) return '#fff3cd';
+                        return '#f5f5f5';
+                      };
+                      const bgColor = getSimilarityBgColor(dup.similarityScore);
+                      
+                      return (
+                        <Pressable
+                          key={dup.product.id}
+                          style={[
+                            styles.matchItem,
+                            { backgroundColor: bgColor },
+                            selectedSimilarProduct?.id === dup.product.id && styles.matchItemSelected
+                          ]}
+                          onPress={() => handleViewSimilarProduct(dup.product)}
+                        >
+                          <Image
+                            source={{ uri: dup.product.detailImageUri }}
+                            style={styles.matchImage}
+                          />
+                          <View style={styles.matchInfo}>
+                            <ThemedText style={styles.matchSku}>{dup.product.sku}</ThemedText>
+                            <ThemedText style={[
+                              styles.matchSimilarity,
+                              dup.similarityScore >= 85 && { color: '#155724', fontWeight: '700' },
+                              dup.similarityScore >= 75 && dup.similarityScore < 85 && { color: '#856404', fontWeight: '600' }
+                            ]}>
+                              相似度: {dup.similarityScore}%
+                              {dup.similarityScore >= 85 && ' 🟢'}
+                              {dup.similarityScore >= 75 && dup.similarityScore < 85 && ' 🟡'}
+                            </ThemedText>
+                            <ThemedText style={styles.matchQuantity}>
+                              库存: {dup.product.quantity}
+                            </ThemedText>
+                          </View>
+                          <ThemedText style={styles.matchArrow}>›</ThemedText>
+                        </Pressable>
+                      );
+                    })}
+                </>
+              )}
+
+              {/* 手动搜索区域 - 始终显示 */}
+              <View style={styles.manualSearchSection}>
+                <ThemedText style={styles.manualSearchTitle}>
+                  🔍 手动搜索现有产品：
                 </ThemedText>
-                <ThemedText style={styles.matchLegend}>
-                  🟢 ≥ 85% 高度相似  🟡 75-84% 中度相似  ⚪ 50-74% 低度相似
-                </ThemedText>
-                {duplicateResult.duplicates
-                  .slice() // 创建副本避免修改原数组
-                  .sort((a, b) => b.similarityScore - a.similarityScore) // 按相似度从高到低排序
-                  .slice(0, 5) // 最多显示5个
-                  .map((dup, index) => {
-                    // 根据相似度确定背景色
-                    const getSimilarityBgColor = (score: number) => {
-                      if (score >= 85) return '#d4edda'; // 绿色 - 高度相似
-                      if (score >= 75) return '#fff3cd'; // 黄色 - 中度相似
-                      return '#f5f5f5'; // 无色 - 低度相似
-                    };
-                    const bgColor = getSimilarityBgColor(dup.similarityScore);
-                    
-                    return (
-                  <View key={dup.product.id}>
-                    <Pressable
-                      style={[
-                        styles.matchItem,
-                        { backgroundColor: bgColor },
-                        selectedSimilarProduct?.id === dup.product.id && styles.matchItemSelected
-                      ]}
-                      onPress={() => handleViewSimilarProduct(dup.product)}
-                    >
-                      <Image
-                        source={{ uri: dup.product.detailImageUri }}
-                        style={styles.matchImage}
-                      />
-                      <View style={styles.matchInfo}>
-                        <ThemedText style={styles.matchSku}>{dup.product.sku}</ThemedText>
-                        <ThemedText style={[
-                          styles.matchSimilarity,
-                          dup.similarityScore >= 85 && { color: '#155724', fontWeight: '700' },
-                          dup.similarityScore >= 75 && dup.similarityScore < 85 && { color: '#856404', fontWeight: '600' }
-                        ]}>
-                          相似度: {dup.similarityScore}%
-                          {dup.similarityScore >= 85 && ' 🟢'}
-                          {dup.similarityScore >= 75 && dup.similarityScore < 85 && ' 🟡'}
-                        </ThemedText>
-                        {/* AI 判断理由 */}
-                        {dup.analysisNote && dup.analysisNote !== '无法分析' && (
-                          <ThemedText style={styles.matchAnalysisNote}>
-                            💬 {dup.analysisNote}
+                <TextInput
+                  style={[styles.manualSearchInput, { backgroundColor: inputBg, color: inputColor }]}
+                  value={manualSearchQuery}
+                  onChangeText={handleManualSearch}
+                  placeholder="输入 SKU 搜索..."
+                  placeholderTextColor={placeholderColor}
+                />
+                {/* 搜索结果 */}
+                {manualSearchResults.length > 0 && (
+                  <View style={styles.manualSearchResults}>
+                    {manualSearchResults.map((product) => (
+                      <Pressable
+                        key={product.id}
+                        style={[
+                          styles.matchItem,
+                          selectedSimilarProduct?.id === product.id && styles.matchItemSelected
+                        ]}
+                        onPress={() => handleManualSelectProduct(product)}
+                      >
+                        <Image
+                          source={{ uri: product.detailImageUri }}
+                          style={styles.matchImage}
+                        />
+                        <View style={styles.matchInfo}>
+                          <ThemedText style={styles.matchSku}>{product.sku}</ThemedText>
+                          <ThemedText style={styles.matchQuantity}>
+                            库存: {product.quantity}
                           </ThemedText>
-                        )}
-                        <ThemedText style={styles.matchQuantity}>
-                          库存: {dup.product.quantity}
-                        </ThemedText>
-                        {/* 查重反馈按钮 */}
-                        <Pressable
-                          style={styles.feedbackButton}
-                          onPress={(e) => {
-                            e.stopPropagation();
-                            setFeedbackDuplicate(dup);
-                            setUserSimilarityScore(dup.similarityScore);
-                            setUserJudgment(dup.similarityScore >= 85 ? 'same' : dup.similarityScore >= 70 ? 'similar' : 'different');
-                            setShowFeedbackModal(true);
-                          }}
-                        >
-                          <ThemedText style={styles.feedbackButtonText}>📝 反馈</ThemedText>
-                        </Pressable>
-                      </View>
-                      <ThemedText style={styles.matchArrow}>›</ThemedText>
-                    </Pressable>
-                    {/* 如果该产品被选中，显示操作按钮 */}
-                    {selectedSimilarProduct?.id === dup.product.id && (
-                      <View style={styles.mergeButtonsContainer}>
-                        <Pressable
-                          style={styles.cancelMergeButton}
-                          onPress={handleCancelMerge}
-                        >
-                          <ThemedText style={styles.cancelMergeButtonText}>取消</ThemedText>
-                        </Pressable>
-                        <Pressable
-                          style={styles.sameStyleButton}
-                          onPress={() => handleSameStyleDifferentColor(dup.product)}
-                        >
-                          <ThemedText style={styles.sameStyleButtonText}>同款不同色</ThemedText>
-                        </Pressable>
-                        <Pressable
-                          style={styles.confirmMergeButton}
-                          onPress={handleConfirmMerge}
-                        >
-                          <ThemedText style={styles.confirmMergeButtonText}>合并到此款</ThemedText>
-                        </Pressable>
-                      </View>
-                    )}
+                        </View>
+                        <ThemedText style={styles.matchArrow}>›</ThemedText>
+                      </Pressable>
+                    ))}
                   </View>
-                    );
-                  })}
-              </ScrollView>
-            ) : (
-              <ThemedText style={styles.noMatchText}>
-                {duplicateCheckStatus === "done" ? "未发现相似产品，这是一个新款式" : "正在查重..."}
-              </ThemedText>
+                )}
+              </View>
+
+              {/* 如果没有 AI 结果也没有搜索结果，显示提示 */}
+              {(!duplicateResult?.duplicates || duplicateResult.duplicates.length === 0) && 
+               manualSearchResults.length === 0 && 
+               !manualSearchQuery && (
+                <ThemedText style={styles.noMatchText}>
+                  {duplicateCheckStatus === "done" 
+                    ? "AI 未发现相似产品，可以手动搜索或直接新建" 
+                    : duplicateCheckStatus === "running"
+                      ? "正在查重..."
+                      : "等待查重..."}
+                </ThemedText>
+              )}
+            </ScrollView>
+
+            {/* 选中产品后显示操作按钮 */}
+            {selectedSimilarProduct && (
+              <View style={styles.selectedProductActions}>
+                <View style={styles.selectedProductInfo}>
+                  <Image
+                    source={{ uri: selectedSimilarProduct.detailImageUri }}
+                    style={styles.selectedProductImage}
+                  />
+                  <View style={styles.selectedProductText}>
+                    <ThemedText style={styles.selectedProductSku}>已选择: {selectedSimilarProduct.sku}</ThemedText>
+                    <ThemedText style={styles.selectedProductQuantity}>库存: {selectedSimilarProduct.quantity}</ThemedText>
+                  </View>
+                </View>
+                <View style={styles.mergeButtonsContainer}>
+                  <Pressable
+                    style={styles.cancelMergeButton}
+                    onPress={handleCancelMerge}
+                  >
+                    <ThemedText style={styles.cancelMergeButtonText}>取消选择</ThemedText>
+                  </Pressable>
+                  <Pressable
+                    style={styles.sameStyleButton}
+                    onPress={() => handleSameStyleDifferentColor(selectedSimilarProduct)}
+                  >
+                    <ThemedText style={styles.sameStyleButtonText}>同款不同色</ThemedText>
+                  </Pressable>
+                  <Pressable
+                    style={styles.confirmMergeButton}
+                    onPress={handleConfirmMerge}
+                  >
+                    <ThemedText style={styles.confirmMergeButtonText}>合并到此款</ThemedText>
+                  </Pressable>
+                </View>
+              </View>
             )}
 
             {/* SKU 输入 */}
@@ -2125,6 +2199,63 @@ const styles = StyleSheet.create({
     textAlign: "center",
     color: "#666",
     marginVertical: 20,
+  },
+  // 手动搜索区域样式
+  manualSearchSection: {
+    marginTop: 16,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: "#e0e0e0",
+  },
+  manualSearchTitle: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#333",
+    marginBottom: 8,
+  },
+  manualSearchInput: {
+    height: 44,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    fontSize: 15,
+    borderWidth: 1,
+    borderColor: "#ddd",
+  },
+  manualSearchResults: {
+    marginTop: 8,
+  },
+  // 选中产品操作区域样式
+  selectedProductActions: {
+    marginTop: 16,
+    padding: 12,
+    backgroundColor: "#f0f8ff",
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: "#007AFF",
+  },
+  selectedProductInfo: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 12,
+  },
+  selectedProductImage: {
+    width: 50,
+    height: 50,
+    borderRadius: 8,
+    marginRight: 12,
+  },
+  selectedProductText: {
+    flex: 1,
+  },
+  selectedProductSku: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: "#007AFF",
+  },
+  selectedProductQuantity: {
+    fontSize: 13,
+    color: "#666",
+    marginTop: 2,
   },
   skuInputContainer: {
     marginBottom: 16,
