@@ -87,7 +87,7 @@ export interface DuplicateCheckResult {
 export async function performDuplicateCheck(
   detailImageUri: string,
   detailImageBase64?: string,
-  threshold: number = 50 // 降低阈值到50%，显示更多相似产品供用户参考
+  threshold: number = 60 // 阈值60%，过滤不相关的产品
 ): Promise<DuplicateCheckResult> {
   const startTime = Date.now();
   
