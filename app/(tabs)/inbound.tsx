@@ -463,13 +463,7 @@ export default function InboundScreen() {
             ]}
             onPress={() => router.push("/add-product-quick" as any)}
           >
-            <View style={styles.addButtonContent}>
-              <ThemedText style={styles.addButtonIcon}>📦</ThemedText>
-              <View style={styles.addButtonTextContainer}>
-                <ThemedText style={styles.addButtonText}>添加新产品</ThemedText>
-                <ThemedText style={styles.addButtonHint}>拍照 → 填写信息 → 保存</ThemedText>
-              </View>
-            </View>
+            <ThemedText style={styles.addButtonTextSimple}>添加新产品</ThemedText>
           </Pressable>
 
           {/* 入库流程说明 */}
@@ -644,7 +638,16 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 3,
     marginBottom: 24,
+    alignItems: "center",
+    justifyContent: "center",
   },
+  addButtonTextSimple: {
+    color: "#000",
+    fontSize: 24,
+    fontWeight: "700",
+    textAlign: "center",
+  },
+  // 保留旧样式以防止其他地方引用
   addButtonContent: {
     flexDirection: "row",
     alignItems: "center",
