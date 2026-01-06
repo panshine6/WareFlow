@@ -236,14 +236,14 @@ export const BoxGenerator = {
    * 获取 Box 中的产品数量
    * 注意：这个函数需要访问产品数据，由调用方提供产品列表
    */
-  getProductCountInBox(boxCode: string, products: Array<{ boxCode?: string }>): number {
-    return products.filter(p => p.boxCode === boxCode).length;
+  getProductCountInBox(boxCode: string, products: Array<{ boxName?: string; boxCode?: string }>): number {
+    return products.filter(p => p.boxName === boxCode || p.boxCode === boxCode).length;
   },
 
   /**
    * 检查 Box 是否可以删除（没有关联产品）
    */
-  canDeleteBox(boxCode: string, products: Array<{ boxCode?: string }>): boolean {
+  canDeleteBox(boxCode: string, products: Array<{ boxName?: string; boxCode?: string }>): boolean {
     return this.getProductCountInBox(boxCode, products) === 0;
   },
 };

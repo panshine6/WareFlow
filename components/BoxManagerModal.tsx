@@ -47,7 +47,7 @@ interface BoxManagerModalProps {
   visible: boolean;
   onClose: () => void;
   onSelect?: (boxCode: string, shelfLocation: string) => void; // 选择 Box 时的回调
-  products?: Array<{ boxCode?: string }>; // 产品列表，用于统计
+  products?: Array<{ boxCode?: string; boxName?: string }>; // 产品列表，用于统计
   mode?: "manage" | "select"; // 管理模式或选择模式
 }
 

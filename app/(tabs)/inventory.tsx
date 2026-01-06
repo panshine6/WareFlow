@@ -192,10 +192,16 @@ export default function InventoryScreen() {
     if (selectedBoxId !== null) {
       if (selectedBoxId === "unassigned") {
         // 筛选未关联 Box 的产品
-        result = result.filter((p) => !p.boxId);
+        result = result.filter((p) => !p.boxId && !p.boxName);
       } else {
-        // 筛选指定 Box 的产品
-        result = result.filter((p) => p.boxId === selectedBoxId);
+        // 筛选指定 Box 的产品（同时支持 boxId 和 boxName）
+        // 找到选中的 Box 信息
+        const selectedBox = boxes.find(b => b.id === selectedBoxId);
+        result = result.filter((p) => 
+          p.boxId === selectedBoxId || 
+          p.boxName === selectedBoxId ||
+          (selectedBox && (p.boxId === selectedBox.name || p.boxName === selectedBox.name))
+        );
       }
     }
 
