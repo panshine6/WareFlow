@@ -18,6 +18,7 @@ import { useColorScheme } from "@/hooks/use-color-scheme";
 import { trpc, createTRPCClient } from "@/lib/trpc";
 import { initManusRuntime, subscribeSafeAreaInsets } from "@/lib/manus-runtime";
 import { initDatabase } from "@/lib/database-init";
+import { checkVersionAndClearCache } from "@/lib/cache-buster";
 
 const DEFAULT_WEB_INSETS: EdgeInsets = { top: 0, right: 0, bottom: 0, left: 0 };
 const DEFAULT_WEB_FRAME: Rect = { x: 0, y: 0, width: 0, height: 0 };
@@ -43,6 +44,13 @@ export default function RootLayout() {
   // Initialize database (SQLite for native, IndexedDB for web)
   useEffect(() => {
     initDatabase();
+  }, []);
+
+  // Check version and clear cache if needed (web only)
+  useEffect(() => {
+    if (Platform.OS === 'web') {
+      checkVersionAndClearCache();
+    }
   }, []);
 
   const handleSafeAreaUpdate = useCallback((metrics: Metrics) => {
