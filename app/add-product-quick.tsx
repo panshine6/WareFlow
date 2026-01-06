@@ -35,6 +35,7 @@ import { compressImage, base64ToDataUrl } from "@/lib/image-utils";
 import type { Product, InventoryHistoryEntry } from "@/types/product";
 import { getAllBoxes, createBox, deleteBox } from "@/lib/box-storage";
 import type { Box } from "@/types/box";
+import { BoxGenerator, BoxRecord } from "@/lib/box-generator";
 import { saveLearningRecord } from "@/lib/ai-learning-storage";
 import { saveLearningRecord as saveSimilarityLearningRecord } from "@/lib/similarity-learning-storage";
 
@@ -158,25 +159,37 @@ export default function AddProductQuickScreen() {
           setOperatorId(parseInt(user.id?.toString() || "1"));
         }
 
-        // 加载 Box 列表
-        const allBoxes = await getAllBoxes();
-        const openBoxes = allBoxes.filter(b => b.status === 'open'); // 只显示开放中的 Box
-        setBoxes(openBoxes);
+        // 加载 Box 列表（使用 BoxGenerator，因为 Box 是通过 BoxGenerator 创建的）
+        const boxRecords = await BoxGenerator.getAllBoxes();
+        console.log("[QuickAdd] Loaded box records from BoxGenerator:", boxRecords.length);
+        
+        // 将 BoxRecord 转换为 Box 类型，以便与现有代码兼容
+        const convertedBoxes: Box[] = boxRecords.map(record => ({
+          id: record.code, // 使用 code 作为 id
+          name: record.code,
+          location: record.shelfLocation,
+          status: 'open' as const,
+          createdAt: record.createdAt,
+          updatedAt: record.updatedAt,
+          operatorId: 0,
+          operatorName: '',
+          items: [],
+        }));
+        setBoxes(convertedBoxes);
         
         // 设置上次选择的 Box 为默认值
-        // 优先使用 lastBoxName 匹配，因为 name 是稳定的标识符（如 LB-RF-Box-0001）
-        // lastBoxId 可能是临时 ID（temp_xxx），无法匹配
+        // 使用 lastBoxName 匹配，因为 name/code 是稳定的标识符（如 LB-ED-Box-0001）
         if (settings.lastBoxName) {
-          const lastBox = openBoxes.find(b => b.name === settings.lastBoxName);
+          const lastBox = convertedBoxes.find(b => b.name === settings.lastBoxName);
           if (lastBox) {
             setSelectedBox(lastBox);
             console.log("[QuickAdd] Restored last selected box by name:", lastBox.name);
           } else {
-            console.log("[QuickAdd] Last box not found in open boxes:", settings.lastBoxName);
+            console.log("[QuickAdd] Last box not found in boxes:", settings.lastBoxName, "Available:", convertedBoxes.map(b => b.name));
           }
         } else if (settings.lastBoxId) {
           // 向后兼容：尝试用 id 匹配
-          const lastBox = openBoxes.find(b => b.id === settings.lastBoxId);
+          const lastBox = convertedBoxes.find(b => b.id === settings.lastBoxId);
           if (lastBox) {
             setSelectedBox(lastBox);
             console.log("[QuickAdd] Restored last selected box by id:", lastBox.name);
