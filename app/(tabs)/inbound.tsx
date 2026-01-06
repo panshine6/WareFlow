@@ -456,10 +456,7 @@ export default function InboundScreen() {
           <Pressable
             style={({ pressed }) => [
               styles.addButton,
-              {
-                backgroundColor: Colors[colorScheme ?? "light"].tint,
-                opacity: pressed ? 0.8 : 1,
-              },
+              { opacity: pressed ? 0.8 : 1 },
             ]}
             onPress={() => router.push("/add-product-quick" as any)}
           >
@@ -632,6 +629,7 @@ const styles = StyleSheet.create({
   addButton: {
     borderRadius: 16,
     padding: 20,
+    backgroundColor: "#007AFF",  // 天蓝色，与入库操作按钮一致
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
@@ -642,9 +640,9 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   addButtonTextSimple: {
-    color: "#000",
-    fontSize: 24,
-    fontWeight: "700",
+    color: "#fff",  // 白色文字，与天蓝色背景协调
+    fontSize: 18,   // 参考入库流程标题的字号
+    fontWeight: "700",  // 参考入库流程标题的字重
     textAlign: "center",
   },
   // 保留旧样式以防止其他地方引用
