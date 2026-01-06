@@ -9,6 +9,7 @@ import {
   Platform,
   Pressable,
   RefreshControl,
+  ScrollView,
   StyleSheet,
   TouchableWithoutFeedback,
   View,
@@ -276,18 +277,23 @@ export default function HomeScreen() {
 
   return (
     <ThemedView style={styles.container}>
-      {/* 顶部区域 */}
-      <View
-        style={[
-          styles.header,
-          {
-            paddingTop: Math.max(insets.top, 16),
-            paddingHorizontal: 16,
-          },
-        ]}
+      <ScrollView 
+        style={styles.scrollView}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
       >
-        {/* 顶部标题和设置按钮 */}
-        <View style={styles.titleRow}>
+        {/* 顶部区域 */}
+        <View
+          style={[
+            styles.header,
+            {
+              paddingTop: Math.max(insets.top, 16),
+              paddingHorizontal: 16,
+            },
+          ]}
+        >
+          {/* 顶部标题和设置按钮 */}
+          <View style={styles.titleRow}>
           <ThemedText type="title" style={styles.title}>
             WareFlow
           </ThemedText>
@@ -438,6 +444,7 @@ export default function HomeScreen() {
           </View>
         </View>
       </View>
+      </ScrollView>
 
       {/* 设置底部弹窗 */}
       <Modal
@@ -812,6 +819,13 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+  },
+  scrollView: {
+    flex: 1,
+  },
+  scrollContent: {
+    flexGrow: 1,
+    paddingBottom: 20,
   },
   loadingContainer: {
     flex: 1,
