@@ -34,6 +34,7 @@ import SkuGeneratorModal from "@/components/SkuGeneratorModal";
 import BoxManagerModal from "@/components/BoxManagerModal";
 import { downloadLearningData, getLearningStats } from "@/lib/ai-learning-storage";
 import { downloadLearningData as downloadSimilarityLearningData, getLearningStats as getSimilarityLearningStats } from "@/lib/similarity-learning-storage";
+import { getDuplicateWarnings, dismissDuplicateWarning, scanForDuplicateSKUs, DuplicateSKUWarning } from "@/lib/sku-duplicate-check";
 import type { Product } from "@/types/product";
 
 export default function HomeScreen() {
@@ -67,6 +68,10 @@ export default function HomeScreen() {
   const [showDownloadPrompt, setShowDownloadPrompt] = useState(false);
   const [cloudProductCount, setCloudProductCount] = useState(0);
   const [downloading, setDownloading] = useState(false);
+
+  // SKU 重复警告
+  const [duplicateWarnings, setDuplicateWarnings] = useState<DuplicateSKUWarning[]>([]);
+  const [showDuplicateWarning, setShowDuplicateWarning] = useState(false);
 
   // 出库统计数据
   const [outboundStats, setOutboundStats] = useState({
@@ -148,11 +153,39 @@ export default function HomeScreen() {
     loadCurrentUser();
   }, []);
 
+  // 加载 SKU 重复警告
+  const loadDuplicateWarnings = async () => {
+    try {
+      const warnings = await getDuplicateWarnings();
+      setDuplicateWarnings(warnings);
+      if (warnings.length > 0) {
+        setShowDuplicateWarning(true);
+      }
+    } catch (error) {
+      console.error("Failed to load duplicate warnings:", error);
+    }
+  };
+
+  // 忽略重复警告
+  const handleDismissWarning = async (sku: string) => {
+    await dismissDuplicateWarning(sku);
+    setDuplicateWarnings(prev => prev.filter(w => w.sku !== sku));
+    if (duplicateWarnings.length <= 1) {
+      setShowDuplicateWarning(false);
+    }
+  };
+
+  // 查看重复产品
+  const handleViewDuplicateProduct = (productId: string) => {
+    router.push(`/product-detail?id=${productId}`);
+  };
+
   // 页面获得焦点时重新加载数据
   useFocusEffect(
     useCallback(() => {
       loadProducts();
       loadOutboundStats();
+      loadDuplicateWarnings();
       checkAndPromptDownload();
     }, [])
   );
@@ -330,6 +363,19 @@ export default function HomeScreen() {
           </View>
         </View>
 
+        {/* SKU 重复警告 */}
+        {duplicateWarnings.length > 0 && (
+          <Pressable 
+            style={styles.duplicateWarningBanner}
+            onPress={() => setShowDuplicateWarning(true)}
+          >
+            <ThemedText style={styles.duplicateWarningIcon}>⚠️</ThemedText>
+            <ThemedText style={styles.duplicateWarningText}>
+              发现 {duplicateWarnings.length} 个重复 SKU，点击查看
+            </ThemedText>
+          </Pressable>
+        )}
+
         {/* 出库统计区 - 三个卡片 */}
         <View style={styles.statsContainer}>
           <View style={[styles.statCard, styles.outboundStatCard]}>
@@ -446,6 +492,71 @@ export default function HomeScreen() {
         </View>
       </View>
       </ScrollView>
+
+      {/* SKU 重复警告弹窗 */}
+      <Modal
+        visible={showDuplicateWarning}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowDuplicateWarning(false)}
+      >
+        <Pressable 
+          style={[styles.modalOverlay, { backgroundColor: overlayBg }]}
+          onPress={() => setShowDuplicateWarning(false)}
+        >
+          <View style={[styles.bottomSheet, { backgroundColor: modalBg, maxHeight: '70%' }]}>
+            <View style={styles.bottomSheetHandle} />
+            <ThemedText style={styles.bottomSheetTitle}>⚠️ SKU 重复警告</ThemedText>
+            
+            <ScrollView style={{ maxHeight: 400 }}>
+              {duplicateWarnings.map((warning, index) => (
+                <View key={warning.sku} style={styles.duplicateWarningItem}>
+                  <View style={styles.duplicateWarningHeader}>
+                    <ThemedText style={styles.duplicateWarningSku}>
+                      {warning.sku}
+                    </ThemedText>
+                    <ThemedText style={styles.duplicateWarningCount}>
+                      {warning.productIds.length} 个重复
+                    </ThemedText>
+                  </View>
+                  
+                  <View style={styles.duplicateProductList}>
+                    {warning.productIds.map((productId, idx) => (
+                      <Pressable
+                        key={productId}
+                        style={styles.duplicateProductItem}
+                        onPress={() => {
+                          setShowDuplicateWarning(false);
+                          handleViewDuplicateProduct(productId);
+                        }}
+                      >
+                        <ThemedText style={styles.duplicateProductId}>
+                          产品 #{idx + 1}
+                        </ThemedText>
+                        <ThemedText style={styles.duplicateProductArrow}>›</ThemedText>
+                      </Pressable>
+                    ))}
+                  </View>
+                  
+                  <Pressable
+                    style={styles.dismissWarningButton}
+                    onPress={() => handleDismissWarning(warning.sku)}
+                  >
+                    <ThemedText style={styles.dismissWarningText}>忽略此警告</ThemedText>
+                  </Pressable>
+                </View>
+              ))}
+            </ScrollView>
+            
+            <Pressable
+              style={styles.closeWarningButton}
+              onPress={() => setShowDuplicateWarning(false)}
+            >
+              <ThemedText style={styles.closeWarningText}>关闭</ThemedText>
+            </Pressable>
+          </View>
+        </Pressable>
+      </Modal>
 
       {/* 设置底部弹窗 */}
       <Modal
@@ -1252,5 +1363,89 @@ const styles = StyleSheet.create({
     fontSize: 13,
     opacity: 0.6,
     lineHeight: 18,
+  },
+  // SKU 重复警告样式
+  duplicateWarningBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#FFF3CD",
+    borderRadius: 12,
+    padding: 12,
+    marginTop: 12,
+    borderWidth: 1,
+    borderColor: "#FFECB5",
+  },
+  duplicateWarningIcon: {
+    fontSize: 18,
+    marginRight: 8,
+  },
+  duplicateWarningText: {
+    flex: 1,
+    fontSize: 14,
+    color: "#856404",
+    fontWeight: "500",
+  },
+  duplicateWarningItem: {
+    backgroundColor: "rgba(255, 193, 7, 0.1)",
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 12,
+  },
+  duplicateWarningHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 12,
+  },
+  duplicateWarningSku: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#856404",
+  },
+  duplicateWarningCount: {
+    fontSize: 14,
+    color: "#DC3545",
+    fontWeight: "600",
+  },
+  duplicateProductList: {
+    marginBottom: 12,
+  },
+  duplicateProductItem: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    backgroundColor: "rgba(255, 255, 255, 0.8)",
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 8,
+  },
+  duplicateProductId: {
+    fontSize: 14,
+    fontWeight: "500",
+  },
+  duplicateProductArrow: {
+    fontSize: 18,
+    opacity: 0.5,
+  },
+  dismissWarningButton: {
+    alignItems: "center",
+    paddingVertical: 8,
+  },
+  dismissWarningText: {
+    fontSize: 13,
+    color: "#6C757D",
+    textDecorationLine: "underline",
+  },
+  closeWarningButton: {
+    backgroundColor: "#007AFF",
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: "center",
+    marginTop: 16,
+  },
+  closeWarningText: {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "600",
   },
 });

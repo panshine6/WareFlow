@@ -37,6 +37,7 @@ import { getAllBoxes, createBox, deleteBox } from "@/lib/box-storage";
 import type { Box } from "@/types/box";
 import { BoxGenerator, BoxRecord } from "@/lib/box-generator";
 import { saveLearningRecord } from "@/lib/ai-learning-storage";
+import { scanForDuplicateSKUs } from "@/lib/sku-duplicate-check";
 import { saveLearningRecord as saveSimilarityLearningRecord } from "@/lib/similarity-learning-storage";
 
 // 流程阶段
@@ -801,6 +802,15 @@ export default function AddProductQuickScreen() {
           // 不影响主流程，静默失败
         }
       }
+
+      // 扫描 SKU 重复（后台执行，不阻塞）
+      scanForDuplicateSKUs().then(duplicates => {
+        if (duplicates.length > 0) {
+          console.log(`[QuickAdd] Found ${duplicates.length} duplicate SKUs`);
+        }
+      }).catch(err => {
+        console.error("[QuickAdd] SKU duplicate scan failed:", err);
+      });
 
       alert("产品入库成功！");
       router.replace("/(tabs)/inbound");
