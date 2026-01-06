@@ -1,0 +1,42 @@
+name: Generate Version
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  generate-version:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Generate version file
+        run: |
+          COMMIT_HASH=$(git rev-parse --short HEAD)
+          COMMIT_DATE=$(git log -1 --format=%cd --date=format:'%Y%m%d%H%M%S')
+          VERSION="1.${COMMIT_DATE}.${COMMIT_HASH}"
+          BUILD_TIME=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+          
+          mkdir -p public
+          
+          cat > public/version.json << EOF
+          {
+            "version": "${VERSION}",
+            "buildTime": "${BUILD_TIME}",
+            "commitHash": "${COMMIT_HASH}"
+          }
+          EOF
+          
+          echo "Generated version: ${VERSION}"
+          cat public/version.json
+
+      - name: Commit version file
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add public/version.json
+          git diff --staged --quiet || git commit -m "chore: update version to $(cat public/version.json | grep version | cut -d'"' -f4)"
+          git push
