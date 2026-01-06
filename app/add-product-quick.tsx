@@ -339,6 +339,9 @@ export default function AddProductQuickScreen() {
         // 保存细节图
         setDetailImageUri(dataUrl);
         setDetailImageBase64(compressedBase64);
+        
+        // 重置 AI 学习数据保存状态（新产品流程开始）
+        setAiLearningSaved(false);
 
         // 后台查重（不等待）
         runDuplicateCheckInBackground(dataUrl, compressedBase64);
