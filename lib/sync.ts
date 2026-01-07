@@ -142,30 +142,40 @@ export const SyncService = {
         products: productsToUpload,
       });
       
-      // 4. 上传用户设置
-      console.log(`[Sync] Uploading user settings...`);
-      const settingsToUpload: { key: string; value: string }[] = [];
-      for (const key of SYNC_SETTINGS_KEYS) {
-        try {
-          const value = await AsyncStorage.getItem(key);
-          if (value !== null) {
-            settingsToUpload.push({ key, value });
+      // 4. 上传用户设置（如果API存在）
+      let settingsUploaded = 0;
+      if (trpcClient.sync.uploadSettings) {
+        console.log(`[Sync] Uploading user settings...`);
+        const settingsToUpload: { key: string; value: string }[] = [];
+        for (const key of SYNC_SETTINGS_KEYS) {
+          try {
+            const value = await AsyncStorage.getItem(key);
+            if (value !== null) {
+              settingsToUpload.push({ key, value });
+            }
+          } catch (e) {
+            console.warn(`[Sync] Failed to get setting ${key}:`, e);
           }
-        } catch (e) {
-          console.warn(`[Sync] Failed to get setting ${key}:`, e);
         }
-      }
-      
-      if (settingsToUpload.length > 0) {
-        await trpcClient.sync.uploadSettings.mutate({ settings: settingsToUpload });
-        console.log(`[Sync] Uploaded ${settingsToUpload.length} settings`);
+        
+        if (settingsToUpload.length > 0) {
+          try {
+            await trpcClient.sync.uploadSettings.mutate({ settings: settingsToUpload });
+            settingsUploaded = settingsToUpload.length;
+            console.log(`[Sync] Uploaded ${settingsToUpload.length} settings`);
+          } catch (e) {
+            console.warn(`[Sync] Failed to upload settings (API may not be deployed yet):`, e);
+          }
+        }
+      } else {
+        console.log(`[Sync] Settings sync API not available, skipping...`);
       }
       
       // 5. 更新最后同步时间
       const now = new Date().toISOString();
       await AsyncStorage.setItem(LAST_SYNC_TIME_KEY, now);
       
-      console.log(`[Sync] Upload completed: ${result.count} products, ${settingsToUpload.length} settings synced`);
+      console.log(`[Sync] Upload completed: ${result.count} products, ${settingsUploaded} settings synced`);
       
       return {
         success: true,
@@ -224,22 +234,26 @@ export const SyncService = {
       // 4. 清空本地数据并保存云端数据（使用适配器确保 Web 端使用 IndexedDB）
       await ProductStorageAdapter.replaceAll(localProducts);
       
-      // 5. 下载用户设置
-      console.log(`[Sync] Downloading user settings...`);
-      try {
-        const settingsResult = await trpcClient.sync.downloadSettings.query();
-        const settings = settingsResult.settings || [];
-        
-        for (const setting of settings) {
-          try {
-            await AsyncStorage.setItem(setting.key, setting.value);
-          } catch (e) {
-            console.warn(`[Sync] Failed to save setting ${setting.key}:`, e);
+      // 5. 下载用户设置（如果API存在）
+      if (trpcClient.sync.downloadSettings) {
+        console.log(`[Sync] Downloading user settings...`);
+        try {
+          const settingsResult = await trpcClient.sync.downloadSettings.query();
+          const settings = settingsResult.settings || [];
+          
+          for (const setting of settings) {
+            try {
+              await AsyncStorage.setItem(setting.key, setting.value);
+            } catch (e) {
+              console.warn(`[Sync] Failed to save setting ${setting.key}:`, e);
+            }
           }
+          console.log(`[Sync] Downloaded ${settings.length} settings`);
+        } catch (e) {
+          console.warn(`[Sync] Failed to download settings (API may not be deployed yet):`, e);
         }
-        console.log(`[Sync] Downloaded ${settings.length} settings`);
-      } catch (e) {
-        console.warn(`[Sync] Failed to download settings:`, e);
+      } else {
+        console.log(`[Sync] Settings sync API not available, skipping...`);
       }
       
       // 6. 更新最后同步时间
