@@ -377,6 +377,7 @@ export default function InboundScreen() {
                         style={[
                           styles.labelItem,
                           isSelected && styles.labelItemSelected,
+                          item.exported && styles.labelItemExported,
                           { borderLeftColor: `hsl(${groupIndex * 60}, 70%, 50%)` }
                         ]}
                         onPress={() => {
@@ -398,9 +399,16 @@ export default function InboundScreen() {
                           )}
                         </View>
                         <View style={styles.labelItemInfo}>
-                          <ThemedText style={styles.labelItemSku}>
-                            {item.systemSku}
-                          </ThemedText>
+                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                            <ThemedText style={styles.labelItemSku}>
+                              {item.systemSku}
+                            </ThemedText>
+                            {item.exported && (
+                              <View style={styles.exportedBadge}>
+                                <ThemedText style={styles.exportedBadgeText}>已导出</ThemedText>
+                              </View>
+                            )}
+                          </View>
                           {item.userSku && (
                             <ThemedText style={styles.labelItemUserSku}>
                               公司SKU: {item.userSku}
@@ -422,13 +430,15 @@ export default function InboundScreen() {
                   styles.exportButton,
                   selectedLabelIds.size === 0 && styles.buttonDisabled,
                 ]}
-                onPress={() => {
+                onPress={async () => {
                   const selectedItems = labelItems.filter(item => 
                     selectedLabelIds.has(`${item.id}-${item.inboundTime}`)
                   );
                   try {
-                    exportLabelsToExcel(selectedItems);
+                    await exportLabelsToExcel(selectedItems);
                     Alert.alert("导出成功", `已导出 ${selectedItems.length} 个商品的标签数据，请在 NIIMBOT APP 中导入打印`);
+                    // 导出后刷新列表，更新已导出标记
+                    await loadLabelItems();
                   } catch (error) {
                     Alert.alert("导出失败", error instanceof Error ? error.message : "未知错误");
                   }
@@ -858,6 +868,20 @@ const styles = StyleSheet.create({
   },
   labelItemSelected: {
     backgroundColor: "rgba(0, 122, 255, 0.1)",
+  },
+  labelItemExported: {
+    opacity: 0.6,
+  },
+  exportedBadge: {
+    backgroundColor: "#8E8E93",
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  exportedBadgeText: {
+    color: "#fff",
+    fontSize: 10,
+    fontWeight: "600",
   },
   labelItemInfo: {
     flex: 1,

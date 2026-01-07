@@ -159,7 +159,53 @@ export async function exportToDianxiaomiFormat(
 // ============================================
 
 import * as XLSX from 'xlsx';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ProductStorage } from './storage';
+
+// 导出记录存储键
+const EXPORTED_LABELS_KEY = 'exported_labels';
+
+/**
+ * 获取已导出的标签记录
+ * 返回一个 Set，包含已导出的标签唯一标识（id-inboundTime）
+ */
+export async function getExportedLabels(): Promise<Set<string>> {
+  try {
+    const data = await AsyncStorage.getItem(EXPORTED_LABELS_KEY);
+    if (!data) return new Set();
+    return new Set(JSON.parse(data));
+  } catch (error) {
+    console.error('[ExcelExport] Failed to get exported labels:', error);
+    return new Set();
+  }
+}
+
+/**
+ * 记录已导出的标签
+ * @param labelKeys 标签唯一标识列表（id-inboundTime）
+ */
+export async function markLabelsAsExported(labelKeys: string[]): Promise<void> {
+  try {
+    const existing = await getExportedLabels();
+    for (const key of labelKeys) {
+      existing.add(key);
+    }
+    await AsyncStorage.setItem(EXPORTED_LABELS_KEY, JSON.stringify([...existing]));
+  } catch (error) {
+    console.error('[ExcelExport] Failed to mark labels as exported:', error);
+  }
+}
+
+/**
+ * 清除导出记录（可选，用于清理旧数据）
+ */
+export async function clearExportedLabels(): Promise<void> {
+  try {
+    await AsyncStorage.removeItem(EXPORTED_LABELS_KEY);
+  } catch (error) {
+    console.error('[ExcelExport] Failed to clear exported labels:', error);
+  }
+}
 
 // 待打印标签项
 export interface LabelItem {
@@ -169,6 +215,8 @@ export interface LabelItem {
   productName?: string;
   quantity: number;
   inboundTime: number;
+  /** 是否已导出过 */
+  exported?: boolean;
 }
 
 // 批次分组结果
@@ -244,6 +292,13 @@ export async function getRecentInboundProducts(hours: number = 24): Promise<Labe
   // 按入库时间降序排列
   recentItems.sort((a, b) => b.inboundTime - a.inboundTime);
   
+  // 获取已导出记录，标记已导出的标签
+  const exportedLabels = await getExportedLabels();
+  for (const item of recentItems) {
+    const labelKey = `${item.id}-${item.inboundTime}`;
+    item.exported = exportedLabels.has(labelKey);
+  }
+  
   return recentItems;
 }
 
@@ -294,6 +349,14 @@ export function groupByBatch(items: LabelItem[], batchIntervalMinutes: number = 
   // 标记只有一个商品的批次
   for (const group of groups) {
     group.isSameBatch = group.items.length > 1;
+  }
+  
+  // 按时间倒序排列（最近的在前面）
+  groups.reverse();
+  
+  // 每个批次内的商品也按时间倒序排列
+  for (const group of groups) {
+    group.items.sort((a, b) => b.inboundTime - a.inboundTime);
   }
   
   return groups;
@@ -368,8 +431,9 @@ export function downloadExcelWeb(blob: Blob, filename: string = 'niimbot_labels.
 /**
  * 一键导出最近入库商品的标签 Excel
  * @param items 选中的商品列表
+ * @returns 导出的标签唯一标识列表，用于标记已导出
  */
-export function exportLabelsToExcel(items: LabelItem[]): void {
+export async function exportLabelsToExcel(items: LabelItem[]): Promise<string[]> {
   if (items.length === 0) {
     throw new Error('没有选中任何商品');
   }
@@ -378,6 +442,12 @@ export function exportLabelsToExcel(items: LabelItem[]): void {
   const timestamp = new Date().toISOString().slice(0, 10);
   const filename = `niimbot_labels_${timestamp}.xlsx`;
   downloadExcelWeb(blob, filename);
+  
+  // 记录已导出的标签
+  const exportedKeys = items.map(item => `${item.id}-${item.inboundTime}`);
+  await markLabelsAsExported(exportedKeys);
+  
+  return exportedKeys;
 }
 
 /**
