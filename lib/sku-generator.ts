@@ -201,16 +201,38 @@ export const SkuGenerator = {
         segments = segments.map(seg => {
           if (seg.isSerialNumber) return seg;
           
+          let modified = false;
+          let updatedOptions = [...seg.options];
+          
+          // 添加空值选项
           const hasEmptyOption = seg.options.some(o => o.code === '');
           if (!hasEmptyOption) {
+            modified = true;
+            updatedOptions = [
+              { code: '', nameEn: 'None', nameCn: '不选择' },
+              ...updatedOptions,
+            ];
+          }
+          
+          // 迁移3: 为颜色段的选项添加colorHex字段
+          if (seg.id === 'color') {
+            updatedOptions = updatedOptions.map(opt => {
+              if (opt.colorHex) return opt; // 已有colorHex，跳过
+              const defaultColor = DEFAULT_COLOR_MAP[opt.code];
+              if (defaultColor) {
+                modified = true;
+                return { ...opt, colorHex: defaultColor };
+              }
+              return opt;
+            });
+          }
+          
+          if (modified) {
             needsSave = true;
             return {
               ...seg,
-              isRequired: false, // 改为非必填
-              options: [
-                { code: '', nameEn: 'None', nameCn: '不选择' },
-                ...seg.options,
-              ],
+              isRequired: false,
+              options: updatedOptions,
             };
           }
           return seg;
