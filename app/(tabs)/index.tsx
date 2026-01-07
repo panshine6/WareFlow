@@ -513,12 +513,26 @@ export default function HomeScreen() {
                 <View key={warning.sku} style={styles.duplicateWarningItem}>
                   <View style={styles.duplicateWarningHeader}>
                     <ThemedText style={styles.duplicateWarningSku}>
-                      {warning.sku}
+                      基础SKU: {warning.baseSku || warning.sku}
                     </ThemedText>
                     <ThemedText style={styles.duplicateWarningCount}>
-                      {warning.productIds.length} 个重复
+                      {warning.productIds.length} 个相似
                     </ThemedText>
                   </View>
+                  
+                  {/* 显示相似的SKU列表 */}
+                  {warning.similarSkus && warning.similarSkus.length > 0 && (
+                    <View style={{ marginBottom: 8 }}>
+                      <ThemedText style={{ fontSize: 12, color: '#666', marginBottom: 4 }}>
+                        相似的SKU:
+                      </ThemedText>
+                      {warning.similarSkus.map((sku, idx) => (
+                        <ThemedText key={idx} style={{ fontSize: 13, color: '#333', marginLeft: 8 }}>
+                          • {sku}
+                        </ThemedText>
+                      ))}
+                    </View>
+                  )}
                   
                   <View style={styles.duplicateProductList}>
                     {warning.productIds.map((productId, idx) => (
@@ -531,7 +545,7 @@ export default function HomeScreen() {
                         }}
                       >
                         <ThemedText style={styles.duplicateProductId}>
-                          产品 #{idx + 1}
+                          {warning.similarSkus?.[idx] || `产品 #${idx + 1}`}
                         </ThemedText>
                         <ThemedText style={styles.duplicateProductArrow}>›</ThemedText>
                       </Pressable>
