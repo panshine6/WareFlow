@@ -186,7 +186,7 @@ export default function InboundScreen() {
           if (result.count === 0) {
             msg = `本地数据无变化，无需同步\n共 ${activeCount} 个产品`;
           } else {
-            msg = `已同步 ${activeCount} 个产品到云端`;
+            msg = `已同步 ${activeCount} 个产品和设置到云端`;
           }
           Alert.alert("上传成功", msg);
         } else {
@@ -218,7 +218,7 @@ export default function InboundScreen() {
         };
         const result = await SyncService.downloadFromCloud(trpcClient);
         if (result.success) {
-          Alert.alert("下载成功", `已从云端下载 ${result.count} 个产品`);
+          Alert.alert("下载成功", `已从云端下载 ${result.count} 个产品和设置`);
         } else {
           Alert.alert("下载失败", result.error || "未知错误");
         }

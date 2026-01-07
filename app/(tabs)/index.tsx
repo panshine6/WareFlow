@@ -802,7 +802,7 @@ export default function HomeScreen() {
                       if (result.count === 0) {
                         msg = `本地数据无变化，无需同步\n共 ${activeCount} 个产品`;
                       } else {
-                        msg = `已同步 ${activeCount} 个产品到云端`;
+                        msg = `已同步 ${activeCount} 个产品和设置到云端`;
                       }
                       console.log("[Upload] Success:", msg);
                       if (Platform.OS === 'web') {
@@ -877,7 +877,7 @@ export default function HomeScreen() {
                     console.log("[Download] Result:", result);
                     if (result.success) {
                       await loadProducts();
-                      const msg = `已下载 ${result.count} 个产品到本地`;
+                      const msg = `已下载 ${result.count} 个产品和设置到本地`;
                       console.log("[Download] Success:", msg);
                       if (Platform.OS === 'web') {
                         window.alert(`下载成功\n${msg}`);
