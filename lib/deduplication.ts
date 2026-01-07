@@ -8,19 +8,47 @@ import { ProductAPI } from "./api-client";
 import { ProductStorage } from "./storage";
 import { batchCompareImages } from "./ai-vision";
 import { calculatePHashFromBase64, filterSimilarByPHash, PHASH_THRESHOLDS } from "./phash";
-import { getImageBase64WithCache, imageCache } from "./image-cache";
 import type { Product } from "@/types/product";
 
 // 放宽 pHash 阈值，避免漏掉相似产品
 const PHASH_THRESHOLD_FOR_DEDUP = 25; // 汉明距离阈值，越大越宽松
 
 /**
- * 将图片 URI 转换为 Base64（带重试机制）
+ * 从 Data URL 或 Base64 字符串中提取纯 Base64 数据
+ * 数据库中的 detailImageUri 存储的是 Data URL 格式：data:image/jpeg;base64,xxxxx
+ */
+export function extractBase64FromDataUrl(dataUrl: string): string {
+  if (!dataUrl) {
+    throw new Error("图片数据为空");
+  }
+  
+  // 如果是 Data URL 格式，提取 Base64 部分
+  if (dataUrl.startsWith("data:")) {
+    const commaIndex = dataUrl.indexOf(",");
+    if (commaIndex !== -1) {
+      return dataUrl.substring(commaIndex + 1);
+    }
+  }
+  
+  // 如果已经是纯 Base64，直接返回
+  return dataUrl;
+}
+
+/**
+ * 将图片 URI 转换为 Base64（兼容 Data URL 和网络 URL）
+ * 优先直接提取 Data URL 中的 Base64，避免不必要的网络请求
  */
 export async function imageToBase64(uri: string, retries = 3): Promise<string> {
+  // 如果是 Data URL，直接提取 Base64（无需网络请求）
+  if (uri.startsWith("data:")) {
+    console.log("[Image] Extracting base64 from Data URL (no network request needed)");
+    return extractBase64FromDataUrl(uri);
+  }
+  
+  // 如果是网络 URL，才进行 fetch
   for (let i = 0; i < retries; i++) {
     try {
-      console.log(`[Image] Converting to base64 (attempt ${i + 1}/${retries}):`, uri.substring(0, 50) + "...");
+      console.log(`[Image] Fetching from URL (attempt ${i + 1}/${retries}):`, uri.substring(0, 50) + "...");
       
       // 创建超时控制器
       const controller = new AbortController();
@@ -48,7 +76,7 @@ export async function imageToBase64(uri: string, retries = 3): Promise<string> {
         reader.readAsDataURL(blob);
       });
     } catch (error: any) {
-      console.error(`[Image] Conversion failed (attempt ${i + 1}):`, error);
+      console.error(`[Image] Fetch failed (attempt ${i + 1}):`, error);
       if (i === retries - 1) {
         throw new Error(`图片加载失败: ${error.message}`);
       }
@@ -80,7 +108,7 @@ export interface DuplicateCheckResult {
 
 /**
  * 执行去重检查（两阶段策略：pHash 预筛选 + AI 精确对比）
- * @param detailImageUri 新拍摄的细节图 URI
+ * @param detailImageUri 新拍摄的细节图 URI（Data URL 格式）
  * @param detailImageBase64 新拍摄的细节图 Base64（可选，如果提供则不需要转换）
  * @param threshold 相似度阈值 (0-100)
  * @returns 去重检查结果
@@ -94,16 +122,16 @@ export async function performDuplicateCheck(
   
   try {
     console.log("[Dedup] ========== Starting duplicate check (pHash + AI) ==========");
-    console.log("[Dedup] Detail image URI:", detailImageUri.substring(0, 50) + "...");
+    console.log("[Dedup] Detail image URI type:", detailImageUri.startsWith("data:") ? "Data URL" : "Network URL");
     console.log("[Dedup] Has base64:", !!detailImageBase64);
     console.log("[Dedup] Threshold:", threshold);
     
-    // 1. 转换新图片为 Base64（如果没有提供）
+    // 1. 获取新图片的 Base64
     let newImageBase64 = detailImageBase64;
     if (!newImageBase64) {
-      console.log("[Dedup] Converting new image to base64...");
-      newImageBase64 = await imageToBase64(detailImageUri);
-      console.log("[Dedup] Conversion successful, base64 length:", newImageBase64.length);
+      console.log("[Dedup] Extracting base64 from new image...");
+      newImageBase64 = extractBase64FromDataUrl(detailImageUri);
+      console.log("[Dedup] Extraction successful, base64 length:", newImageBase64.length);
     }
     
     // 2. 获取所有活跃产品
@@ -203,42 +231,25 @@ export async function performDuplicateCheck(
       };
     }
     
-    // 5. 转换候选产品图片为 Base64（使用缓存加速）
-    console.log("[Dedup] Converting candidate product images to base64 (with cache)...");
+    // 5. 直接从产品的 detailImageUri（Data URL）提取 Base64
+    // 由于图片已经存储在 IndexedDB 中，无需网络请求
+    console.log("[Dedup] Extracting base64 from product images (direct from IndexedDB)...");
     const existingImages: Array<{ id: string; base64: string }> = [];
     
-    // 并行获取图片（带缓存）
-    const BATCH_SIZE = 10; // 并行获取数量
-    for (let i = 0; i < productsToCompare.length; i += BATCH_SIZE) {
-      const batch = productsToCompare.slice(i, i + BATCH_SIZE);
-      const batchResults = await Promise.all(
-        batch.map(async (product) => {
-          try {
-            // 使用缓存获取 Base64
-            const base64WithPrefix = await getImageBase64WithCache(product.detailImageUri);
-            // 移除 data:image/...;base64, 前缀
-            const base64 = base64WithPrefix.includes(',') 
-              ? base64WithPrefix.split(',')[1] 
-              : base64WithPrefix;
-            return { id: product.id, base64, sku: product.sku };
-          } catch (error: any) {
-            console.error(`[Dedup] Failed to get image for product ${product.id}:`, error);
-            return null;
-          }
-        })
-      );
-      
-      // 过滤掉失败的
-      for (const result of batchResults) {
-        if (result) {
-          existingImages.push({ id: result.id, base64: result.base64 });
-        }
+    const extractStartTime = Date.now();
+    for (const product of productsToCompare) {
+      try {
+        // 直接从 Data URL 提取 Base64，无需网络请求
+        const base64 = extractBase64FromDataUrl(product.detailImageUri);
+        existingImages.push({ id: product.id, base64 });
+      } catch (error: any) {
+        console.error(`[Dedup] Failed to extract base64 for product ${product.sku}:`, error.message);
+        // 跳过无法提取的产品
       }
-      
-      console.log(`[Dedup] Converted ${Math.min(i + BATCH_SIZE, productsToCompare.length)}/${productsToCompare.length} images`);
     }
+    const extractDuration = Date.now() - extractStartTime;
     
-    console.log("[Dedup] Successfully converted", existingImages.length, "images (with cache)");
+    console.log(`[Dedup] Extracted ${existingImages.length}/${productsToCompare.length} images in ${extractDuration}ms (no network requests)`);
     
     if (existingImages.length === 0) {
       console.log("[Dedup] No images to compare, skipping");
