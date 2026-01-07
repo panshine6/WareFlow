@@ -60,6 +60,10 @@ export default function HomeScreen() {
     enabled: false, // 手动触发
   });
   const uploadMutation = trpc.sync.upload.useMutation();
+  const uploadSettingsMutation = trpc.sync.uploadSettings.useMutation();
+  const downloadSettingsQuery = trpc.sync.downloadSettings.useQuery(undefined, {
+    enabled: false, // 手动触发
+  });
   
   // 上传状态
   const [uploading, setUploading] = useState(false);
@@ -781,6 +785,12 @@ export default function HomeScreen() {
                             return uploadMutation.mutateAsync(data);
                           },
                         },
+                        uploadSettings: {
+                          mutate: async (data: any) => {
+                            console.log("[Upload] Calling uploadSettingsMutation.mutateAsync");
+                            return uploadSettingsMutation.mutateAsync(data);
+                          },
+                        },
                       },
                     };
                     const result = await SyncService.uploadToCloud(trpcClient);
@@ -853,6 +863,12 @@ export default function HomeScreen() {
                           query: async () => {
                             console.log("[Download] Calling downloadWithoutImagesQuery.refetch (no images)");
                             return (await downloadWithoutImagesQuery.refetch()).data;
+                          },
+                        },
+                        downloadSettings: {
+                          query: async () => {
+                            console.log("[Download] Calling downloadSettingsQuery.refetch");
+                            return (await downloadSettingsQuery.refetch()).data;
                           },
                         },
                       },

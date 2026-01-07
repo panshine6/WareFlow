@@ -62,8 +62,10 @@ export default function InboundScreen() {
   // 同步相关
   const [refreshing, setRefreshing] = useState(false);
   const uploadMutation = trpc.sync.upload.useMutation();
+  const uploadSettingsMutation = trpc.sync.uploadSettings.useMutation();
   const downloadQuery = trpc.sync.download.useQuery(undefined, { enabled: false });
   const downloadWithoutImagesQuery = trpc.sync.downloadWithoutImages.useQuery(undefined, { enabled: false });
+  const downloadSettingsQuery = trpc.sync.downloadSettings.useQuery(undefined, { enabled: false });
   
   // 检测是否为移动端（手机）
   const isMobile = Platform.OS !== 'web' || (Platform.OS === 'web' && typeof window !== 'undefined' && /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(window.navigator?.userAgent || ''));
@@ -170,6 +172,11 @@ export default function InboundScreen() {
                 return uploadMutation.mutateAsync(data);
               },
             },
+            uploadSettings: {
+              mutate: async (data: any) => {
+                return uploadSettingsMutation.mutateAsync(data);
+              },
+            },
           },
         };
         const result = await SyncService.uploadToCloud(trpcClient);
@@ -198,6 +205,12 @@ export default function InboundScreen() {
             downloadWithoutImages: {
               query: async () => {
                 const result = await downloadWithoutImagesQuery.refetch();
+                return result.data;
+              },
+            },
+            downloadSettings: {
+              query: async () => {
+                const result = await downloadSettingsQuery.refetch();
                 return result.data;
               },
             },
