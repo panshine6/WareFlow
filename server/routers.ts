@@ -140,6 +140,31 @@ export const appRouter = router({
         const records = await db.getAllOutboundRecords();
         return { records };
       }),
+    
+    // 上传用户设置到云端
+    uploadSettings: publicProcedure
+      .input(z.object({
+        settings: z.array(z.object({
+          key: z.string(),
+          value: z.string(),
+        })),
+      }))
+      .mutation(async ({ input }) => {
+        await db.batchUpsertUserSettings(input.settings);
+        return { success: true, count: input.settings.length };
+      }),
+    
+    // 从云端下载用户设置
+    downloadSettings: publicProcedure
+      .query(async () => {
+        const settings = await db.getAllUserSettings();
+        return { 
+          settings: settings.map(s => ({
+            key: s.settingKey,
+            value: s.settingValue,
+          }))
+        };
+      }),
   }),
 
   // 操作员账户管理 API

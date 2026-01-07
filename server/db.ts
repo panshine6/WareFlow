@@ -474,3 +474,75 @@ export async function getOutboundRecordsCount() {
   const result = await db.select().from(outboundRecords);
   return result.length;
 }
+
+
+// ==================== 用户设置同步 ====================
+
+import { userSettings, type InsertUserSetting } from "../drizzle/schema";
+
+/**
+ * 获取所有用户设置
+ */
+export async function getAllUserSettings() {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(userSettings);
+}
+
+/**
+ * 获取单个用户设置
+ */
+export async function getUserSetting(key: string) {
+  const db = await getDb();
+  if (!db) return null;
+  const result = await db.select().from(userSettings).where(eq(userSettings.settingKey, key)).limit(1);
+  return result[0] || null;
+}
+
+/**
+ * 保存用户设置（upsert）
+ */
+export async function upsertUserSetting(key: string, value: string) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  await db.insert(userSettings).values({
+    settingKey: key,
+    settingValue: value,
+  }).onDuplicateKeyUpdate({
+    set: {
+      settingValue: value,
+      updatedAt: new Date(),
+    },
+  });
+}
+
+/**
+ * 批量保存用户设置
+ */
+export async function batchUpsertUserSettings(settings: { key: string; value: string }[]) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  for (const setting of settings) {
+    await upsertUserSetting(setting.key, setting.value);
+  }
+}
+
+/**
+ * 删除用户设置
+ */
+export async function deleteUserSetting(key: string) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.delete(userSettings).where(eq(userSettings.settingKey, key));
+}
+
+/**
+ * 清空所有用户设置
+ */
+export async function clearAllUserSettings() {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.delete(userSettings);
+}

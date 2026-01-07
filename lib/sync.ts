@@ -6,6 +6,20 @@ import type { Product } from "@/types/product";
 
 const LAST_SYNC_TIME_KEY = "lastSyncTime";
 
+// 需要同步到云端的设置键名列表
+const SYNC_SETTINGS_KEYS = [
+  "sku_sequences_v2",      // SKU生成器 - 各分类的流水号序列
+  "sku_segments_v2",       // SKU生成器 - 自定义分段选项
+  "sku_history_v2",        // SKU生成器 - 生成历史记录
+  "sku_last_selection",    // SKU生成器 - 上次选择的分段值
+  "box_list_v1",           // Box管理器 - Box列表
+  "box_sequence_v1",       // Box管理器 - Box流水号序列
+  "settings",              // 用户设置（默认位置等）
+  "exported_labels",       // 已导出标签记录
+  "outbound_records",      // 出库记录
+  "ai_learning_records",   // AI学习记录
+];
+
 // 云端图片压缩设置
 const CLOUD_IMAGE_MAX_SIZE = 512; // 最大边长 512px
 const CLOUD_IMAGE_QUALITY = 0.5; // JPEG 质量 50%
@@ -128,11 +142,30 @@ export const SyncService = {
         products: productsToUpload,
       });
       
-      // 4. 更新最后同步时间
+      // 4. 上传用户设置
+      console.log(`[Sync] Uploading user settings...`);
+      const settingsToUpload: { key: string; value: string }[] = [];
+      for (const key of SYNC_SETTINGS_KEYS) {
+        try {
+          const value = await AsyncStorage.getItem(key);
+          if (value !== null) {
+            settingsToUpload.push({ key, value });
+          }
+        } catch (e) {
+          console.warn(`[Sync] Failed to get setting ${key}:`, e);
+        }
+      }
+      
+      if (settingsToUpload.length > 0) {
+        await trpcClient.sync.uploadSettings.mutate({ settings: settingsToUpload });
+        console.log(`[Sync] Uploaded ${settingsToUpload.length} settings`);
+      }
+      
+      // 5. 更新最后同步时间
       const now = new Date().toISOString();
       await AsyncStorage.setItem(LAST_SYNC_TIME_KEY, now);
       
-      console.log(`[Sync] Upload completed: ${result.count} products synced`);
+      console.log(`[Sync] Upload completed: ${result.count} products, ${settingsToUpload.length} settings synced`);
       
       return {
         success: true,
@@ -191,11 +224,29 @@ export const SyncService = {
       // 4. 清空本地数据并保存云端数据（使用适配器确保 Web 端使用 IndexedDB）
       await ProductStorageAdapter.replaceAll(localProducts);
       
-      // 5. 更新最后同步时间
+      // 5. 下载用户设置
+      console.log(`[Sync] Downloading user settings...`);
+      try {
+        const settingsResult = await trpcClient.sync.downloadSettings.query();
+        const settings = settingsResult.settings || [];
+        
+        for (const setting of settings) {
+          try {
+            await AsyncStorage.setItem(setting.key, setting.value);
+          } catch (e) {
+            console.warn(`[Sync] Failed to save setting ${setting.key}:`, e);
+          }
+        }
+        console.log(`[Sync] Downloaded ${settings.length} settings`);
+      } catch (e) {
+        console.warn(`[Sync] Failed to download settings:`, e);
+      }
+      
+      // 6. 更新最后同步时间
       const now = new Date().toISOString();
       await AsyncStorage.setItem(LAST_SYNC_TIME_KEY, now);
       
-      // 6. 统计有效产品数量（未删除的）
+      // 7. 统计有效产品数量（未删除的）
       const activeProducts = localProducts.filter(p => !p.isDeleted);
       
       console.log(`[Sync] Download completed: ${activeProducts.length} active products (${localProducts.length} total)`);

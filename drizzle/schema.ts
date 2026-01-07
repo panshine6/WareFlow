@@ -102,3 +102,21 @@ export type Operator = typeof operators.$inferSelect;
 export type InsertOperator = typeof operators.$inferInsert;
 export type OutboundRecord = typeof outboundRecords.$inferSelect;
 export type InsertOutboundRecord = typeof outboundRecords.$inferInsert;
+
+
+/**
+ * 用户设置表 - 存储用户的各种设置数据
+ * 用于跨设备同步设置
+ */
+export const userSettings = mysqlTable("userSettings", {
+  id: int("id").autoincrement().primaryKey(),
+  /** 设置键名，如 'sku_sequences_v2', 'box_list_v1' 等 */
+  settingKey: varchar("settingKey", { length: 128 }).notNull().unique(),
+  /** 设置值，JSON 格式存储 */
+  settingValue: mediumtext("settingValue").notNull(),
+  /** 更新时间 */
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type UserSetting = typeof userSettings.$inferSelect;
+export type InsertUserSetting = typeof userSettings.$inferInsert;
