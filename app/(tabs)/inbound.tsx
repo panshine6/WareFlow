@@ -69,6 +69,23 @@ export default function InboundScreen() {
   
   // 检测是否为移动端（手机）
   const isMobile = Platform.OS !== 'web' || (Platform.OS === 'web' && typeof window !== 'undefined' && /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(window.navigator?.userAgent || ''));
+  
+  // 判断是否为手机 Web 端（用于区分电脑和手机）
+  const [isMobileWeb, setIsMobileWeb] = useState(false);
+  
+  useEffect(() => {
+    if (Platform.OS === 'web' && typeof window !== 'undefined') {
+      // 通过屏幕宽度和 userAgent 判断是否为手机
+      const checkMobile = () => {
+        const isMobile = window.innerWidth <= 768 || 
+          /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+        setIsMobileWeb(isMobile);
+      };
+      checkMobile();
+      window.addEventListener('resize', checkMobile);
+      return () => window.removeEventListener('resize', checkMobile);
+    }
+  }, []);
 
   // 页面获得焦点时加载入库历史或标签数据
   useFocusEffect(
@@ -158,13 +175,13 @@ export default function InboundScreen() {
   };
 
   // 同步按钮点击处理
-  // 手机端：上传数据到云端
-  // 电脑端：从云端下载数据
+  // 手机 Web 端：上传数据到云端
+  // 电脑 Web 端：从云端下载数据（禁用上传）
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     try {
-      if (isMobile) {
-        // 手机端：上传数据到云端
+      // 手机 Web 端：上传数据到云端
+      if (isMobile && isMobileWeb) {
         const trpcClient = {
           sync: {
             upload: {
@@ -192,8 +209,9 @@ export default function InboundScreen() {
         } else {
           Alert.alert("上传失败", result.error || "未知错误");
         }
-      } else {
-        // 电脑端：从云端下载数据，显示选项对话框
+      } 
+      // 电脑 Web 端：从云端下载数据，显示选项对话框
+      else if (Platform.OS === 'web' && !isMobileWeb) {
         setRefreshing(false); // 先停止加载状态，等待用户选择
         
         Alert.alert(
@@ -274,6 +292,36 @@ export default function InboundScreen() {
         );
         return; // 提前返回，等待用户选择
       }
+      // 原生 App：保持原有逻辑
+      else if (isMobile) {
+        const trpcClient = {
+          sync: {
+            upload: {
+              mutate: async (data: any) => {
+                return uploadMutation.mutateAsync(data);
+              },
+            },
+            uploadSettings: {
+              mutate: async (data: any) => {
+                return uploadSettingsMutation.mutateAsync(data);
+              },
+            },
+          },
+        };
+        const result = await SyncService.uploadToCloud(trpcClient);
+        if (result.success) {
+          const activeCount = result.activeCount || result.count;
+          let msg: string;
+          if (result.count === 0) {
+            msg = `本地数据无变化，无需同步\n共 ${activeCount} 个产品`;
+          } else {
+            msg = `已同步 ${activeCount} 个产品和设置到云端`;
+          }
+          Alert.alert("上传成功", msg);
+        } else {
+          Alert.alert("上传失败", result.error || "未知错误");
+        }
+      }
       // 同步后重新加载入库历史
       if (viewMode === "history") {
         await loadInboundHistory();
@@ -284,7 +332,7 @@ export default function InboundScreen() {
     } finally {
       setRefreshing(false);
     }
-  }, [viewMode, uploadMutation, downloadQuery, isMobile]);
+  }, [viewMode, uploadMutation, downloadQuery, isMobile, isMobileWeb]);
 
   // 格式化时间
   const formatTime = (timestamp: string) => {
@@ -601,7 +649,7 @@ export default function InboundScreen() {
               <ActivityIndicator size="small" color="#fff" />
             ) : (
               <ThemedText style={styles.syncButtonText}>
-                {isMobile ? '☁️ 同步到云端' : '☁️ 从云端下载'}
+                {(Platform.OS === 'web' && isMobileWeb) ? '☁️ 同步到云端' : (Platform.OS === 'web' && !isMobileWeb) ? '☁️ 从云端下载' : '☁️ 同步到云端'}
               </ThemedText>
             )}
           </Pressable>

@@ -68,6 +68,23 @@ export default function HomeScreen() {
   // 上传状态
   const [uploading, setUploading] = useState(false);
   
+  // 判断是否为手机 Web 端（用于区分电脑和手机）
+  const [isMobileWeb, setIsMobileWeb] = useState(false);
+  
+  useEffect(() => {
+    if (Platform.OS === 'web' && typeof window !== 'undefined') {
+      // 通过屏幕宽度和 userAgent 判断是否为手机
+      const checkMobile = () => {
+        const isMobile = window.innerWidth <= 768 || 
+          /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+        setIsMobileWeb(isMobile);
+      };
+      checkMobile();
+      window.addEventListener('resize', checkMobile);
+      return () => window.removeEventListener('resize', checkMobile);
+    }
+  }, []);
+  
   // 下载提示状态
   const [showDownloadPrompt, setShowDownloadPrompt] = useState(false);
   const [cloudProductCount, setCloudProductCount] = useState(0);
@@ -765,9 +782,18 @@ export default function HomeScreen() {
             </Pressable>
 
             <Pressable 
-              style={[styles.bottomSheetItem, uploading && styles.bottomSheetItemDisabled]}
-              disabled={uploading}
+              style={[
+                styles.bottomSheetItem, 
+                (uploading || (Platform.OS === 'web' && !isMobileWeb)) && styles.bottomSheetItemDisabled
+              ]}
+              disabled={uploading || (Platform.OS === 'web' && !isMobileWeb)}
               onPress={() => {
+                // 电脑 Web 端禁止上传
+                if (Platform.OS === 'web' && !isMobileWeb) {
+                  window.alert("电脑端禁止上传\n\n为防止误操作覆盖云端数据，请在手机端进行上传操作");
+                  return;
+                }
+                
                 console.log("[Upload] Button clicked - sync version");
                 setShowDataModal(false);
                 
@@ -833,8 +859,15 @@ export default function HomeScreen() {
                 }, 100);
               }}
             >
-              <ThemedText style={styles.bottomSheetItemIcon}>{uploading ? "⏳" : "⬆️"}</ThemedText>
-              <ThemedText style={styles.bottomSheetItemText}>{uploading ? "上传中..." : "上传到云端"}</ThemedText>
+              <ThemedText style={styles.bottomSheetItemIcon}>
+                {uploading ? "⏳" : (Platform.OS === 'web' && !isMobileWeb) ? "🚫" : "⬆️"}
+              </ThemedText>
+              <ThemedText style={[
+                styles.bottomSheetItemText,
+                (Platform.OS === 'web' && !isMobileWeb) && { color: '#999' }
+              ]}>
+                {uploading ? "上传中..." : (Platform.OS === 'web' && !isMobileWeb) ? "上传到云端（禁用）" : "上传到云端"}
+              </ThemedText>
               <ThemedText style={styles.bottomSheetItemArrow}>›</ThemedText>
             </Pressable>
 
@@ -847,6 +880,40 @@ export default function HomeScreen() {
                 
                 // 显示下载选项对话框
                 if (Platform.OS === 'web') {
+                  // 手机 Web 端：只能同步设置和 Box 数据，不能下载产品信息
+                  if (isMobileWeb) {
+                    setTimeout(async () => {
+                      setRefreshing(true);
+                      try {
+                        const trpcClient = {
+                          sync: {
+                            download: {
+                              query: async () => (await downloadQuery.refetch()).data,
+                            },
+                            downloadSettings: {
+                              query: async () => (await downloadSettingsQuery.refetch()).data,
+                            },
+                          },
+                        };
+                        
+                        console.log("[Download] Mobile web - settings and boxes only");
+                        const result = await SyncService.downloadSettingsAndBoxesOnly(trpcClient);
+                        if (result.success) {
+                          await loadProducts();
+                          window.alert(`同步成功\n已同步设置和Box数据\n（手机端不支持下载产品数据，以保护本地高分辨率图片）`);
+                        } else {
+                          window.alert(`同步失败\n${result.error || "未知错误"}`);
+                        }
+                      } catch (error: any) {
+                        window.alert(`同步失败\n${error.message || "网络错误"}`);
+                      } finally {
+                        setRefreshing(false);
+                      }
+                    }, 100);
+                    return;
+                  }
+                  
+                  // 电脑 Web 端：显示选项对话框
                   const choice = window.confirm(
                     "⚠️ 警告\n\n" +
                     "完整下载会覆盖本地所有数据（包括高分辨率图片）\n\n" +
@@ -982,8 +1049,12 @@ export default function HomeScreen() {
                 }
               }}
             >
-              <ThemedText style={styles.bottomSheetItemIcon}>{refreshing ? "⏳" : "⬇️"}</ThemedText>
-              <ThemedText style={styles.bottomSheetItemText}>{refreshing ? "下载中..." : "从云端下载"}</ThemedText>
+              <ThemedText style={styles.bottomSheetItemIcon}>
+                {refreshing ? "⏳" : (Platform.OS === 'web' && isMobileWeb) ? "🔄" : "⬇️"}
+              </ThemedText>
+              <ThemedText style={styles.bottomSheetItemText}>
+                {refreshing ? "同步中..." : (Platform.OS === 'web' && isMobileWeb) ? "同步设置" : "从云端下载"}
+              </ThemedText>
               <ThemedText style={styles.bottomSheetItemArrow}>›</ThemedText>
             </Pressable>
 
