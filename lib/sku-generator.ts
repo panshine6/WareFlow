@@ -20,7 +20,28 @@ export interface CodeOption {
   nameEn: string;
   nameCn: string;
   isCustom?: boolean; // 是否为用户自定义
+  colorHex?: string; // 颜色代码对应的十六进制颜色值（仅用于颜色段）
 }
+
+// 默认颜色映射表
+export const DEFAULT_COLOR_MAP: Record<string, string> = {
+  "RE": "#FF0000", // 红色
+  "BL": "#0000FF", // 蓝色
+  "GR": "#00FF00", // 绿色
+  "YE": "#FFFF00", // 黄色
+  "BK": "#000000", // 黑色
+  "WH": "#FFFFFF", // 白色
+  "PK": "#FFC0CB", // 粉色
+  "OR": "#FFA500", // 橙色
+  "PU": "#800080", // 紫色
+  "SV": "#C0C0C0", // 银色
+  "GD": "#FFD700", // 金色
+  "BR": "#8B4513", // 棕色
+  "MC": "linear-gradient(45deg, #FF0000, #00FF00, #0000FF)", // 多色（渐变）
+  "NT": "#DEB887", // 原色/自然色
+  "GE": "#808080", // 灰色
+  "DR": "#006400", // 墨绿
+};
 
 // SKU 段定义
 export interface SkuSegment {
@@ -114,20 +135,22 @@ export const DEFAULT_SEGMENTS: SkuSegment[] = [
     order: 4,
     options: [
       { code: "", nameEn: "None", nameCn: "不选择" },
-      { code: "RE", nameEn: "Red", nameCn: "红色" },
-      { code: "BL", nameEn: "Blue", nameCn: "蓝色" },
-      { code: "GR", nameEn: "Green", nameCn: "绿色" },
-      { code: "YE", nameEn: "Yellow", nameCn: "黄色" },
-      { code: "BK", nameEn: "Black", nameCn: "黑色" },
-      { code: "WH", nameEn: "White", nameCn: "白色" },
-      { code: "PK", nameEn: "Pink", nameCn: "粉色" },
-      { code: "OR", nameEn: "Orange", nameCn: "橙色" },
-      { code: "PU", nameEn: "Purple", nameCn: "紫色" },
-      { code: "SV", nameEn: "Silver", nameCn: "银色" },
-      { code: "GD", nameEn: "Gold", nameCn: "金色" },
-      { code: "BR", nameEn: "Brown", nameCn: "棕色" },
-      { code: "MC", nameEn: "Multi-color", nameCn: "多色" },
-      { code: "NT", nameEn: "Natural", nameCn: "原色" },
+      { code: "RE", nameEn: "Red", nameCn: "红色", colorHex: "#FF0000" },
+      { code: "BL", nameEn: "Blue", nameCn: "蓝色", colorHex: "#0000FF" },
+      { code: "GR", nameEn: "Green", nameCn: "绿色", colorHex: "#00FF00" },
+      { code: "YE", nameEn: "Yellow", nameCn: "黄色", colorHex: "#FFFF00" },
+      { code: "BK", nameEn: "Black", nameCn: "黑色", colorHex: "#000000" },
+      { code: "WH", nameEn: "White", nameCn: "白色", colorHex: "#FFFFFF" },
+      { code: "PK", nameEn: "Pink", nameCn: "粉色", colorHex: "#FFC0CB" },
+      { code: "OR", nameEn: "Orange", nameCn: "橙色", colorHex: "#FFA500" },
+      { code: "PU", nameEn: "Purple", nameCn: "紫色", colorHex: "#800080" },
+      { code: "SV", nameEn: "Silver", nameCn: "银色", colorHex: "#C0C0C0" },
+      { code: "GD", nameEn: "Gold", nameCn: "金色", colorHex: "#FFD700" },
+      { code: "BR", nameEn: "Brown", nameCn: "棕色", colorHex: "#8B4513" },
+      { code: "MC", nameEn: "Multi-color", nameCn: "多色", colorHex: "#GRADIENT" },
+      { code: "NT", nameEn: "Natural", nameCn: "原色", colorHex: "#DEB887" },
+      { code: "GE", nameEn: "Grey", nameCn: "灰色", colorHex: "#808080" },
+      { code: "DR", nameEn: "Dark Green", nameCn: "墨绿", colorHex: "#006400" },
     ],
   },
   {

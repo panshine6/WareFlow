@@ -468,6 +468,10 @@ export default function SkuGeneratorModal({
               {segment.options.map((option) => {
                 const isEmptyOption = option.code === '';
                 const isSelected = selectedValue === option.code;
+                const isColorSegment = segment.id === 'color';
+                const colorHex = option.colorHex;
+                const isGradient = colorHex === '#GRADIENT';
+                
                 return (
                   <TouchableOpacity
                     key={option.code || 'empty'}
@@ -493,6 +497,16 @@ export default function SkuGeneratorModal({
                       }
                     }}
                   >
+                    {/* 颜色方块（仅颜色段显示） */}
+                    {isColorSegment && colorHex && !isEmptyOption && (
+                      <View
+                        style={[
+                          styles.colorSwatch,
+                          isGradient ? styles.colorSwatchGradient : { backgroundColor: colorHex },
+                          colorHex === '#FFFFFF' && styles.colorSwatchWhite,
+                        ]}
+                      />
+                    )}
                     <Text
                       style={[
                         styles.optionCode,
@@ -1362,6 +1376,30 @@ const styles = StyleSheet.create({
   },
   optionTextSelected: {
     color: "#fff",
+  },
+  // 颜色方块样式
+  colorSwatch: {
+    width: 24,
+    height: 24,
+    borderRadius: 4,
+    marginBottom: 4,
+    borderWidth: 1,
+    borderColor: "#ddd",
+  },
+  colorSwatchWhite: {
+    borderColor: "#ccc",
+    borderWidth: 1,
+  },
+  colorSwatchGradient: {
+    backgroundColor: "#f0f0f0",
+    // 多色渐变效果（用简化的方式表示）
+    borderWidth: 2,
+    borderColor: "transparent",
+    // 用四个边框颜色表示多色
+    borderTopColor: "#FF0000",
+    borderRightColor: "#00FF00",
+    borderBottomColor: "#0000FF",
+    borderLeftColor: "#FFFF00",
   },
   addOptionButton: {
     backgroundColor: "#e8f4ff",
