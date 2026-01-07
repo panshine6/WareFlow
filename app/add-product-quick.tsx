@@ -1062,8 +1062,11 @@ export default function AddProductQuickScreen() {
             ]}>
               {countStatus === "running" && <ActivityIndicator size="small" color="#007AFF" style={styles.statusSpinner} />}
               <ThemedText style={styles.statusText}>
-                {countStatus === "pending" ? "⏳ 计数待开始" :
-                 countStatus === "running" ? "计数中..." : "✓ 计数已完成"}
+                {countStatus === "pending" 
+                  ? (overviewImageUri ? "⏳ 计数待开始" : "✋ 等待人工计数") 
+                  : countStatus === "running" 
+                    ? "计数中..." 
+                    : "✓ 计数已完成"}
               </ThemedText>
             </View>
             {barcodeScanStatus !== "idle" && (
