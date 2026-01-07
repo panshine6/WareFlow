@@ -258,13 +258,24 @@ class IndexedDBStorage {
       const products = await this.db!.getAll('products');
       const history = await this.db!.getAll('inventory_history');
       
+      // 导出 Box 数据（从独立的 IndexedDB 数据库）
+      let boxes: any[] = [];
+      try {
+        const { getAllBoxes } = await import('./box-storage');
+        boxes = await getAllBoxes();
+      } catch (error) {
+        console.warn('[IndexedDB] Failed to export boxes:', error);
+      }
+      
       const data = {
-        version: 1,
+        version: 2, // 升级版本号，表示包含 Box 数据
         exportDate: new Date().toISOString(),
         productsCount: products.length,
         historyCount: history.length,
+        boxesCount: boxes.length,
         products,
         history,
+        boxes,
       };
       
       return JSON.stringify(data, null, 2);
@@ -276,8 +287,8 @@ class IndexedDBStorage {
     await this.withRetry(async () => {
       const data = JSON.parse(jsonString);
       
-      // 验证数据格式
-      if (!data.version || !data.products || !data.history) {
+      // 验证数据格式（兼容旧版本和新版本）
+      if (!data.version || !data.products) {
         throw new Error('Invalid data format');
       }
       
@@ -294,12 +305,25 @@ class IndexedDBStorage {
       }
       await tx1.done;
       
-      // 导入历史记录
-      const tx2 = this.db!.transaction('inventory_history', 'readwrite');
-      for (const history of data.history) {
-        await tx2.store.add(history);
+      // 导入历史记录（如果有）
+      if (data.history && data.history.length > 0) {
+        const tx2 = this.db!.transaction('inventory_history', 'readwrite');
+        for (const history of data.history) {
+          await tx2.store.add(history);
+        }
+        await tx2.done;
       }
-      await tx2.done;
+      
+      // 导入 Box 数据（如果有，版本 2+）
+      if (data.boxes && data.boxes.length > 0) {
+        try {
+          const { importBoxes } = await import('./box-storage');
+          await importBoxes(data.boxes);
+          console.log(`[IndexedDB] Imported ${data.boxes.length} boxes`);
+        } catch (error) {
+          console.warn('[IndexedDB] Failed to import boxes:', error);
+        }
+      }
     });
   }
 

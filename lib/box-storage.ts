@@ -391,3 +391,78 @@ export function getBoxItemCount(box: Box): number {
 export function generateBoxBarcode(box: Box): string {
   return box.id;
 }
+
+/**
+ * 批量导入 Box 数据（用于数据恢复）
+ */
+export async function importBoxes(boxes: Box[]): Promise<void> {
+  const database = await initDB();
+
+  return new Promise((resolve, reject) => {
+    const transaction = database.transaction([STORE_NAME], 'readwrite');
+    const store = transaction.objectStore(STORE_NAME);
+
+    // 先清空现有数据
+    const clearRequest = store.clear();
+    
+    clearRequest.onsuccess = () => {
+      // 逐个添加 Box
+      let addedCount = 0;
+      
+      if (boxes.length === 0) {
+        console.log('[BoxStorage] No boxes to import');
+        resolve();
+        return;
+      }
+
+      for (const box of boxes) {
+        const addRequest = store.add(box);
+        
+        addRequest.onsuccess = () => {
+          addedCount++;
+          if (addedCount === boxes.length) {
+            console.log(`[BoxStorage] Imported ${addedCount} boxes`);
+            resolve();
+          }
+        };
+
+        addRequest.onerror = () => {
+          console.error('[BoxStorage] Failed to import box:', box.id, addRequest.error);
+          // 继续导入其他 Box
+          addedCount++;
+          if (addedCount === boxes.length) {
+            resolve();
+          }
+        };
+      }
+    };
+
+    clearRequest.onerror = () => {
+      console.error('[BoxStorage] Failed to clear boxes:', clearRequest.error);
+      reject(clearRequest.error);
+    };
+  });
+}
+
+/**
+ * 清空所有 Box 数据
+ */
+export async function clearAllBoxes(): Promise<void> {
+  const database = await initDB();
+
+  return new Promise((resolve, reject) => {
+    const transaction = database.transaction([STORE_NAME], 'readwrite');
+    const store = transaction.objectStore(STORE_NAME);
+    const request = store.clear();
+
+    request.onsuccess = () => {
+      console.log('[BoxStorage] All boxes cleared');
+      resolve();
+    };
+
+    request.onerror = () => {
+      console.error('[BoxStorage] Failed to clear boxes:', request.error);
+      reject(request.error);
+    };
+  });
+}

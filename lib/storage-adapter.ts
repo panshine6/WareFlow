@@ -507,13 +507,24 @@ export const BackupAdapter = {
     } else {
       const products = await ProductStorageAdapter.getAll();
       const settings = await SettingsStorageAdapter.get();
+      
+      // 导出 Box 数据
+      let boxes: any[] = [];
+      try {
+        const { getAllBoxes } = await import('./box-storage');
+        boxes = await getAllBoxes();
+      } catch (error) {
+        console.warn('[BackupAdapter] Failed to export boxes:', error);
+      }
 
       const data = {
-        version: 1,
+        version: 2, // 升级版本号，表示包含 Box 数据
         exportDate: new Date().toISOString(),
         productsCount: products.length,
+        boxesCount: boxes.length,
         products,
         settings,
+        boxes,
       };
 
       return JSON.stringify(data, null, 2);
@@ -540,6 +551,17 @@ export const BackupAdapter = {
       // 导入设置（如果有）
       if (data.settings) {
         await SettingsStorageAdapter.update(data.settings);
+      }
+      
+      // 导入 Box 数据（如果有，版本 2+）
+      if (data.boxes && data.boxes.length > 0) {
+        try {
+          const { importBoxes } = await import('./box-storage');
+          await importBoxes(data.boxes);
+          console.log(`[BackupAdapter] Imported ${data.boxes.length} boxes`);
+        } catch (error) {
+          console.warn('[BackupAdapter] Failed to import boxes:', error);
+        }
       }
     }
   },
