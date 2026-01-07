@@ -386,4 +386,94 @@ export const SyncService = {
       return false;
     }
   },
+
+  /**
+   * 仅下载设置和Box数据，保留本地产品数据（包括高分辨率图片）
+   * 这个方法不会覆盖本地的产品数据，只同步设置和Box信息
+   */
+  async downloadSettingsAndBoxesOnly(trpcClient: any): Promise<SyncResult> {
+    try {
+      console.log("[Sync] Starting settings and boxes only download...");
+      
+      // 1. 下载用户设置
+      let settingsCount = 0;
+      try {
+        const settingsResult = await trpcClient.sync.downloadSettings.query();
+        const settings = settingsResult.settings || [];
+        
+        for (const setting of settings) {
+          try {
+            await AsyncStorage.setItem(setting.key, setting.value);
+            settingsCount++;
+          } catch (e) {
+            console.warn(`[Sync] Failed to save setting ${setting.key}:`, e);
+          }
+        }
+        console.log(`[Sync] Downloaded ${settingsCount} settings`);
+      } catch (e) {
+        console.warn(`[Sync] Failed to download settings:`, e);
+      }
+      
+      // 2. 下载产品数据，但只更新 boxId 和 boxName 字段
+      let boxUpdatedCount = 0;
+      try {
+        const result = await trpcClient.sync.download.query();
+        const cloudProducts = result.products || [];
+        const localProducts = await ProductStorageAdapter.getAll();
+        
+        // 创建云端产品的映射（按 ID）
+        const cloudProductMap = new Map<string, any>();
+        for (const p of cloudProducts) {
+          cloudProductMap.set(p.id, p);
+        }
+        
+        // 更新本地产品的 boxId 和 boxName
+        let hasUpdates = false;
+        for (const localProduct of localProducts) {
+          const cloudProduct = cloudProductMap.get(localProduct.id);
+          if (cloudProduct) {
+            const newBoxId = cloudProduct.boxId || undefined;
+            const newBoxName = cloudProduct.boxName || undefined;
+            
+            // 只有当云端有盒子信息且与本地不同时才更新
+            if ((newBoxId && newBoxId !== localProduct.boxId) || 
+                (newBoxName && newBoxName !== localProduct.boxName)) {
+              localProduct.boxId = newBoxId;
+              localProduct.boxName = newBoxName;
+              hasUpdates = true;
+              boxUpdatedCount++;
+            }
+          }
+        }
+        
+        // 保存更新后的本地数据
+        if (hasUpdates) {
+          await ProductStorageAdapter.replaceAll(localProducts);
+          console.log(`[Sync] Updated box info for ${boxUpdatedCount} products`);
+        }
+      } catch (e) {
+        console.warn(`[Sync] Failed to update box info:`, e);
+      }
+      
+      // 3. 更新最后同步时间
+      const now = new Date().toISOString();
+      await AsyncStorage.setItem(LAST_SYNC_TIME_KEY, now);
+      
+      console.log(`[Sync] Settings and boxes download completed: ${settingsCount} settings, ${boxUpdatedCount} box updates`);
+      
+      return {
+        success: true,
+        direction: "download",
+        count: settingsCount + boxUpdatedCount,
+      };
+    } catch (error: any) {
+      console.error("[Sync] Settings and boxes download failed:", error);
+      return {
+        success: false,
+        direction: "download",
+        count: 0,
+        error: error.message || "下载失败",
+      };
+    }
+  },
 };

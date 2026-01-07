@@ -193,35 +193,86 @@ export default function InboundScreen() {
           Alert.alert("上传失败", result.error || "未知错误");
         }
       } else {
-        // 电脑端：从云端下载数据
-        const trpcClient = {
-          sync: {
-            download: {
-              query: async () => {
-                const result = await downloadQuery.refetch();
-                return result.data;
+        // 电脑端：从云端下载数据，显示选项对话框
+        setRefreshing(false); // 先停止加载状态，等待用户选择
+        
+        Alert.alert(
+          "从云端下载",
+          "请选择下载方式：\n\n• 完整下载：覆盖本地所有数据（包括图片）\n• 仅同步设置：保留本地图片，只同步设置和Box数据",
+          [
+            {
+              text: "取消",
+              style: "cancel",
+            },
+            {
+              text: "仅同步设置",
+              onPress: async () => {
+                setRefreshing(true);
+                try {
+                  const trpcClient = {
+                    sync: {
+                      download: {
+                        query: async () => (await downloadQuery.refetch()).data,
+                      },
+                      downloadSettings: {
+                        query: async () => (await downloadSettingsQuery.refetch()).data,
+                      },
+                    },
+                  };
+                  const result = await SyncService.downloadSettingsAndBoxesOnly(trpcClient);
+                  if (result.success) {
+                    Alert.alert("同步成功", "已同步设置和Box数据，本地图片已保留");
+                  } else {
+                    Alert.alert("同步失败", result.error || "未知错误");
+                  }
+                } catch (error: any) {
+                  Alert.alert("同步失败", error.message || "网络错误");
+                } finally {
+                  setRefreshing(false);
+                  if (viewMode === "history") {
+                    await loadInboundHistory();
+                  }
+                }
               },
             },
-            downloadWithoutImages: {
-              query: async () => {
-                const result = await downloadWithoutImagesQuery.refetch();
-                return result.data;
+            {
+              text: "完整下载",
+              style: "destructive",
+              onPress: async () => {
+                setRefreshing(true);
+                try {
+                  const trpcClient = {
+                    sync: {
+                      download: {
+                        query: async () => (await downloadQuery.refetch()).data,
+                      },
+                      downloadWithoutImages: {
+                        query: async () => (await downloadWithoutImagesQuery.refetch()).data,
+                      },
+                      downloadSettings: {
+                        query: async () => (await downloadSettingsQuery.refetch()).data,
+                      },
+                    },
+                  };
+                  const result = await SyncService.downloadFromCloud(trpcClient);
+                  if (result.success) {
+                    Alert.alert("下载成功", `已从云端下载 ${result.count} 个产品和设置`);
+                  } else {
+                    Alert.alert("下载失败", result.error || "未知错误");
+                  }
+                } catch (error: any) {
+                  Alert.alert("下载失败", error.message || "网络错误");
+                } finally {
+                  setRefreshing(false);
+                  if (viewMode === "history") {
+                    await loadInboundHistory();
+                  }
+                }
               },
             },
-            downloadSettings: {
-              query: async () => {
-                const result = await downloadSettingsQuery.refetch();
-                return result.data;
-              },
-            },
-          },
-        };
-        const result = await SyncService.downloadFromCloud(trpcClient);
-        if (result.success) {
-          Alert.alert("下载成功", `已从云端下载 ${result.count} 个产品和设置`);
-        } else {
-          Alert.alert("下载失败", result.error || "未知错误");
-        }
+          ]
+        );
+        return; // 提前返回，等待用户选择
       }
       // 同步后重新加载入库历史
       if (viewMode === "history") {

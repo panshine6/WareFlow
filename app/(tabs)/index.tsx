@@ -842,69 +842,144 @@ export default function HomeScreen() {
               style={[styles.bottomSheetItem, refreshing && styles.bottomSheetItemDisabled]}
               disabled={refreshing}
               onPress={() => {
-                console.log("[Download] Button clicked - sync version");
+                console.log("[Download] Button clicked - showing options");
                 setShowDataModal(false);
                 
-                // 使用 setTimeout 来延迟执行异步操作
-                setTimeout(async () => {
-                  setRefreshing(true);
-                  try {
-                    console.log("[Download] Starting download...");
-                    // 使用 SyncService 下载数据
-                    const trpcClient = {
-                      sync: {
-                        download: {
-                          query: async () => {
-                            console.log("[Download] Calling downloadQuery.refetch");
-                            return (await downloadQuery.refetch()).data;
+                // 显示下载选项对话框
+                if (Platform.OS === 'web') {
+                  const choice = window.confirm(
+                    "⚠️ 警告\n\n" +
+                    "完整下载会覆盖本地所有数据（包括高分辨率图片）\n\n" +
+                    "点击“确定”进行完整下载\n" +
+                    "点击“取消”仅同步设置和Box数据（保留本地图片）"
+                  );
+                  
+                  setTimeout(async () => {
+                    setRefreshing(true);
+                    try {
+                      const trpcClient = {
+                        sync: {
+                          download: {
+                            query: async () => {
+                              return (await downloadQuery.refetch()).data;
+                            },
+                          },
+                          downloadWithoutImages: {
+                            query: async () => {
+                              return (await downloadWithoutImagesQuery.refetch()).data;
+                            },
+                          },
+                          downloadSettings: {
+                            query: async () => {
+                              return (await downloadSettingsQuery.refetch()).data;
+                            },
                           },
                         },
-                        downloadWithoutImages: {
-                          query: async () => {
-                            console.log("[Download] Calling downloadWithoutImagesQuery.refetch (no images)");
-                            return (await downloadWithoutImagesQuery.refetch()).data;
-                          },
-                        },
-                        downloadSettings: {
-                          query: async () => {
-                            console.log("[Download] Calling downloadSettingsQuery.refetch");
-                            return (await downloadSettingsQuery.refetch()).data;
-                          },
+                      };
+                      
+                      let result;
+                      if (choice) {
+                        // 完整下载
+                        console.log("[Download] Full download selected");
+                        result = await SyncService.downloadFromCloud(trpcClient);
+                        if (result.success) {
+                          await loadProducts();
+                          window.alert(`下载成功\n已下载 ${result.count} 个产品和设置到本地`);
+                        }
+                      } else {
+                        // 仅同步设置和Box
+                        console.log("[Download] Settings and boxes only selected");
+                        result = await SyncService.downloadSettingsAndBoxesOnly(trpcClient);
+                        if (result.success) {
+                          await loadProducts();
+                          window.alert(`同步成功\n已同步设置和Box数据，本地图片已保留`);
+                        }
+                      }
+                      
+                      if (!result.success) {
+                        window.alert(`下载失败\n${result.error || "未知错误"}`);
+                      }
+                    } catch (error: any) {
+                      window.alert(`下载失败\n${error.message || "网络错误"}`);
+                    } finally {
+                      setRefreshing(false);
+                    }
+                  }, 100);
+                } else {
+                  // 原生平台使用 Alert
+                  Alert.alert(
+                    "从云端下载",
+                    "请选择下载方式：\n\n• 完整下载：覆盖本地所有数据（包括图片）\n• 仅同步设置：保留本地图片，只同步设置和Box数据",
+                    [
+                      {
+                        text: "取消",
+                        style: "cancel",
+                      },
+                      {
+                        text: "仅同步设置",
+                        onPress: async () => {
+                          setRefreshing(true);
+                          try {
+                            const trpcClient = {
+                              sync: {
+                                download: {
+                                  query: async () => (await downloadQuery.refetch()).data,
+                                },
+                                downloadSettings: {
+                                  query: async () => (await downloadSettingsQuery.refetch()).data,
+                                },
+                              },
+                            };
+                            const result = await SyncService.downloadSettingsAndBoxesOnly(trpcClient);
+                            if (result.success) {
+                              await loadProducts();
+                              Alert.alert("同步成功", "已同步设置和Box数据，本地图片已保留");
+                            } else {
+                              Alert.alert("同步失败", result.error || "未知错误");
+                            }
+                          } catch (error: any) {
+                            Alert.alert("同步失败", error.message || "网络错误");
+                          } finally {
+                            setRefreshing(false);
+                          }
                         },
                       },
-                    };
-                    const result = await SyncService.downloadFromCloud(trpcClient);
-                    console.log("[Download] Result:", result);
-                    if (result.success) {
-                      await loadProducts();
-                      const msg = `已下载 ${result.count} 个产品和设置到本地`;
-                      console.log("[Download] Success:", msg);
-                      if (Platform.OS === 'web') {
-                        window.alert(`下载成功\n${msg}`);
-                      } else {
-                        Alert.alert("下载成功", msg);
-                      }
-                    } else {
-                      const errMsg = result.error || "未知错误";
-                      console.log("[Download] Failed:", errMsg);
-                      if (Platform.OS === 'web') {
-                        window.alert(`下载失败\n${errMsg}`);
-                      } else {
-                        Alert.alert("下载失败", errMsg);
-                      }
-                    }
-                  } catch (error: any) {
-                    console.error("[Download] Error:", error);
-                    const errMsg = error.message || "网络错误";
-                    if (Platform.OS === 'web') {
-                      window.alert(`下载失败\n${errMsg}`);
-                    } else {
-                      Alert.alert("下载失败", errMsg);
-                    }
-                  } finally {
-                    setRefreshing(false);
-                  }
-                }, 100);
+                      {
+                        text: "完整下载",
+                        style: "destructive",
+                        onPress: async () => {
+                          setRefreshing(true);
+                          try {
+                            const trpcClient = {
+                              sync: {
+                                download: {
+                                  query: async () => (await downloadQuery.refetch()).data,
+                                },
+                                downloadWithoutImages: {
+                                  query: async () => (await downloadWithoutImagesQuery.refetch()).data,
+                                },
+                                downloadSettings: {
+                                  query: async () => (await downloadSettingsQuery.refetch()).data,
+                                },
+                              },
+                            };
+                            const result = await SyncService.downloadFromCloud(trpcClient);
+                            if (result.success) {
+                              await loadProducts();
+                              Alert.alert("下载成功", `已下载 ${result.count} 个产品和设置到本地`);
+                            } else {
+                              Alert.alert("下载失败", result.error || "未知错误");
+                            }
+                          } catch (error: any) {
+                            Alert.alert("下载失败", error.message || "网络错误");
+                          } finally {
+                            setRefreshing(false);
+                          }
+                        },
+                      },
+                    ]
+                  );
+                }
               }}
             >
               <ThemedText style={styles.bottomSheetItemIcon}>{refreshing ? "⏳" : "⬇️"}</ThemedText>
