@@ -853,14 +853,14 @@ export default function AddProductQuickScreen() {
         }
       }
 
-      // 扫描 SKU 重复（后台执行，不阻塞）
-      scanForDuplicateSKUs().then(duplicates => {
-        if (duplicates.length > 0) {
-          console.log(`[QuickAdd] Found ${duplicates.length} duplicate SKUs`);
-        }
-      }).catch(err => {
-        console.error("[QuickAdd] SKU duplicate scan failed:", err);
-      });
+      // SKU 重复检测功能已暂停
+      // scanForDuplicateSKUs().then(duplicates => {
+      //   if (duplicates.length > 0) {
+      //     console.log(`[QuickAdd] Found ${duplicates.length} duplicate SKUs`);
+      //   }
+      // }).catch(err => {
+      //   console.error("[QuickAdd] SKU duplicate scan failed:", err);
+      // });
 
       alert("产品入库成功！");
       router.replace("/(tabs)/inbound");

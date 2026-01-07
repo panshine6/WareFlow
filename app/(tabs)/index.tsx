@@ -185,7 +185,7 @@ export default function HomeScreen() {
     useCallback(() => {
       loadProducts();
       loadOutboundStats();
-      loadDuplicateWarnings();
+      // loadDuplicateWarnings(); // SKU 重复检测功能已暂停
       checkAndPromptDownload();
     }, [])
   );
