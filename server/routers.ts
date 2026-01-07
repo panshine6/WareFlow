@@ -237,23 +237,25 @@ export const appRouter = router({
 
   // AI 视觉识别 API
   ai: router({
-    // 识别图片中的饰品数量（多次计数取共识）
+    // 识别图片中的饰品数量（多次计数取共识，并行优化版）
     countProducts: publicProcedure
       .input(z.object({
         imageBase64: z.string(),
       }))
       .mutation(async ({ input }) => {
-        // 第一次计数
-        const count1 = await aiVision.countProductsInImage(input.imageBase64);
-        console.log("[AI Count] First count:", count1);
+        const startTime = Date.now();
         
-        // 第二次计数
-        const count2 = await aiVision.countProductsInImage(input.imageBase64);
-        console.log("[AI Count] Second count:", count2);
+        // 并行执行前两次计数（大幅提升速度）
+        console.log("[AI Count] Starting parallel count (2 requests)...");
+        const [count1, count2] = await Promise.all([
+          aiVision.countProductsInImage(input.imageBase64),
+          aiVision.countProductsInImage(input.imageBase64),
+        ]);
+        console.log(`[AI Count] Parallel counts completed in ${Date.now() - startTime}ms: count1=${count1}, count2=${count2}`);
         
         // 如果两次结果相同，直接返回
         if (count1 === count2) {
-          console.log("[AI Count] Two counts match:", count1);
+          console.log(`[AI Count] Two counts match: ${count1}, total time: ${Date.now() - startTime}ms`);
           return { 
             count: count1, 
             counts: [count1, count2],
@@ -263,8 +265,9 @@ export const appRouter = router({
         }
         
         // 如果不同，进行第三次计数
+        console.log("[AI Count] Counts differ, starting third count...");
         const count3 = await aiVision.countProductsInImage(input.imageBase64);
-        console.log("[AI Count] Third count:", count3);
+        console.log(`[AI Count] Third count: ${count3}`);
         
         const counts = [count1, count2, count3];
         
@@ -290,7 +293,7 @@ export const appRouter = router({
           ? `三次计数中有${maxFreq}次结果为${consensusCount}`
           : `三次计数结果均不同，建议手动确认`;
         
-        console.log("[AI Count] Consensus count:", consensusCount, "confidence:", confidence);
+        console.log(`[AI Count] Consensus: ${consensusCount}, confidence: ${confidence}, total time: ${Date.now() - startTime}ms`);
         
         return { 
           count: consensusCount, 
