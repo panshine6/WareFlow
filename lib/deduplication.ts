@@ -8,6 +8,7 @@ import { ProductAPI } from "./api-client";
 import { ProductStorage } from "./storage";
 import { batchCompareImages } from "./ai-vision";
 import { calculatePHashFromBase64, filterSimilarByPHash, PHASH_THRESHOLDS } from "./phash";
+import { getImageBase64WithCache, imageCache } from "./image-cache";
 import type { Product } from "@/types/product";
 
 // 放宽 pHash 阈值，避免漏掉相似产品
@@ -202,26 +203,42 @@ export async function performDuplicateCheck(
       };
     }
     
-    // 5. 转换候选产品图片为 Base64
-    console.log("[Dedup] Converting candidate product images to base64...");
+    // 5. 转换候选产品图片为 Base64（使用缓存加速）
+    console.log("[Dedup] Converting candidate product images to base64 (with cache)...");
     const existingImages: Array<{ id: string; base64: string }> = [];
     
-    for (let i = 0; i < productsToCompare.length; i++) {
-      const product = productsToCompare[i];
-      try {
-        console.log(`[Dedup] Converting image ${i + 1}/${productsToCompare.length} (${product.sku})...`);
-        const base64 = await imageToBase64(product.detailImageUri);
-        existingImages.push({
-          id: product.id,
-          base64,
-        });
-      } catch (error: any) {
-        console.error(`[Dedup] Failed to convert image for product ${product.id}:`, error);
-        // 跳过这个产品，继续处理其他产品
+    // 并行获取图片（带缓存）
+    const BATCH_SIZE = 10; // 并行获取数量
+    for (let i = 0; i < productsToCompare.length; i += BATCH_SIZE) {
+      const batch = productsToCompare.slice(i, i + BATCH_SIZE);
+      const batchResults = await Promise.all(
+        batch.map(async (product) => {
+          try {
+            // 使用缓存获取 Base64
+            const base64WithPrefix = await getImageBase64WithCache(product.detailImageUri);
+            // 移除 data:image/...;base64, 前缀
+            const base64 = base64WithPrefix.includes(',') 
+              ? base64WithPrefix.split(',')[1] 
+              : base64WithPrefix;
+            return { id: product.id, base64, sku: product.sku };
+          } catch (error: any) {
+            console.error(`[Dedup] Failed to get image for product ${product.id}:`, error);
+            return null;
+          }
+        })
+      );
+      
+      // 过滤掉失败的
+      for (const result of batchResults) {
+        if (result) {
+          existingImages.push({ id: result.id, base64: result.base64 });
+        }
       }
+      
+      console.log(`[Dedup] Converted ${Math.min(i + BATCH_SIZE, productsToCompare.length)}/${productsToCompare.length} images`);
     }
     
-    console.log("[Dedup] Successfully converted", existingImages.length, "images");
+    console.log("[Dedup] Successfully converted", existingImages.length, "images (with cache)");
     
     if (existingImages.length === 0) {
       console.log("[Dedup] No images to compare, skipping");
