@@ -225,6 +225,11 @@ export const SyncService = {
         createdAt: new Date(p.createdAt).toISOString(),
         updatedAt: new Date(p.updatedAt).toISOString(),
         history: [], // 历史记录需要单独查询
+        // 盒子关联信息
+        boxId: p.boxId || undefined,
+        boxName: p.boxName || undefined,
+        // 价格信息
+        price: p.price || undefined,
       }));
       
       // 4. 清空本地数据并保存云端数据（使用适配器确保 Web 端使用 IndexedDB）
