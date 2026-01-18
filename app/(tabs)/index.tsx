@@ -893,8 +893,14 @@ export default function HomeScreen() {
                 
                 // 显示下载选项对话框
                 if (Platform.OS === 'web') {
-                  // 手机 Web 端：只能同步设置和 Box 数据，不能下载产品信息
+                  // 手机 Web 端：显示选项对话框，可选择完整下载或仅同步设置
                   if (isMobileWeb) {
+                    const choice = window.confirm(
+                      "从云端下载\n\n" +
+                      "点击"确定"：完整下载（⚠️ 覆盖本地所有数据，包括高清图片）\n\n" +
+                      "点击"取消"：仅同步设置和Box数据（保留本地图片）"
+                    );
+                    
                     setTimeout(async () => {
                       setRefreshing(true);
                       try {
@@ -909,16 +915,30 @@ export default function HomeScreen() {
                           },
                         };
                         
-                        console.log("[Download] Mobile web - settings and boxes only");
-                        const result = await SyncService.downloadSettingsAndBoxesOnly(trpcClient);
-                        if (result.success) {
-                          await loadProducts();
-                          window.alert(`同步成功\n已同步设置和Box数据\n（手机端不支持下载产品数据，以保护本地高分辨率图片）`);
+                        let result;
+                        if (choice) {
+                          // 完整下载
+                          console.log("[Download] Mobile web - full download selected");
+                          result = await SyncService.downloadFromCloud(trpcClient);
+                          if (result.success) {
+                            await loadProducts();
+                            window.alert(`下载成功\n已下载 ${result.count} 个产品到本地\n（本地数据已被云端数据覆盖）`);
+                          }
                         } else {
-                          window.alert(`同步失败\n${result.error || "未知错误"}`);
+                          // 仅同步设置
+                          console.log("[Download] Mobile web - settings and boxes only");
+                          result = await SyncService.downloadSettingsAndBoxesOnly(trpcClient);
+                          if (result.success) {
+                            await loadProducts();
+                            window.alert(`同步成功\n已同步设置和Box数据\n（本地产品数据和图片已保留）`);
+                          }
+                        }
+                        
+                        if (!result.success) {
+                          window.alert(`操作失败\n${result.error || "未知错误"}`);
                         }
                       } catch (error: any) {
-                        window.alert(`同步失败\n${error.message || "网络错误"}`);
+                        window.alert(`操作失败\n${error.message || "网络错误"}`);
                       } finally {
                         setRefreshing(false);
                       }
