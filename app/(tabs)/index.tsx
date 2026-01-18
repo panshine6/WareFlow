@@ -101,16 +101,29 @@ export default function HomeScreen() {
     todayOutboundQuantity: 0,
   });
 
-  // 加载产品列表（Web 使用 AsyncStorage，原生使用 SQLite）
+  // 加载产品列表（Web 使用 IndexedDB，原生使用 SQLite）
   const loadProducts = async () => {
     try {
       const isWeb = Platform.OS === 'web';
-      const data = isWeb 
-        ? await ProductStorage.getActive()
-        : await ProductAPI.getActive();
+      let data: Product[] = [];
+      
+      try {
+        data = isWeb 
+          ? await ProductStorage.getActive()
+          : await ProductAPI.getActive();
+      } catch (dbError: any) {
+        console.error("[Home] Database error:", dbError);
+        // 不显示 Alert，让 ErrorBoundary 处理
+        // 但设置空数据以避免崩溃
+        setProducts([]);
+        setLoading(false);
+        return;
+      }
+      
       setProducts(data);
     } catch (error) {
       console.error("Failed to load products:", error);
+      setProducts([]);
     } finally {
       setLoading(false);
     }

@@ -102,7 +102,18 @@ export default function InboundScreen() {
   const loadInboundHistory = async () => {
     setLoadingHistory(true);
     try {
-      const products = await ProductStorage.getActive();
+      let products: Product[] = [];
+      try {
+        products = await ProductStorage.getActive();
+      } catch (dbError: any) {
+        console.error("[Inbound] Database error:", dbError);
+        Alert.alert(
+          "数据库连接失败",
+          "请尝试刷新页面。如果问题持续，请关闭其他标签页后重试。"
+        );
+        setLoadingHistory(false);
+        return;
+      }
       
       // 收集所有入库记录
       const allInboundRecords: {
@@ -158,7 +169,18 @@ export default function InboundScreen() {
     setLoadingLabels(true);
     try {
       // 获取最近 7 天内入库的商品（168 小时）
-      const items = await getRecentInboundProducts(168);
+      let items: LabelItem[] = [];
+      try {
+        items = await getRecentInboundProducts(168);
+      } catch (dbError: any) {
+        console.error("[Inbound] Database error loading labels:", dbError);
+        Alert.alert(
+          "数据库连接失败",
+          "请尝试刷新页面。如果问题持续，请关闭其他标签页后重试。"
+        );
+        setLoadingLabels(false);
+        return;
+      }
       setLabelItems(items);
       
       // 按批次分组（30 分钟内算同一批次）

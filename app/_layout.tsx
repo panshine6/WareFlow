@@ -17,8 +17,9 @@ import type { EdgeInsets, Metrics, Rect } from "react-native-safe-area-context";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { trpc, createTRPCClient } from "@/lib/trpc";
 import { initManusRuntime, subscribeSafeAreaInsets } from "@/lib/manus-runtime";
-import { initDatabase } from "@/lib/database-init";
 import { checkVersionAndClearCache } from "@/lib/cache-buster";
+import { ErrorBoundary } from "@/components/error-boundary";
+import { DatabaseProvider } from "@/components/database-provider";
 
 const DEFAULT_WEB_INSETS: EdgeInsets = { top: 0, right: 0, bottom: 0, left: 0 };
 const DEFAULT_WEB_FRAME: Rect = { x: 0, y: 0, width: 0, height: 0 };
@@ -39,11 +40,6 @@ export default function RootLayout() {
   // Initialize Manus runtime for cookie injection from parent container
   useEffect(() => {
     initManusRuntime();
-  }, []);
-
-  // Initialize database (SQLite for native, IndexedDB for web)
-  useEffect(() => {
-    initDatabase();
   }, []);
 
   // Check version and clear cache if needed (web only)
@@ -85,32 +81,37 @@ export default function RootLayout() {
     [initialFrame, initialInsets],
   );
 
+  // 应用内容（包含 ErrorBoundary 和 DatabaseProvider）
   const content = (
     <GestureHandlerRootView style={{ flex: 1 }}>
-      <trpc.Provider client={trpcClient} queryClient={queryClient}>
-        <QueryClientProvider client={queryClient}>
-          <ThemeProvider value={colorScheme === "dark" ? DarkTheme : DefaultTheme}>
-            <Stack>
-              <Stack.Screen name="login" options={{ headerShown: false }} />
-              <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-              <Stack.Screen name="modal" options={{ presentation: "modal", title: "Modal" }} />
-              <Stack.Screen name="oauth/callback" options={{ headerShown: false }} />
-              <Stack.Screen name="product-detail" options={{ title: "产品详情" }} />
-              <Stack.Screen name="add-product-quick" options={{ title: "快速产品添加" }} />
-              <Stack.Screen name="add-product" options={{ title: "添加产品" }} />
-              <Stack.Screen name="add-product-sku" options={{ title: "SKU 设置" }} />
-              <Stack.Screen name="add-product-location" options={{ title: "存储位置" }} />
-              <Stack.Screen name="add-product-overview" options={{ title: "拍摄全景图" }} />
-              <Stack.Screen name="recycle-bin" options={{ title: "回收站" }} />
-              <Stack.Screen name="backup" options={{ title: "数据备份" }} />
-              <Stack.Screen name="user-management" options={{ title: "用户管理" }} />
-              <Stack.Screen name="duplicate-check" options={{ title: "查重结果" }} />
-              <Stack.Screen name="feedback" options={{ title: "意见反馈" }} />
-            </Stack>
-            <StatusBar style="auto" />
-          </ThemeProvider>
-        </QueryClientProvider>
-      </trpc.Provider>
+      <ErrorBoundary>
+        <trpc.Provider client={trpcClient} queryClient={queryClient}>
+          <QueryClientProvider client={queryClient}>
+            <ThemeProvider value={colorScheme === "dark" ? DarkTheme : DefaultTheme}>
+              <DatabaseProvider>
+                <Stack>
+                  <Stack.Screen name="login" options={{ headerShown: false }} />
+                  <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+                  <Stack.Screen name="modal" options={{ presentation: "modal", title: "Modal" }} />
+                  <Stack.Screen name="oauth/callback" options={{ headerShown: false }} />
+                  <Stack.Screen name="product-detail" options={{ title: "产品详情" }} />
+                  <Stack.Screen name="add-product-quick" options={{ title: "快速产品添加" }} />
+                  <Stack.Screen name="add-product" options={{ title: "添加产品" }} />
+                  <Stack.Screen name="add-product-sku" options={{ title: "SKU 设置" }} />
+                  <Stack.Screen name="add-product-location" options={{ title: "存储位置" }} />
+                  <Stack.Screen name="add-product-overview" options={{ title: "拍摄全景图" }} />
+                  <Stack.Screen name="recycle-bin" options={{ title: "回收站" }} />
+                  <Stack.Screen name="backup" options={{ title: "数据备份" }} />
+                  <Stack.Screen name="user-management" options={{ title: "用户管理" }} />
+                  <Stack.Screen name="duplicate-check" options={{ title: "查重结果" }} />
+                  <Stack.Screen name="feedback" options={{ title: "意见反馈" }} />
+                </Stack>
+                <StatusBar style="auto" />
+              </DatabaseProvider>
+            </ThemeProvider>
+          </QueryClientProvider>
+        </trpc.Provider>
+      </ErrorBoundary>
     </GestureHandlerRootView>
   );
 

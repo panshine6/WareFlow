@@ -119,6 +119,11 @@ class IndexedDBStorage {
 
       console.log('[IndexedDB] Opening database connection...');
       
+      // 检查 IndexedDB 是否可用
+      if (typeof indexedDB === 'undefined') {
+        throw new Error('IndexedDB 不可用');
+      }
+      
       this.db = await openDB<FashionAccessoriesDB>(this.DB_NAME, this.DB_VERSION, {
         upgrade(db, oldVersion, newVersion, transaction) {
           console.log(`[IndexedDB] Upgrading database from v${oldVersion} to v${newVersion}`);
