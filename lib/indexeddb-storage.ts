@@ -441,7 +441,7 @@ class IndexedDBStorage {
       await txClear.done;
       
       // 导入产品（分批处理，避免大事务超时）
-      const BATCH_SIZE = 50;
+      const BATCH_SIZE = 10;
       for (let i = 0; i < data.products.length; i += BATCH_SIZE) {
         const batch = data.products.slice(i, i + BATCH_SIZE);
         const tx = this.db!.transaction('products', 'readwrite');

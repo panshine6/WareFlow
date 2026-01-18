@@ -250,7 +250,7 @@ export const ProductStorageAdapter = {
       await indexedDBStorage.clearAllData();
       
       // 分批添加产品，避免大事务超时
-      const BATCH_SIZE = 50;
+      const BATCH_SIZE = 10;
       for (let i = 0; i < products.length; i += BATCH_SIZE) {
         const batch = products.slice(i, i + BATCH_SIZE);
         for (const product of batch) {
