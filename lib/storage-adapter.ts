@@ -242,13 +242,26 @@ export const ProductStorageAdapter = {
 
   /**
    * 替换所有产品数据（用于从云端同步）
+   * 注意：此操作会清空本地数据并用新数据替换
    */
   async replaceAll(products: Product[]): Promise<void> {
     if (Platform.OS === 'web') {
+      // 先清空数据
       await indexedDBStorage.clearAllData();
-      for (const product of products) {
-        await indexedDBStorage.addProduct(product);
+      
+      // 分批添加产品，避免大事务超时
+      const BATCH_SIZE = 50;
+      for (let i = 0; i < products.length; i += BATCH_SIZE) {
+        const batch = products.slice(i, i + BATCH_SIZE);
+        for (const product of batch) {
+          await indexedDBStorage.addProduct(product);
+        }
+        // 每批之间短暂暂停，让浏览器有机会处理其他任务
+        if (i + BATCH_SIZE < products.length) {
+          await new Promise(resolve => setTimeout(resolve, 10));
+        }
       }
+      console.log(`[StorageAdapter] Replaced ${products.length} products`);
     } else {
       try {
         await AsyncStorage.setItem(PRODUCTS_KEY, JSON.stringify(products));
