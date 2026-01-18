@@ -897,8 +897,8 @@ export default function HomeScreen() {
                   if (isMobileWeb) {
                     const choice = window.confirm(
                       "从云端下载\n\n" +
-                      "点击"确定"：完整下载（⚠️ 覆盖本地所有数据，包括高清图片）\n\n" +
-                      "点击"取消"：仅同步设置和Box数据（保留本地图片）"
+                      "点击[确定]：完整下载（⚠️ 覆盖本地所有数据，包括高清图片）\n\n" +
+                      "点击[取消]：仅同步设置和Box数据（保留本地图片）"
                     );
                     
                     setTimeout(async () => {
