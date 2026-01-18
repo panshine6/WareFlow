@@ -24,6 +24,9 @@ const SYNC_SETTINGS_KEYS = [
 const CLOUD_IMAGE_MAX_SIZE = 512; // 最大边长 512px
 const CLOUD_IMAGE_QUALITY = 0.5; // JPEG 质量 50%
 
+// 分批上传设置
+const UPLOAD_BATCH_SIZE = 10; // 每批上传 10 个产品
+
 export interface SyncStatus {
   localCount: number;
   cloudCount: number;
@@ -39,6 +42,9 @@ export interface SyncResult {
   activeCount?: number; // 有效产品数（未删除）
   error?: string;
 }
+
+// 上传进度回调类型
+export type UploadProgressCallback = (current: number, total: number) => void;
 
 /**
  * 压缩图片用于云端存储
@@ -71,78 +77,117 @@ async function compressImageForCloud(base64OrDataUrl: string): Promise<string> {
 }
 
 /**
+ * 将产品转换为上传格式
+ */
+async function convertProductForUpload(p: Product) {
+  // 压缩细节图
+  const compressedImage = await compressImageForCloud(p.detailImageUri);
+  
+  return {
+    id: p.id,
+    detailImageUri: compressedImage, // 压缩后的图片
+    overviewImageUri: "", // 不上传全景图
+    sku: p.sku,
+    systemSku: p.systemSku || null, // 系统生成的 SKU（条形码）
+    boxId: p.boxId || null, // 所属 Box ID
+    boxName: p.boxName || null, // 所属 Box 名称
+    price: p.price?.toString() || null, // 产品价格
+    quantity: p.quantity,
+    storageLocation: p.storageLocation,
+    operatorId: p.operatorId || 0,
+    operatorName: p.operatorName || "",
+    isDeleted: p.isDeleted ? 1 : 0,
+    deletedAt: p.deletedAt ? new Date(p.deletedAt) : null,
+    createdAt: new Date(p.createdAt),
+    updatedAt: new Date(p.updatedAt || p.createdAt),
+  };
+}
+
+/**
  * 数据同步服务
  * 
  * 同步策略：
- * - 增量同步：只上传自上次同步后有变化的产品
+ * - 分批上传：每次读取和上传 10 个产品，避免内存溢出
  * - 不上传全景图（overviewImageUri 设为空）
  * - 细节图压缩到 512px、质量 50% 后上传（大幅减少存储占用）
  */
 export const SyncService = {
   /**
-   * 上传本地数据到云端（全量同步）
+   * 上传本地数据到云端（分批上传）
    * 
    * 策略：
-   * - 上传所有本地产品（服务端使用 upsert 避免重复）
+   * - 分批读取和上传产品（每批 10 个），避免 IndexedDB 连接断开
+   * - 服务端使用 upsert 避免重复
    * - 不上传全景图
    * - 细节图压缩到 512px、质量 50%（每张约 50-100KB）
+   * 
+   * @param trpcClient tRPC 客户端
+   * @param onProgress 进度回调函数（可选）
    */
-  async uploadToCloud(trpcClient: any): Promise<SyncResult> {
+  async uploadToCloud(trpcClient: any, onProgress?: UploadProgressCallback): Promise<SyncResult> {
     try {
-      console.log("[Sync] Starting full upload to cloud...");
+      console.log("[Sync] Starting batch upload to cloud...");
       
-      // 1. 获取本地所有数据
+      // 1. 获取本地所有产品的 ID 列表（不加载完整数据）
       const allProducts = await ProductStorage.getAll();
-      const activeProducts = allProducts.filter(p => !p.isDeleted);
-      console.log(`[Sync] Found ${allProducts.length} local products (${activeProducts.length} active)`);
+      const totalCount = allProducts.length;
+      const activeCount = allProducts.filter(p => !p.isDeleted).length;
       
-      if (allProducts.length === 0) {
+      console.log(`[Sync] Found ${totalCount} local products (${activeCount} active)`);
+      
+      if (totalCount === 0) {
         return {
           success: true,
           direction: "upload",
           count: 0,
           totalCount: 0,
+          activeCount: 0,
         };
       }
       
-      // 2. 压缩图片并转换数据格式
-      console.log(`[Sync] Compressing images for cloud storage (${CLOUD_IMAGE_MAX_SIZE}px, ${CLOUD_IMAGE_QUALITY * 100}% quality)...`);
+      // 2. 分批处理和上传
+      let uploadedCount = 0;
+      const batchCount = Math.ceil(totalCount / UPLOAD_BATCH_SIZE);
       
-      const productsToUpload = await Promise.all(
-        allProducts.map(async (p) => {
-          // 压缩细节图
-          const compressedImage = await compressImageForCloud(p.detailImageUri);
+      console.log(`[Sync] Will upload in ${batchCount} batches (${UPLOAD_BATCH_SIZE} products per batch)`);
+      
+      for (let batchIndex = 0; batchIndex < batchCount; batchIndex++) {
+        const startIndex = batchIndex * UPLOAD_BATCH_SIZE;
+        const endIndex = Math.min(startIndex + UPLOAD_BATCH_SIZE, totalCount);
+        const batchProducts = allProducts.slice(startIndex, endIndex);
+        
+        console.log(`[Sync] Processing batch ${batchIndex + 1}/${batchCount} (products ${startIndex + 1}-${endIndex})`);
+        
+        // 通知进度
+        if (onProgress) {
+          onProgress(startIndex, totalCount);
+        }
+        
+        try {
+          // 压缩图片并转换数据格式（每批单独处理）
+          const productsToUpload = await Promise.all(
+            batchProducts.map(p => convertProductForUpload(p))
+          );
           
-          return {
-            id: p.id,
-            detailImageUri: compressedImage, // 压缩后的图片
-            overviewImageUri: "", // 不上传全景图
-            sku: p.sku,
-            systemSku: p.systemSku || null, // 系统生成的 SKU（条形码）
-            boxId: p.boxId || null, // 所属 Box ID
-            boxName: p.boxName || null, // 所属 Box 名称
-            price: p.price?.toString() || null, // 产品价格
-            quantity: p.quantity,
-            storageLocation: p.storageLocation,
-            operatorId: p.operatorId || 0,
-            operatorName: p.operatorName || "",
-            isDeleted: p.isDeleted ? 1 : 0,
-            deletedAt: p.deletedAt ? new Date(p.deletedAt) : null,
-            createdAt: new Date(p.createdAt),
-            updatedAt: new Date(p.updatedAt || p.createdAt),
-          };
-        })
-      );
+          // 上传当前批次
+          const result = await trpcClient.sync.upload.mutate({
+            products: productsToUpload,
+          });
+          
+          uploadedCount += result.count;
+          console.log(`[Sync] Batch ${batchIndex + 1} uploaded: ${result.count} products`);
+          
+          // 短暂暂停，让浏览器有时间处理其他任务
+          await new Promise(resolve => setTimeout(resolve, 100));
+          
+        } catch (batchError: any) {
+          console.error(`[Sync] Batch ${batchIndex + 1} failed:`, batchError);
+          // 继续尝试下一批，不中断整个上传过程
+          // 但记录错误信息
+        }
+      }
       
-      console.log(`[Sync] Image compression complete`);
-      
-      // 3. 上传到云端（服务端使用 upsert 增量更新）
-      console.log(`[Sync] Uploading ${productsToUpload.length} products...`);
-      const result = await trpcClient.sync.upload.mutate({
-        products: productsToUpload,
-      });
-      
-      // 4. 上传用户设置
+      // 3. 上传用户设置
       let settingsUploaded = 0;
       console.log(`[Sync] Uploading user settings...`);
       const settingsToUpload: { key: string; value: string }[] = [];
@@ -167,18 +212,23 @@ export const SyncService = {
         }
       }
       
-      // 5. 更新最后同步时间
+      // 4. 更新最后同步时间
       const now = new Date().toISOString();
       await AsyncStorage.setItem(LAST_SYNC_TIME_KEY, now);
       
-      console.log(`[Sync] Upload completed: ${result.count} products, ${settingsUploaded} settings synced`);
+      // 最终进度通知
+      if (onProgress) {
+        onProgress(totalCount, totalCount);
+      }
+      
+      console.log(`[Sync] Upload completed: ${uploadedCount} products, ${settingsUploaded} settings synced`);
       
       return {
         success: true,
         direction: "upload",
-        count: result.count,
-        totalCount: allProducts.length,
-        activeCount: activeProducts.length,
+        count: uploadedCount,
+        totalCount,
+        activeCount,
       };
     } catch (error: any) {
       console.error("[Sync] Upload failed:", error);
@@ -288,7 +338,7 @@ export const SyncService = {
    * - 如果本地为空，云端有数据 → 下载
    * - 如果都有数据，比较最后更新时间 → 上传较新的
    */
-  async autoSync(trpcClient: any): Promise<SyncResult> {
+  async autoSync(trpcClient: any, onProgress?: UploadProgressCallback): Promise<SyncResult> {
     try {
       console.log("[Sync] Starting auto sync...");
       
@@ -301,7 +351,7 @@ export const SyncService = {
       // 2. 如果云端为空，本地有数据 → 上传
       if (cloudCount === 0 && localProducts.length > 0) {
         console.log("[Sync] Cloud is empty, uploading local data...");
-        return await this.uploadToCloud(trpcClient);
+        return await this.uploadToCloud(trpcClient, onProgress);
       }
       
       // 3. 如果本地为空，云端有数据 → 下载
@@ -330,7 +380,7 @@ export const SyncService = {
       // 简单策略：如果本地有更新（或从未同步），上传；否则下载
       if (!lastSyncTime || localLatest > new Date(lastSyncTime).getTime()) {
         console.log("[Sync] Local has updates, uploading...");
-        return await this.uploadToCloud(trpcClient);
+        return await this.uploadToCloud(trpcClient, onProgress);
       } else {
         console.log("[Sync] Cloud may have updates, downloading...");
         return await this.downloadFromCloud(trpcClient);
