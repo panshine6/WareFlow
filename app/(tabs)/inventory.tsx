@@ -337,6 +337,64 @@ export default function InventoryScreen() {
           </Pressable>
         </View>
 
+        {/* Box 筛选栏 */}
+        <View style={styles.boxFilterContainer}>
+          <Pressable
+            style={[
+              styles.boxFilterChip,
+              selectedBoxId === null && styles.boxFilterChipActive,
+            ]}
+            onPress={() => setSelectedBoxId(null)}
+          >
+            <ThemedText
+              style={[
+                styles.boxFilterChipText,
+                selectedBoxId === null && styles.boxFilterChipTextActive,
+              ]}
+            >
+              全部 Box
+            </ThemedText>
+          </Pressable>
+          <Pressable
+            style={[
+              styles.boxFilterChip,
+              selectedBoxId === "unassigned" && styles.boxFilterChipActive,
+            ]}
+            onPress={() => setSelectedBoxId("unassigned")}
+          >
+            <ThemedText
+              style={[
+                styles.boxFilterChipText,
+                selectedBoxId === "unassigned" && styles.boxFilterChipTextActive,
+              ]}
+            >
+              未关联
+            </ThemedText>
+          </Pressable>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.boxScrollView}>
+            {boxes.map((box) => (
+              <Pressable
+                key={box.code}
+                style={[
+                  styles.boxFilterChip,
+                  selectedBoxId === box.code && styles.boxFilterChipActive,
+                ]}
+                onPress={() => setSelectedBoxId(box.code)}
+              >
+                <ThemedText
+                  style={[
+                    styles.boxFilterChipText,
+                    selectedBoxId === box.code && styles.boxFilterChipTextActive,
+                  ]}
+                  numberOfLines={1}
+                >
+                  {box.code}
+                </ThemedText>
+              </Pressable>
+            ))}
+          </ScrollView>
+        </View>
+
         {/* 排序选项 */}
         {showSortOptions && (
           <View style={styles.sortOptionsContainer}>
@@ -356,7 +414,7 @@ export default function InventoryScreen() {
                   sortType === "time_desc" && styles.sortOptionTextActive,
                 ]}
               >
-                时间 ↓ 最新
+                时间最新
               </ThemedText>
             </Pressable>
             <Pressable
@@ -375,7 +433,7 @@ export default function InventoryScreen() {
                   sortType === "time_asc" && styles.sortOptionTextActive,
                 ]}
               >
-                时间 ↑ 最早
+                时间最早
               </ThemedText>
             </Pressable>
             <Pressable
@@ -394,7 +452,7 @@ export default function InventoryScreen() {
                   sortType === "quantity_desc" && styles.sortOptionTextActive,
                 ]}
               >
-                数量 ↓ 最多
+                数量最多
               </ThemedText>
             </Pressable>
             <Pressable
@@ -413,68 +471,11 @@ export default function InventoryScreen() {
                   sortType === "quantity_asc" && styles.sortOptionTextActive,
                 ]}
               >
-                数量 ↑ 最少
+                数量最少
               </ThemedText>
             </Pressable>
           </View>
         )}
-
-        {/* Box 筛选 */}
-        <View style={styles.boxFilterContainer}>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.boxScrollView}>
-            <Pressable
-              style={[
-                styles.boxFilterChip,
-                selectedBoxId === null && styles.boxFilterChipActive,
-              ]}
-              onPress={() => setSelectedBoxId(null)}
-            >
-              <ThemedText
-                style={[
-                  styles.boxFilterChipText,
-                  selectedBoxId === null && styles.boxFilterChipTextActive,
-                ]}
-              >
-                全部 Box
-              </ThemedText>
-            </Pressable>
-            <Pressable
-              style={[
-                styles.boxFilterChip,
-                selectedBoxId === "unassigned" && styles.boxFilterChipActive,
-              ]}
-              onPress={() => setSelectedBoxId("unassigned")}
-            >
-              <ThemedText
-                style={[
-                  styles.boxFilterChipText,
-                  selectedBoxId === "unassigned" && styles.boxFilterChipTextActive,
-                ]}
-              >
-                未关联
-              </ThemedText>
-            </Pressable>
-            {boxes.map((box) => (
-              <Pressable
-                key={box.code}
-                style={[
-                  styles.boxFilterChip,
-                  selectedBoxId === box.code && styles.boxFilterChipActive,
-                ]}
-                onPress={() => setSelectedBoxId(box.code)}
-              >
-                <ThemedText
-                  style={[
-                    styles.boxFilterChipText,
-                    selectedBoxId === box.code && styles.boxFilterChipTextActive,
-                  ]}
-                >
-                  {box.code}
-                </ThemedText>
-              </Pressable>
-            ))}
-          </ScrollView>
-        </View>
 
         {/* 统计信息和导出按钮 */}
         <View style={styles.statsRow}>
@@ -489,11 +490,12 @@ export default function InventoryScreen() {
           <View style={styles.exportButtons}>
             {filteredProducts.length > 100 && (
               <Pressable
-                style={styles.batchExportButton}
+                style={[styles.batchExportButton, exporting && styles.exportButtonDisabled]}
                 onPress={() => setShowBatchExport(!showBatchExport)}
+                disabled={exporting}
               >
                 <ThemedText style={styles.batchExportButtonText}>
-                  {showBatchExport ? "收起" : "分批"}
+                  分批
                 </ThemedText>
               </Pressable>
             )}
@@ -581,6 +583,11 @@ export default function InventoryScreen() {
           <FlatList
             data={filteredProducts}
             keyExtractor={(item) => item.id}
+            // 性能优化：限制同时渲染的项目数量，减少内存压力
+            initialNumToRender={10}
+            maxToRenderPerBatch={5}
+            windowSize={5}
+            removeClippedSubviews={true}
             renderItem={({ item }) => (
               <Pressable
                 style={({ pressed }) => [

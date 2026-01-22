@@ -1,5 +1,4 @@
 import type { Product } from "@/types/product";
-import ExcelJS from 'exceljs';
 
 // ============================================
 // 图片压缩工具函数
@@ -83,12 +82,14 @@ async function compressImage(
 /**
  * 并行压缩多张图片
  * @param images 图片数组，每个元素包含 id 和 base64
- * @param concurrency 并发数，默认 10
+ * @param concurrency 并发数，默认 5（降低并发以减少内存压力）
+ * @param onProgress 进度回调
  * @returns 压缩后的图片 Map
  */
 async function compressImagesParallel(
   images: Array<{ id: string; base64: string }>,
-  concurrency: number = 10
+  concurrency: number = 5,
+  onProgress?: (current: number, total: number) => void
 ): Promise<Map<string, string>> {
   const result = new Map<string, string>();
   
@@ -111,23 +112,27 @@ async function compressImagesParallel(
         result.set(id, compressed);
       }
     }
+    
+    // 报告进度
+    onProgress?.(Math.min(i + concurrency, images.length), images.length);
   }
   
   return result;
 }
 
 // ============================================
-// Excel 导出功能
+// Excel 导出功能（使用动态导入减少初始加载内存）
 // ============================================
 
 /**
  * 导出产品数据为店小秘格式的 Excel 文件（带压缩图片）
  * 
  * 性能优化说明：
- * 1. 图片压缩到 100x100 像素，约 10-20KB
- * 2. 并行压缩图片，提高处理速度
- * 3. 支持分批导出，避免内存溢出
- * 4. 显示进度信息
+ * 1. 使用动态导入 ExcelJS，避免初始加载时占用内存
+ * 2. 图片压缩到 100x100 像素，约 10-20KB
+ * 3. 并行压缩图片，提高处理速度
+ * 4. 支持分批导出，避免内存溢出
+ * 5. 显示进度信息
  */
 export async function exportToExcel(
   products: Product[],
@@ -138,7 +143,12 @@ export async function exportToExcel(
     console.log(`[ExcelExport] Starting export for ${products.length} products with images...`);
     onProgress?.(0, `准备导出 ${products.length} 个产品...`);
     
-    // 1. 准备图片数据
+    // 1. 动态导入 ExcelJS（减少初始加载内存）
+    onProgress?.(5, '正在加载 Excel 库...');
+    const ExcelJS = await import('exceljs');
+    console.log(`[ExcelExport] ExcelJS loaded in ${Date.now() - startTime}ms`);
+    
+    // 2. 准备图片数据
     onProgress?.(10, '正在压缩图片...');
     const imagesToCompress: Array<{ id: string; base64: string }> = [];
     
@@ -152,16 +162,23 @@ export async function exportToExcel(
     }
     
     console.log(`[ExcelExport] Compressing ${imagesToCompress.length} images...`);
-    const compressedImages = await compressImagesParallel(imagesToCompress);
+    const compressedImages = await compressImagesParallel(
+      imagesToCompress,
+      5, // 降低并发数以减少内存压力
+      (current, total) => {
+        const progress = 10 + Math.round((current / total) * 40);
+        onProgress?.(progress, `处理图片 ${current}/${total}`);
+      }
+    );
     console.log(`[ExcelExport] Compressed ${compressedImages.size} images in ${Date.now() - startTime}ms`);
     
     onProgress?.(50, '正在生成 Excel 文件...');
     
-    // 2. 创建工作簿
+    // 3. 创建工作簿
     const workbook = new ExcelJS.Workbook();
     const worksheet = workbook.addWorksheet('产品库存');
     
-    // 3. 设置列
+    // 4. 设置列
     worksheet.columns = [
       { header: '图片', key: 'image', width: 15 },
       { header: 'SKU', key: 'sku', width: 25 },
@@ -179,7 +196,7 @@ export async function exportToExcel(
     headerRow.alignment = { vertical: 'middle', horizontal: 'center' };
     headerRow.height = 25;
     
-    // 4. 添加数据行
+    // 5. 添加数据行
     let rowIndex = 2;
     for (const product of products) {
       const row = worksheet.addRow({
@@ -226,13 +243,13 @@ export async function exportToExcel(
     
     onProgress?.(90, '正在生成文件...');
     
-    // 5. 生成 Excel 文件
+    // 6. 生成 Excel 文件
     const buffer = await workbook.xlsx.writeBuffer();
     const blob = new Blob([buffer], {
       type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     });
     
-    // 6. 下载文件
+    // 7. 下载文件
     const timestamp = new Date().toISOString().slice(0, 10);
     const filename = `饰品库存_${timestamp}.xlsx`;
     
@@ -320,7 +337,6 @@ export async function exportToDianxiaomiFormat(
 // NIIMBOT 标签打印 Excel 导出功能
 // ============================================
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as XLSX from 'xlsx';
 import { ProductStorage } from './storage';
 
 // 导出记录存储键
@@ -524,14 +540,17 @@ export function groupByBatch(items: LabelItem[], batchIntervalMinutes: number = 
 }
 
 /**
- * 生成 NIIMBOT APP 可导入的 Excel 文件
+ * 生成 NIIMBOT APP 可导入的 Excel 文件（使用动态导入）
  * @param items 要导出的商品列表
  * @returns Excel 文件的 Blob
  * 
  * 注意：每个公司 SKU 只导出一条记录，不按数量重复
  * 因为同一产品只需要一个标签
  */
-export function generateNiimbotExcel(items: LabelItem[]): Blob {
+export async function generateNiimbotExcel(items: LabelItem[]): Promise<Blob> {
+  // 动态导入 xlsx 库
+  const XLSX = await import('xlsx');
+  
   // 创建工作表数据
   // 第一行：列标题
   const data: (string | number)[][] = [
@@ -599,7 +618,7 @@ export async function exportLabelsToExcel(items: LabelItem[]): Promise<string[]>
     throw new Error('没有选中任何商品');
   }
   
-  const blob = generateNiimbotExcel(items);
+  const blob = await generateNiimbotExcel(items);
   const timestamp = new Date().toISOString().slice(0, 10);
   const filename = `niimbot_labels_${timestamp}.xlsx`;
   downloadExcelWeb(blob, filename);
