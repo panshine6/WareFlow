@@ -95,15 +95,20 @@ export default function BackupScreen() {
       let downloadedCount = 0;
       const totalChunks = exportEstimate?.estimatedChunks || 1;
       
+      // 等待一下，让页面稳定
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
       // 逐个下载分片
       for await (const chunk of exportChunks(onProgress)) {
+        // 下载当前分片
         downloadChunk(chunk.filename, chunk.data);
         downloadedCount++;
         
-        // 每个分片下载后等待一段时间，让用户有时间保存
+        // 每个分片下载后等待较长时间，让浏览器有时间释放内存
         if (downloadedCount < totalChunks) {
-          setExportProgress(`已下载 ${downloadedCount}/${totalChunks} 个分片，准备下一个...`);
-          await new Promise(resolve => setTimeout(resolve, 1500));
+          setExportProgress(`已下载 ${downloadedCount}/${totalChunks} 个产品，准备下一个...`);
+          // 增加等待时间到 2 秒，让浏览器有足够时间回收内存
+          await new Promise(resolve => setTimeout(resolve, 2000));
         }
       }
       

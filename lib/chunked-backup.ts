@@ -2,6 +2,11 @@
  * 分片备份工具库
  * 支持将大型备份数据分成多个小文件导出，以及合并多个分片文件导入
  * 专为 iPhone Safari 的内存限制优化
+ * 
+ * v1.3.11 优化：
+ * - 每个分片只包含 1 个产品，避免内存溢出
+ * - 使用流式处理，逐个产品导出
+ * - 增加暂停时间，让浏览器有机会回收内存
  */
 
 import { Platform } from 'react-native';
@@ -10,8 +15,8 @@ import { ProductStorageAdapter, SettingsStorageAdapter } from './storage-adapter
 import type { Product } from '@/types/product';
 
 // 分片大小配置（每个分片的产品数量）
-// 假设每个产品平均 2MB（包含 base64 图片），每个分片约 10MB
-const PRODUCTS_PER_CHUNK = 5;
+// 优化：每个分片只包含 1 个产品，避免内存溢出
+const PRODUCTS_PER_CHUNK = 1;
 
 // 分片元数据接口
 export interface ChunkMetadata {
@@ -71,24 +76,54 @@ export function calculateChunkCount(totalProducts: number): number {
 }
 
 /**
+ * 强制垃圾回收（尽可能释放内存）
+ */
+async function forceGC(): Promise<void> {
+  // 给浏览器足够的时间进行垃圾回收
+  await new Promise(resolve => setTimeout(resolve, 500));
+}
+
+/**
  * 分片导出数据
  * 返回一个生成器，逐个生成分片数据
+ * 
+ * 优化策略：
+ * 1. 每个分片只包含 1 个产品
+ * 2. 每次只从数据库读取 1 个产品
+ * 3. 生成 JSON 后立即释放产品数据
+ * 4. 增加暂停时间让浏览器回收内存
  */
 export async function* exportChunks(
   onProgress?: ExportProgressCallback
 ): AsyncGenerator<{ filename: string; data: string; chunkIndex: number; totalChunks: number }> {
   const backupId = generateBackupId();
   
-  // 获取产品总数
-  const { total: totalProducts } = await ProductStorageAdapter.getProductCount();
+  // 获取产品总数（轻量级操作）
+  let totalProducts = 0;
+  try {
+    const countResult = await ProductStorageAdapter.getProductCount();
+    totalProducts = countResult.total;
+  } catch (error) {
+    console.error('[ChunkedBackup] Failed to get product count:', error);
+    throw new Error('无法获取产品数量，请刷新页面重试');
+  }
+  
   const totalChunks = calculateChunkCount(totalProducts);
   
   console.log(`[ChunkedBackup] Starting export: ${totalProducts} products, ${totalChunks} chunks`);
   
-  // 获取设置（只在第一个分片中包含）
-  const settings = await SettingsStorageAdapter.get();
+  // 等待一下，让之前的操作完成
+  await forceGC();
   
-  // 获取 Box 数据（只在第一个分片中包含）
+  // 获取设置（只在第一个分片中包含）- 轻量级数据
+  let settings: any = null;
+  try {
+    settings = await SettingsStorageAdapter.get();
+  } catch (error) {
+    console.warn('[ChunkedBackup] Failed to get settings:', error);
+  }
+  
+  // 获取 Box 数据（只在第一个分片中包含）- 轻量级数据
   let boxes: any[] = [];
   try {
     const { getAllBoxes } = await import('./box-storage');
@@ -97,23 +132,27 @@ export async function* exportChunks(
     console.warn('[ChunkedBackup] Failed to get boxes:', error);
   }
   
-  // 获取库存历史（只在第一个分片中包含）
-  // 注意：历史记录通常较小，可以在第一个分片中包含
-  let history: any[] = [];
-  // 历史记录会在导入时从完整备份中恢复，分片导出暂不单独处理历史
+  // 等待一下
+  await forceGC();
   
-  // 逐个分片导出
+  // 逐个产品导出
   for (let chunkIndex = 0; chunkIndex < totalChunks; chunkIndex++) {
     onProgress?.({
       currentChunk: chunkIndex + 1,
       totalChunks,
-      currentProduct: chunkIndex * PRODUCTS_PER_CHUNK,
+      currentProduct: chunkIndex,
       totalProducts,
-      status: `正在导出第 ${chunkIndex + 1}/${totalChunks} 个分片...`,
+      status: `正在导出第 ${chunkIndex + 1}/${totalChunks} 个产品...`,
     });
     
-    // 获取当前分片的产品
-    const products = await ProductStorageAdapter.getProductsBatch(PRODUCTS_PER_CHUNK, chunkIndex);
+    // 获取单个产品
+    let products: Product[] = [];
+    try {
+      products = await ProductStorageAdapter.getProductsBatch(PRODUCTS_PER_CHUNK, chunkIndex);
+    } catch (error) {
+      console.error(`[ChunkedBackup] Failed to get product ${chunkIndex + 1}:`, error);
+      throw new Error(`获取产品 ${chunkIndex + 1} 失败，请刷新页面重试`);
+    }
     
     // 构建分片数据
     const chunk: BackupChunk = {
@@ -125,7 +164,7 @@ export async function* exportChunks(
         exportDate: new Date().toISOString(),
         productsInChunk: products.length,
         totalProducts,
-        hasHistory: chunkIndex === 0 && history.length > 0,
+        hasHistory: false,
         hasBoxes: chunkIndex === 0 && boxes.length > 0,
         hasSettings: chunkIndex === 0,
       },
@@ -135,9 +174,6 @@ export async function* exportChunks(
     // 第一个分片包含额外数据
     if (chunkIndex === 0) {
       chunk.settings = settings;
-      if (history.length > 0) {
-        chunk.history = history;
-      }
       if (boxes.length > 0) {
         chunk.boxes = boxes;
       }
@@ -146,8 +182,8 @@ export async function* exportChunks(
     // 生成文件名
     const filename = `WareFlow-backup-${backupId}-part${chunkIndex + 1}.json`;
     
-    // 序列化数据
-    const data = JSON.stringify(chunk, null, 2);
+    // 序列化数据（不使用缩进，减少内存占用）
+    const data = JSON.stringify(chunk);
     
     console.log(`[ChunkedBackup] Generated chunk ${chunkIndex + 1}/${totalChunks}, size: ${(data.length / 1024 / 1024).toFixed(2)}MB`);
     
@@ -158,8 +194,11 @@ export async function* exportChunks(
       totalChunks,
     };
     
-    // 短暂暂停，让浏览器有机会释放内存
-    await new Promise(resolve => setTimeout(resolve, 100));
+    // 清理引用，帮助垃圾回收
+    products.length = 0;
+    
+    // 等待较长时间，让浏览器有机会释放内存
+    await forceGC();
   }
   
   onProgress?.({
@@ -183,7 +222,11 @@ export function downloadChunk(filename: string, data: string): void {
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);
-  URL.revokeObjectURL(url);
+  
+  // 立即释放 URL
+  setTimeout(() => {
+    URL.revokeObjectURL(url);
+  }, 100);
 }
 
 /**
@@ -196,20 +239,20 @@ export function validateChunk(data: string): { valid: boolean; metadata?: ChunkM
     // 检查是否是分片格式
     if (!chunk.metadata) {
       // 可能是旧版本的完整备份
-      if (chunk.version && chunk.products) {
+      if ((chunk as any).version && (chunk as any).products) {
         return {
           valid: true,
           metadata: {
-            version: chunk.version,
+            version: (chunk as any).version,
             chunkIndex: 0,
             totalChunks: 1,
             backupId: 'legacy',
-            exportDate: chunk.exportDate || new Date().toISOString(),
-            productsInChunk: chunk.products.length,
-            totalProducts: chunk.products.length,
-            hasHistory: !!chunk.history,
-            hasBoxes: !!chunk.boxes,
-            hasSettings: !!chunk.settings,
+            exportDate: (chunk as any).exportDate || new Date().toISOString(),
+            productsInChunk: (chunk as any).products.length,
+            totalProducts: (chunk as any).products.length,
+            hasHistory: !!(chunk as any).history,
+            hasBoxes: !!(chunk as any).boxes,
+            hasSettings: !!(chunk as any).settings,
           } as ChunkMetadata,
         };
       }
@@ -341,7 +384,7 @@ export async function mergeChunks(
       status: '合并完成！',
     });
     
-    return { success: true, mergedData: JSON.stringify(mergedData, null, 2) };
+    return { success: true, mergedData: JSON.stringify(mergedData) };
   } catch (error) {
     console.error('[ChunkedBackup] Merge failed:', error);
     return { success: false, error: error instanceof Error ? error.message : '合并失败' };
@@ -418,9 +461,9 @@ export async function getExportEstimate(): Promise<{
   const { total: totalProducts } = await ProductStorageAdapter.getProductCount();
   const estimatedChunks = calculateChunkCount(totalProducts);
   
-  // 估算每个分片大小（假设每个产品平均 2MB）
+  // 估算每个分片大小（每个产品平均 2MB）
   const avgProductSize = 2; // MB
-  const estimatedSizePerChunk = `${Math.min(PRODUCTS_PER_CHUNK * avgProductSize, 10).toFixed(0)}MB`;
+  const estimatedSizePerChunk = `${(PRODUCTS_PER_CHUNK * avgProductSize).toFixed(0)}MB`;
   
   return {
     totalProducts,
