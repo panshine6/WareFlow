@@ -500,13 +500,6 @@ class IndexedDBStorage {
 
   // ==================== 统计操作 ====================
 
-  // 获取产品总数
-  async getProductCount(): Promise<number> {
-    return await this.withRetry(async () => {
-      return await this.db!.count('products');
-    }, '获取产品数量');
-  }
-
   // 获取活跃产品总数（使用游标统计，避免内存溢出）
   async getActiveProductCount(): Promise<number> {
     return await this.withRetry(async () => {
