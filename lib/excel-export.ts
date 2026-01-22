@@ -1,66 +1,238 @@
 import type { Product } from "@/types/product";
-import * as XLSX from 'xlsx';
+import ExcelJS from 'exceljs';
+
+// ============================================
+// 图片压缩工具函数
+// ============================================
 
 /**
- * 导出产品数据为店小秘格式的 Excel 文件（优化版本，不含图片）
- * 
- * 性能优化说明：
- * 1. 移除图片导出功能，避免大量图片转 base64 的耗时操作
- * 2. 使用轻量级的 SheetJS (xlsx) 库替代 ExcelJS
- * 3. 一次性构建数据数组，而不是逐行添加
- * 4. 直接生成 Blob 并下载，无需中间文件操作
+ * 将 base64 图片压缩到指定尺寸
+ * @param base64 原始 base64 图片数据（可以是 Data URL 或纯 base64）
+ * @param maxSize 最大尺寸（宽高），默认 100 像素
+ * @param quality JPEG 质量，默认 0.6
+ * @returns 压缩后的 base64 数据（纯 base64，不含 Data URL 前缀）
  */
-export async function exportToExcel(products: Product[]): Promise<void> {
-  try {
-    console.log(`[ExcelExport] Starting export for ${products.length} products...`);
-    const startTime = Date.now();
-    
-    // 构建数据数组（表头 + 数据行）
-    const data: (string | number)[][] = [
-      ['SKU', '产品标题', '库存数量', '价格(USD)', '存储位置', 'Box', '创建时间'],
-    ];
-    
-    // 一次性添加所有数据行
-    for (const product of products) {
-      data.push([
-        product.sku || '',
-        `约饰品:${product.sku || ''}`,
-        product.quantity || 0,
-        product.price || '',
-        product.storageLocation || '',
-        product.boxName || '未关联',
-        new Date(product.createdAt).toLocaleString('zh-CN'),
-      ]);
+async function compressImage(
+  base64: string,
+  maxSize: number = 100,
+  quality: number = 0.6
+): Promise<string> {
+  return new Promise((resolve, reject) => {
+    try {
+      // 确保是完整的 Data URL
+      let dataUrl = base64;
+      if (!base64.startsWith('data:')) {
+        dataUrl = `data:image/jpeg;base64,${base64}`;
+      }
+
+      const img = new Image();
+      img.onload = () => {
+        try {
+          // 计算缩放比例，保持宽高比
+          let width = img.width;
+          let height = img.height;
+          
+          if (width > height) {
+            if (width > maxSize) {
+              height = Math.round(height * maxSize / width);
+              width = maxSize;
+            }
+          } else {
+            if (height > maxSize) {
+              width = Math.round(width * maxSize / height);
+              height = maxSize;
+            }
+          }
+
+          // 创建 Canvas 进行压缩
+          const canvas = document.createElement('canvas');
+          canvas.width = width;
+          canvas.height = height;
+          
+          const ctx = canvas.getContext('2d');
+          if (!ctx) {
+            reject(new Error('Failed to get canvas context'));
+            return;
+          }
+
+          // 绘制图片
+          ctx.drawImage(img, 0, 0, width, height);
+
+          // 导出为 JPEG（更小的文件大小）
+          const compressedDataUrl = canvas.toDataURL('image/jpeg', quality);
+          
+          // 提取纯 base64 数据
+          const base64Data = compressedDataUrl.split(',')[1];
+          resolve(base64Data);
+        } catch (error) {
+          reject(error);
+        }
+      };
+
+      img.onerror = () => {
+        reject(new Error('Failed to load image'));
+      };
+
+      img.src = dataUrl;
+    } catch (error) {
+      reject(error);
     }
-    
-    console.log(`[ExcelExport] Data prepared in ${Date.now() - startTime}ms`);
-    
-    // 创建工作簿和工作表
-    const wb = XLSX.utils.book_new();
-    const ws = XLSX.utils.aoa_to_sheet(data);
-    
-    // 设置列宽
-    ws['!cols'] = [
-      { wch: 25 }, // SKU
-      { wch: 30 }, // 产品标题
-      { wch: 12 }, // 库存数量
-      { wch: 12 }, // 价格
-      { wch: 15 }, // 存储位置
-      { wch: 18 }, // Box
-      { wch: 20 }, // 创建时间
-    ];
-    
-    XLSX.utils.book_append_sheet(wb, ws, '产品库存');
-    
-    // 生成 Excel 文件
-    const excelBuffer = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
-    const blob = new Blob([excelBuffer], { 
-      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' 
+  });
+}
+
+/**
+ * 并行压缩多张图片
+ * @param images 图片数组，每个元素包含 id 和 base64
+ * @param concurrency 并发数，默认 10
+ * @returns 压缩后的图片 Map
+ */
+async function compressImagesParallel(
+  images: Array<{ id: string; base64: string }>,
+  concurrency: number = 10
+): Promise<Map<string, string>> {
+  const result = new Map<string, string>();
+  
+  // 分批处理
+  for (let i = 0; i < images.length; i += concurrency) {
+    const batch = images.slice(i, i + concurrency);
+    const promises = batch.map(async ({ id, base64 }) => {
+      try {
+        const compressed = await compressImage(base64);
+        return { id, compressed };
+      } catch (error) {
+        console.warn(`[ExcelExport] Failed to compress image for ${id}:`, error);
+        return { id, compressed: '' };
+      }
     });
     
-    console.log(`[ExcelExport] Excel generated in ${Date.now() - startTime}ms`);
+    const results = await Promise.all(promises);
+    for (const { id, compressed } of results) {
+      if (compressed) {
+        result.set(id, compressed);
+      }
+    }
+  }
+  
+  return result;
+}
+
+// ============================================
+// Excel 导出功能
+// ============================================
+
+/**
+ * 导出产品数据为店小秘格式的 Excel 文件（带压缩图片）
+ * 
+ * 性能优化说明：
+ * 1. 图片压缩到 100x100 像素，约 10-20KB
+ * 2. 并行压缩图片，提高处理速度
+ * 3. 支持分批导出，避免内存溢出
+ * 4. 显示进度信息
+ */
+export async function exportToExcel(
+  products: Product[],
+  onProgress?: (progress: number, message: string) => void
+): Promise<void> {
+  try {
+    const startTime = Date.now();
+    console.log(`[ExcelExport] Starting export for ${products.length} products with images...`);
+    onProgress?.(0, `准备导出 ${products.length} 个产品...`);
     
-    // 下载文件（Web 端）
+    // 1. 准备图片数据
+    onProgress?.(10, '正在压缩图片...');
+    const imagesToCompress: Array<{ id: string; base64: string }> = [];
+    
+    for (const product of products) {
+      if (product.detailImageUri) {
+        imagesToCompress.push({
+          id: product.id,
+          base64: product.detailImageUri,
+        });
+      }
+    }
+    
+    console.log(`[ExcelExport] Compressing ${imagesToCompress.length} images...`);
+    const compressedImages = await compressImagesParallel(imagesToCompress);
+    console.log(`[ExcelExport] Compressed ${compressedImages.size} images in ${Date.now() - startTime}ms`);
+    
+    onProgress?.(50, '正在生成 Excel 文件...');
+    
+    // 2. 创建工作簿
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet('产品库存');
+    
+    // 3. 设置列
+    worksheet.columns = [
+      { header: '图片', key: 'image', width: 15 },
+      { header: 'SKU', key: 'sku', width: 25 },
+      { header: '产品标题', key: 'title', width: 30 },
+      { header: '库存数量', key: 'quantity', width: 12 },
+      { header: '价格(USD)', key: 'price', width: 12 },
+      { header: '存储位置', key: 'location', width: 15 },
+      { header: 'Box', key: 'box', width: 18 },
+      { header: '创建时间', key: 'createdAt', width: 20 },
+    ];
+    
+    // 设置表头样式
+    const headerRow = worksheet.getRow(1);
+    headerRow.font = { bold: true };
+    headerRow.alignment = { vertical: 'middle', horizontal: 'center' };
+    headerRow.height = 25;
+    
+    // 4. 添加数据行
+    let rowIndex = 2;
+    for (const product of products) {
+      const row = worksheet.addRow({
+        image: '', // 图片列留空，后面添加
+        sku: product.sku || '',
+        title: `约饰品:${product.sku || ''}`,
+        quantity: product.quantity || 0,
+        price: product.price || '',
+        location: product.storageLocation || '',
+        box: product.boxName || '未关联',
+        createdAt: new Date(product.createdAt).toLocaleString('zh-CN'),
+      });
+      
+      // 设置行高以容纳图片
+      row.height = 80;
+      row.alignment = { vertical: 'middle' };
+      
+      // 添加图片
+      const compressedImage = compressedImages.get(product.id);
+      if (compressedImage) {
+        try {
+          const imageId = workbook.addImage({
+            base64: compressedImage,
+            extension: 'jpeg',
+          });
+          
+          worksheet.addImage(imageId, {
+            tl: { col: 0, row: rowIndex - 1 },
+            ext: { width: 75, height: 75 },
+          });
+        } catch (error) {
+          console.warn(`[ExcelExport] Failed to add image for ${product.id}:`, error);
+        }
+      }
+      
+      rowIndex++;
+      
+      // 更新进度
+      if (rowIndex % 50 === 0) {
+        const progress = 50 + Math.round((rowIndex / products.length) * 40);
+        onProgress?.(progress, `正在处理第 ${rowIndex - 1}/${products.length} 个产品...`);
+      }
+    }
+    
+    onProgress?.(90, '正在生成文件...');
+    
+    // 5. 生成 Excel 文件
+    const buffer = await workbook.xlsx.writeBuffer();
+    const blob = new Blob([buffer], {
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    });
+    
+    // 6. 下载文件
     const timestamp = new Date().toISOString().slice(0, 10);
     const filename = `饰品库存_${timestamp}.xlsx`;
     
@@ -73,6 +245,7 @@ export async function exportToExcel(products: Product[]): Promise<void> {
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
     
+    onProgress?.(100, '导出完成！');
     console.log(`[ExcelExport] Export completed in ${Date.now() - startTime}ms`);
   } catch (error) {
     console.error('[ExcelExport] Excel export failed:', error);
@@ -81,14 +254,65 @@ export async function exportToExcel(products: Product[]): Promise<void> {
 }
 
 /**
- * 生成店小秘兼容格式的 Excel（优化版本）
+ * 分批导出产品数据
+ * @param products 所有产品
+ * @param batchIndex 批次索引（从 0 开始）
+ * @param batchSize 每批数量，默认 100
+ * @param onProgress 进度回调
+ */
+export async function exportToExcelBatch(
+  products: Product[],
+  batchIndex: number,
+  batchSize: number = 100,
+  onProgress?: (progress: number, message: string) => void
+): Promise<void> {
+  const start = batchIndex * batchSize;
+  const end = Math.min(start + batchSize, products.length);
+  const batchProducts = products.slice(start, end);
+  
+  const totalBatches = Math.ceil(products.length / batchSize);
+  console.log(`[ExcelExport] Exporting batch ${batchIndex + 1}/${totalBatches} (${batchProducts.length} products)`);
+  
+  return exportToExcel(batchProducts, onProgress);
+}
+
+/**
+ * 计算分批信息
+ * @param totalCount 总产品数
+ * @param batchSize 每批数量
+ * @returns 批次信息数组
+ */
+export function calculateBatches(
+  totalCount: number,
+  batchSize: number = 100
+): Array<{ index: number; start: number; end: number; count: number }> {
+  const batches: Array<{ index: number; start: number; end: number; count: number }> = [];
+  const totalBatches = Math.ceil(totalCount / batchSize);
+  
+  for (let i = 0; i < totalBatches; i++) {
+    const start = i * batchSize;
+    const end = Math.min(start + batchSize, totalCount);
+    batches.push({
+      index: i,
+      start: start + 1, // 显示用，从 1 开始
+      end,
+      count: end - start,
+    });
+  }
+  
+  return batches;
+}
+
+/**
+ * 生成店小秘兼容格式的 Excel（带图片）
  * 
  * 此函数是 exportToExcel 的别名，保持 API 兼容性
  */
 export async function exportToDianxiaomiFormat(
   products: Product[],
+  onProgress?: (progress: number, message: string) => void
 ): Promise<void> {
-  return exportToExcel(products);
+  return exportToExcel(products, onProgress);
 }
 
 
@@ -96,6 +320,7 @@ export async function exportToDianxiaomiFormat(
 // NIIMBOT 标签打印 Excel 导出功能
 // ============================================
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as XLSX from 'xlsx';
 import { ProductStorage } from './storage';
 
 // 导出记录存储键
