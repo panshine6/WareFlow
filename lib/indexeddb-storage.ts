@@ -394,10 +394,22 @@ class IndexedDBStorage {
 
   // ==================== 导出/导入操作 ====================
 
-  // 导出所有数据为 JSON
+  // 导出所有数据为 JSON（使用游标分批读取，避免内存溢出）
   async exportAllData(): Promise<string> {
     return await this.withRetry(async () => {
-      const products = await this.db!.getAll('products');
+      // 使用游标分批读取产品数据，避免一次性加载所有数据到内存
+      const products: Product[] = [];
+      const tx = this.db!.transaction('products', 'readonly');
+      let cursor = await tx.store.openCursor();
+      
+      while (cursor) {
+        products.push(cursor.value as Product);
+        cursor = await cursor.continue();
+      }
+      
+      await tx.done;
+      
+      // 导出库存历史记录（通常较小，可以直接加载）
       const history = await this.db!.getAll('inventory_history');
       
       // 导出 Box 数据（从独立的 IndexedDB 数据库）
@@ -495,19 +507,39 @@ class IndexedDBStorage {
     }, '获取产品数量');
   }
 
-  // 获取活跃产品总数
+  // 获取活跃产品总数（使用游标统计，避免内存溢出）
   async getActiveProductCount(): Promise<number> {
     return await this.withRetry(async () => {
-      const allProducts = await this.db!.getAll('products');
-      return allProducts.filter(p => !p.isDeleted).length;
+      const tx = this.db!.transaction('products', 'readonly');
+      let count = 0;
+      let cursor = await tx.store.openCursor();
+      
+      while (cursor) {
+        if (!cursor.value.isDeleted) {
+          count++;
+        }
+        cursor = await cursor.continue();
+      }
+      
+      return count;
     }, '获取活跃产品数量');
   }
 
-  // 获取已删除产品总数
+  // 获取已删除产品总数（使用游标统计，避免内存溢出）
   async getDeletedProductCount(): Promise<number> {
     return await this.withRetry(async () => {
-      const allProducts = await this.db!.getAll('products');
-      return allProducts.filter(p => p.isDeleted === true).length;
+      const tx = this.db!.transaction('products', 'readonly');
+      let count = 0;
+      let cursor = await tx.store.openCursor();
+      
+      while (cursor) {
+        if (cursor.value.isDeleted === true) {
+          count++;
+        }
+        cursor = await cursor.continue();
+      }
+      
+      return count;
     }, '获取已删除产品数量');
   }
 
