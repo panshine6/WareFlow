@@ -19,7 +19,7 @@ import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
 import { CloudImage } from "@/components/cloud-image";
 import { useColorScheme } from "@/hooks/use-color-scheme";
-import { exportToDianxiaomiFormat } from "@/lib/excel-export";
+import { exportToDianxiaomiFormat, calculateBatches, exportToExcelBatch } from "@/lib/excel-export";
 import { ProductAPI } from "@/lib/api-client";
 import { trpc } from "@/lib/trpc";
 import { AutoSync } from "@/lib/auto-sync";
@@ -48,6 +48,8 @@ export default function InventoryScreen() {
   const [searchQuery, setSearchQuery] = useState("");
   const [refreshing, setRefreshing] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [exportProgress, setExportProgress] = useState<string>("");
+  const [showBatchExport, setShowBatchExport] = useState(false);
 
   // 筛选和排序状态
   const [stockFilter, setStockFilter] = useState<StockFilter>("all");
@@ -335,64 +337,6 @@ export default function InventoryScreen() {
           </Pressable>
         </View>
 
-        {/* Box 筛选栏 */}
-        <View style={styles.boxFilterContainer}>
-          <Pressable
-            style={[
-              styles.boxFilterChip,
-              selectedBoxId === null && styles.boxFilterChipActive,
-            ]}
-            onPress={() => setSelectedBoxId(null)}
-          >
-            <ThemedText
-              style={[
-                styles.boxFilterChipText,
-                selectedBoxId === null && styles.boxFilterChipTextActive,
-              ]}
-            >
-              全部 Box
-            </ThemedText>
-          </Pressable>
-          <Pressable
-            style={[
-              styles.boxFilterChip,
-              selectedBoxId === "unassigned" && styles.boxFilterChipActive,
-            ]}
-            onPress={() => setSelectedBoxId("unassigned")}
-          >
-            <ThemedText
-              style={[
-                styles.boxFilterChipText,
-                selectedBoxId === "unassigned" && styles.boxFilterChipTextActive,
-              ]}
-            >
-              未关联
-            </ThemedText>
-          </Pressable>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.boxScrollView}>
-            {boxes.map((box) => (
-              <Pressable
-                key={box.code}
-                style={[
-                  styles.boxFilterChip,
-                  selectedBoxId === box.code && styles.boxFilterChipActive,
-                ]}
-                onPress={() => setSelectedBoxId(box.code)}
-              >
-                <ThemedText
-                  style={[
-                    styles.boxFilterChipText,
-                    selectedBoxId === box.code && styles.boxFilterChipTextActive,
-                  ]}
-                  numberOfLines={1}
-                >
-                  {box.code}
-                </ThemedText>
-              </Pressable>
-            ))}
-          </ScrollView>
-        </View>
-
         {/* 排序选项 */}
         {showSortOptions && (
           <View style={styles.sortOptionsContainer}>
@@ -412,7 +356,7 @@ export default function InventoryScreen() {
                   sortType === "time_desc" && styles.sortOptionTextActive,
                 ]}
               >
-                时间最新
+                时间 ↓ 最新
               </ThemedText>
             </Pressable>
             <Pressable
@@ -431,7 +375,7 @@ export default function InventoryScreen() {
                   sortType === "time_asc" && styles.sortOptionTextActive,
                 ]}
               >
-                时间最早
+                时间 ↑ 最早
               </ThemedText>
             </Pressable>
             <Pressable
@@ -450,7 +394,7 @@ export default function InventoryScreen() {
                   sortType === "quantity_desc" && styles.sortOptionTextActive,
                 ]}
               >
-                数量最多
+                数量 ↓ 最多
               </ThemedText>
             </Pressable>
             <Pressable
@@ -469,11 +413,68 @@ export default function InventoryScreen() {
                   sortType === "quantity_asc" && styles.sortOptionTextActive,
                 ]}
               >
-                数量最少
+                数量 ↑ 最少
               </ThemedText>
             </Pressable>
           </View>
         )}
+
+        {/* Box 筛选 */}
+        <View style={styles.boxFilterContainer}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.boxScrollView}>
+            <Pressable
+              style={[
+                styles.boxFilterChip,
+                selectedBoxId === null && styles.boxFilterChipActive,
+              ]}
+              onPress={() => setSelectedBoxId(null)}
+            >
+              <ThemedText
+                style={[
+                  styles.boxFilterChipText,
+                  selectedBoxId === null && styles.boxFilterChipTextActive,
+                ]}
+              >
+                全部 Box
+              </ThemedText>
+            </Pressable>
+            <Pressable
+              style={[
+                styles.boxFilterChip,
+                selectedBoxId === "unassigned" && styles.boxFilterChipActive,
+              ]}
+              onPress={() => setSelectedBoxId("unassigned")}
+            >
+              <ThemedText
+                style={[
+                  styles.boxFilterChipText,
+                  selectedBoxId === "unassigned" && styles.boxFilterChipTextActive,
+                ]}
+              >
+                未关联
+              </ThemedText>
+            </Pressable>
+            {boxes.map((box) => (
+              <Pressable
+                key={box.code}
+                style={[
+                  styles.boxFilterChip,
+                  selectedBoxId === box.code && styles.boxFilterChipActive,
+                ]}
+                onPress={() => setSelectedBoxId(box.code)}
+              >
+                <ThemedText
+                  style={[
+                    styles.boxFilterChipText,
+                    selectedBoxId === box.code && styles.boxFilterChipTextActive,
+                  ]}
+                >
+                  {box.code}
+                </ThemedText>
+              </Pressable>
+            ))}
+          </ScrollView>
+        </View>
 
         {/* 统计信息和导出按钮 */}
         <View style={styles.statsRow}>
@@ -485,28 +486,83 @@ export default function InventoryScreen() {
               总库存: {filteredProducts.reduce((sum, p) => sum + p.quantity, 0)}
             </ThemedText>
           </View>
-          <Pressable
-            style={[styles.exportButton, exporting && styles.exportButtonDisabled]}
-            onPress={async () => {
-              if (exporting || filteredProducts.length === 0) return;
-              setExporting(true);
-              try {
-                await exportToDianxiaomiFormat(filteredProducts);
-                Alert.alert("成功", `已导出 ${filteredProducts.length} 个产品`);
-              } catch (error) {
-                console.error("Export failed:", error);
-                Alert.alert("导出失败", "请稍后重试");
-              } finally {
-                setExporting(false);
-              }
-            }}
-            disabled={exporting || filteredProducts.length === 0}
-          >
-            <ThemedText style={styles.exportButtonText}>
-              {exporting ? "导出中..." : "导出 Excel"}
-            </ThemedText>
-          </Pressable>
+          <View style={styles.exportButtons}>
+            {filteredProducts.length > 100 && (
+              <Pressable
+                style={styles.batchExportButton}
+                onPress={() => setShowBatchExport(!showBatchExport)}
+              >
+                <ThemedText style={styles.batchExportButtonText}>
+                  {showBatchExport ? "收起" : "分批"}
+                </ThemedText>
+              </Pressable>
+            )}
+            <Pressable
+              style={[styles.exportButton, exporting && styles.exportButtonDisabled]}
+              onPress={async () => {
+                if (exporting || filteredProducts.length === 0) return;
+                setExporting(true);
+                setExportProgress("");
+                try {
+                  await exportToDianxiaomiFormat(filteredProducts, (progress, message) => {
+                    setExportProgress(message);
+                  });
+                  Alert.alert("成功", `已导出 ${filteredProducts.length} 个产品`);
+                } catch (error) {
+                  console.error("Export failed:", error);
+                  Alert.alert("导出失败", "请稍后重试");
+                } finally {
+                  setExporting(false);
+                  setExportProgress("");
+                }
+              }}
+              disabled={exporting || filteredProducts.length === 0}
+            >
+              <ThemedText style={styles.exportButtonText}>
+                {exporting ? (exportProgress || "导出中...") : "导出 Excel"}
+              </ThemedText>
+            </Pressable>
+          </View>
         </View>
+
+        {/* 分批导出选项 */}
+        {showBatchExport && filteredProducts.length > 100 && (
+          <View style={styles.batchExportContainer}>
+            <ThemedText style={styles.batchExportTitle}>
+              分批导出（每批 100 个产品）
+            </ThemedText>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.batchScrollView}>
+              {calculateBatches(filteredProducts.length, 100).map((batch) => (
+                <Pressable
+                  key={batch.index}
+                  style={[styles.batchOption, exporting && styles.exportButtonDisabled]}
+                  onPress={async () => {
+                    if (exporting) return;
+                    setExporting(true);
+                    setExportProgress("");
+                    try {
+                      await exportToExcelBatch(filteredProducts, batch.index, 100, (progress, message) => {
+                        setExportProgress(message);
+                      });
+                      Alert.alert("成功", `已导出第 ${batch.index + 1} 批（${batch.count} 个产品）`);
+                    } catch (error) {
+                      console.error("Batch export failed:", error);
+                      Alert.alert("导出失败", "请稍后重试");
+                    } finally {
+                      setExporting(false);
+                      setExportProgress("");
+                    }
+                  }}
+                  disabled={exporting}
+                >
+                  <ThemedText style={styles.batchOptionText}>
+                    第{batch.index + 1}批 ({batch.start}-{batch.end})
+                  </ThemedText>
+                </Pressable>
+              ))}
+            </ScrollView>
+          </View>
+        )}
       </View>
 
       {/* 产品列表 */}
@@ -721,6 +777,48 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: 13,
     fontWeight: "600",
+  },
+  exportButtons: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  batchExportButton: {
+    backgroundColor: "#007AFF",
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+  },
+  batchExportButtonText: {
+    color: "#fff",
+    fontSize: 13,
+    fontWeight: "600",
+  },
+  batchExportContainer: {
+    marginTop: 8,
+    padding: 12,
+    backgroundColor: "rgba(0, 0, 0, 0.03)",
+    borderRadius: 12,
+  },
+  batchExportTitle: {
+    fontSize: 13,
+    fontWeight: "500",
+    marginBottom: 8,
+    opacity: 0.7,
+  },
+  batchScrollView: {
+    flexGrow: 0,
+  },
+  batchOption: {
+    backgroundColor: "#007AFF",
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    marginRight: 8,
+  },
+  batchOptionText: {
+    color: "#fff",
+    fontSize: 13,
+    fontWeight: "500",
   },
   listContainer: {
     flex: 1,
