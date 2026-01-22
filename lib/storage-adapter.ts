@@ -463,6 +463,25 @@ export const ProductStorageAdapter = {
   },
 
   /**
+   * 获取单个产品的图片数据
+   * 用于 CloudImage 组件按需加载图片
+   */
+  async getProductImage(id: string): Promise<{ detailImageUri: string; overviewImageUri: string; localUri: string } | null> {
+    if (Platform.OS === 'web') {
+      return await indexedDBStorage.getProductImage(id);
+    } else {
+      // 原生平台从完整产品数据中提取图片
+      const product = await this.get(id);
+      if (!product) return null;
+      return {
+        detailImageUri: product.detailImageUri || '',
+        overviewImageUri: product.overviewImageUri || '',
+        localUri: product.localUri || '',
+      };
+    }
+  },
+
+  /**
    * 获取首页统计数据（轻量级）
    * 只返回必要的统计信息，不加载完整产品数据
    */

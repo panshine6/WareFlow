@@ -522,30 +522,55 @@ class IndexedDBStorage {
 
   /**
    * 获取活跃产品列表（不包含图片数据）
-   * 用于列表显示和统计，避免加载大量 base64 图片数据导致内存溢出
+   * 使用游标逐条读取，避免一次性加载所有数据到内存
+   * 每条记录处理完后立即释放，减少内存峰值
    */
-  async getActiveProductsLight(): Promise<Omit<Product, 'detailImageUri' | 'overviewImageUri' | 'localUri'>[]> {
+  async getActiveProductsLight(): Promise<Product[]> {
     return await this.withRetry(async () => {
-      const allProducts = await this.db!.getAll('products');
-      return allProducts
-        .filter(p => !p.isDeleted)
-        .map(p => {
+      const products: Product[] = [];
+      const tx = this.db!.transaction('products', 'readonly');
+      const store = tx.objectStore('products');
+      
+      // 使用游标逐条读取，避免 getAll() 一次性加载所有数据
+      let cursor = await store.openCursor();
+      while (cursor) {
+        const p = cursor.value;
+        if (!p.isDeleted) {
           // 创建不包含图片数据的产品对象
-          const { detailImageUri, overviewImageUri, localUri, ...lightProduct } = p;
-          return {
-            ...lightProduct,
-            // 保留图片 URL 但不包含 base64 数据
+          products.push({
+            ...p,
+            // 清空 base64 图片数据，保留 URL 类型的图片引用
             detailImageUri: p.detailImageUri?.startsWith('data:') ? '' : (p.detailImageUri || ''),
             overviewImageUri: p.overviewImageUri?.startsWith('data:') ? '' : (p.overviewImageUri || ''),
             localUri: p.localUri?.startsWith('data:') ? '' : (p.localUri || ''),
-          };
-        });
+          });
+        }
+        cursor = await cursor.continue();
+      }
+      
+      return products;
     }, '获取轻量级活跃产品');
   }
 
   /**
+   * 获取单个产品的图片数据
+   * 用于 CloudImage 组件按需加载图片
+   */
+  async getProductImage(id: string): Promise<{ detailImageUri: string; overviewImageUri: string; localUri: string } | null> {
+    return await this.withRetry(async () => {
+      const product = await this.db!.get('products', id);
+      if (!product) return null;
+      return {
+        detailImageUri: product.detailImageUri || '',
+        overviewImageUri: product.overviewImageUri || '',
+        localUri: product.localUri || '',
+      };
+    }, '获取产品图片');
+  }
+
+  /**
    * 获取首页统计数据
-   * 只返回必要的统计信息，不加载完整产品数据
+   * 使用游标逐条读取，只统计必要的信息，不加载完整产品数据
    */
   async getHomeStats(): Promise<{
     totalSKU: number;
@@ -553,23 +578,31 @@ class IndexedDBStorage {
     todayCount: number;
   }> {
     return await this.withRetry(async () => {
-      const allProducts = await this.db!.getAll('products');
-      const activeProducts = allProducts.filter(p => !p.isDeleted);
+      const tx = this.db!.transaction('products', 'readonly');
+      const store = tx.objectStore('products');
       
       const today = new Date().toDateString();
+      let totalSKU = 0;
       let todayCount = 0;
       let totalQuantity = 0;
       
-      for (const p of activeProducts) {
-        totalQuantity += p.quantity || 0;
-        const productDate = new Date(p.createdAt).toDateString();
-        if (today === productDate) {
-          todayCount++;
+      // 使用游标逐条读取，避免 getAll() 一次性加载所有数据
+      let cursor = await store.openCursor();
+      while (cursor) {
+        const p = cursor.value;
+        if (!p.isDeleted) {
+          totalSKU++;
+          totalQuantity += p.quantity || 0;
+          const productDate = new Date(p.createdAt).toDateString();
+          if (today === productDate) {
+            todayCount++;
+          }
         }
+        cursor = await cursor.continue();
       }
       
       return {
-        totalSKU: activeProducts.length,
+        totalSKU,
         totalQuantity,
         todayCount,
       };
@@ -578,7 +611,7 @@ class IndexedDBStorage {
 
   /**
    * 获取入库历史记录（轻量级）
-   * 只返回入库相关的数据，不包含完整图片
+   * 使用游标逐条读取，只返回入库相关的数据，不包含完整图片
    */
   async getInboundHistoryLight(): Promise<Array<{
     productId: string;
@@ -590,8 +623,8 @@ class IndexedDBStorage {
     type: string;
   }>> {
     return await this.withRetry(async () => {
-      const allProducts = await this.db!.getAll('products');
-      const activeProducts = allProducts.filter(p => !p.isDeleted);
+      const tx = this.db!.transaction('products', 'readonly');
+      const store = tx.objectStore('products');
       
       const records: Array<{
         productId: string;
@@ -603,34 +636,40 @@ class IndexedDBStorage {
         type: string;
       }> = [];
       
-      for (const product of activeProducts) {
-        // 添加初始入库记录
-        records.push({
-          productId: product.id,
-          sku: product.sku,
-          timestamp: product.createdAt,
-          quantity: product.initialQuantity || product.quantity,
-          location: product.storageLocation,
-          operatorName: product.operatorName || '未知',
-          type: 'inbound',
-        });
-        
-        // 添加历史记录中的入库记录
-        if (product.history) {
-          for (const entry of product.history) {
-            if (entry.type === 'inbound' && entry.quantity > 0) {
-              records.push({
-                productId: product.id,
-                sku: product.sku,
-                timestamp: entry.timestamp,
-                quantity: entry.quantity,
-                location: entry.location || product.storageLocation,
-                operatorName: entry.operatorName || '未知',
-                type: 'inbound',
-              });
+      // 使用游标逐条读取，避免 getAll() 一次性加载所有数据
+      let cursor = await store.openCursor();
+      while (cursor) {
+        const product = cursor.value;
+        if (!product.isDeleted) {
+          // 添加初始入库记录
+          records.push({
+            productId: product.id,
+            sku: product.sku,
+            timestamp: product.createdAt,
+            quantity: product.initialQuantity || product.quantity,
+            location: product.storageLocation,
+            operatorName: product.operatorName || '未知',
+            type: 'inbound',
+          });
+          
+          // 添加历史记录中的入库记录
+          if (product.history) {
+            for (const entry of product.history) {
+              if (entry.type === 'inbound' && entry.quantity > 0) {
+                records.push({
+                  productId: product.id,
+                  sku: product.sku,
+                  timestamp: entry.timestamp,
+                  quantity: entry.quantity,
+                  location: entry.location || product.storageLocation,
+                  operatorName: entry.operatorName || '未知',
+                  type: 'inbound',
+                });
+              }
             }
           }
         }
+        cursor = await cursor.continue();
       }
       
       // 按时间倒序排序

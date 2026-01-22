@@ -228,11 +228,12 @@ export default function HomeScreen() {
   // 进入页面时检查本地和云端数据状态
   const checkAndPromptDownload = async () => {
     try {
-      // 获取本地数据
+      // 获取本地数据数量（使用轻量级查询，避免加载完整数据）
       const isWeb = Platform.OS === 'web';
+      // 使用轻量级查询检查本地是否有数据
       const localProducts = isWeb 
-        ? await ProductStorage.getAll()
-        : await ProductAPI.getAll();
+        ? await ProductStorage.getActiveLight()
+        : await ProductAPI.getActive();
       
       // 如果本地有数据，不需要提示
       if (localProducts.length > 0) {
@@ -1160,28 +1161,32 @@ export default function HomeScreen() {
         </View>
       </Modal>
 
-      {/* SKU 生成助手弹窗 */}
-      <SkuGeneratorModal
-        visible={showSkuGenerator}
-        onClose={() => setShowSkuGenerator(false)}
-        onConfirm={(sku) => {
-          // 复制到剪贴板或显示提示
-          if (Platform.OS === 'web') {
-            navigator.clipboard?.writeText(sku);
-            window.alert(`SKU 已生成: ${sku}\n\n已复制到剪贴板`);
-          } else {
-            Alert.alert("SKU 已生成", `${sku}\n\n可在新品录入时使用`);
-          }
-        }}
-      />
+      {/* SKU 生成助手弹窗 - 使用条件渲染延迟加载 */}
+      {showSkuGenerator && (
+        <SkuGeneratorModal
+          visible={showSkuGenerator}
+          onClose={() => setShowSkuGenerator(false)}
+          onConfirm={(sku) => {
+            // 复制到剪贴板或显示提示
+            if (Platform.OS === 'web') {
+              navigator.clipboard?.writeText(sku);
+              window.alert(`SKU 已生成: ${sku}\n\n已复制到剪贴板`);
+            } else {
+              Alert.alert("SKU 已生成", `${sku}\n\n可在新品录入时使用`);
+            }
+          }}
+        />
+      )}
 
-      {/* Box 管理器弹窗 */}
-      <BoxManagerModal
-        visible={showBoxManager}
-        onClose={() => setShowBoxManager(false)}
-        products={products}
-        mode="manage"
-      />
+      {/* Box 管理器弹窗 - 使用条件渲染延迟加载 */}
+      {showBoxManager && (
+        <BoxManagerModal
+          visible={showBoxManager}
+          onClose={() => setShowBoxManager(false)}
+          products={products}
+          mode="manage"
+        />
+      )}
     </ThemedView>
   );
 }
