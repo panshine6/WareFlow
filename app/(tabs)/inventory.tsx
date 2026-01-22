@@ -47,6 +47,7 @@ export default function InventoryScreen() {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [refreshing, setRefreshing] = useState(false);
+  const [exporting, setExporting] = useState(false);
 
   // 筛选和排序状态
   const [stockFilter, setStockFilter] = useState<StockFilter>("all");
@@ -474,14 +475,37 @@ export default function InventoryScreen() {
           </View>
         )}
 
-        {/* 统计信息 */}
+        {/* 统计信息和导出按钮 */}
         <View style={styles.statsRow}>
-          <ThemedText style={styles.statsText}>
-            共 {filteredProducts.length} 个产品
-          </ThemedText>
-          <ThemedText style={styles.statsText}>
-            总库存: {filteredProducts.reduce((sum, p) => sum + p.quantity, 0)}
-          </ThemedText>
+          <View style={styles.statsLeft}>
+            <ThemedText style={styles.statsText}>
+              共 {filteredProducts.length} 个产品
+            </ThemedText>
+            <ThemedText style={styles.statsText}>
+              总库存: {filteredProducts.reduce((sum, p) => sum + p.quantity, 0)}
+            </ThemedText>
+          </View>
+          <Pressable
+            style={[styles.exportButton, exporting && styles.exportButtonDisabled]}
+            onPress={async () => {
+              if (exporting || filteredProducts.length === 0) return;
+              setExporting(true);
+              try {
+                await exportToDianxiaomiFormat(filteredProducts);
+                Alert.alert("成功", `已导出 ${filteredProducts.length} 个产品`);
+              } catch (error) {
+                console.error("Export failed:", error);
+                Alert.alert("导出失败", "请稍后重试");
+              } finally {
+                setExporting(false);
+              }
+            }}
+            disabled={exporting || filteredProducts.length === 0}
+          >
+            <ThemedText style={styles.exportButtonText}>
+              {exporting ? "导出中..." : "导出 Excel"}
+            </ThemedText>
+          </Pressable>
         </View>
       </View>
 
@@ -671,13 +695,32 @@ const styles = StyleSheet.create({
   statsRow: {
     flexDirection: "row",
     justifyContent: "space-between",
+    alignItems: "center",
     paddingVertical: 8,
     borderTopWidth: 1,
     borderTopColor: "rgba(0, 0, 0, 0.1)",
   },
+  statsLeft: {
+    flexDirection: "row",
+    gap: 16,
+  },
   statsText: {
     fontSize: 13,
     opacity: 0.6,
+  },
+  exportButton: {
+    backgroundColor: "#34C759",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+  },
+  exportButtonDisabled: {
+    backgroundColor: "rgba(52, 199, 89, 0.5)",
+  },
+  exportButtonText: {
+    color: "#fff",
+    fontSize: 13,
+    fontWeight: "600",
   },
   listContainer: {
     flex: 1,
