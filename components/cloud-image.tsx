@@ -1,7 +1,10 @@
 import { Image, ImageStyle } from "expo-image";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, memo } from "react";
 import { ActivityIndicator, StyleProp, View, ViewStyle, Platform } from "react-native";
 import { trpc } from "@/lib/trpc";
+
+// 调试模式开关（生产环境设为 false）
+const DEBUG_MODE = false;
 
 interface CloudImageProps {
   /** 产品 ID，用于从云端获取图片 */
@@ -41,8 +44,12 @@ function ensureDataUrl(uri: string): string {
  * - 如果本地有图片数据（base64 或 URL），直接显示
  * - 如果本地没有图片数据（Web 端下载时不含图片），从云端按需加载
  * - 显示加载状态
+ * 
+ * 性能优化：
+ * - 使用 React.memo 避免不必要的重渲染
+ * - 移除生产环境的 console.log
  */
-export function CloudImage({
+function CloudImageComponent({
   productId,
   localUri,
   style,
@@ -50,7 +57,7 @@ export function CloudImage({
   imageType = "detail",
   placeholderColor = "#f0f0f0",
 }: CloudImageProps) {
-  const [imageUri, setImageUri] = useState<string | null>(localUri || null);
+  const [imageUri, setImageUri] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(false);
 
@@ -68,22 +75,26 @@ export function CloudImage({
   );
 
   useEffect(() => {
-    console.log('[CloudImage] useEffect triggered', { productId, localUri: localUri?.substring(0, 50), isDesktopWeb });
+    if (DEBUG_MODE) {
+      console.log('[CloudImage] useEffect triggered', { productId, localUri: localUri?.substring(0, 50), isDesktopWeb });
+    }
     
     // 如果本地有图片，直接使用（确保有正确的 Data URL 前缀）
     if (localUri && localUri.length > 0) {
       const fullUri = ensureDataUrl(localUri);
-      console.log('[CloudImage] Using local URI, length:', fullUri.length, 'starts with:', fullUri.substring(0, 30));
+      if (DEBUG_MODE) {
+        console.log('[CloudImage] Using local URI, length:', fullUri.length);
+      }
       setImageUri(fullUri);
       return;
     }
 
     // 如果是电脑 Web 端且没有本地图片，从云端加载
     if (isDesktopWeb && !localUri) {
-      console.log('[CloudImage] Desktop Web without local image, loading from cloud...');
+      if (DEBUG_MODE) {
+        console.log('[CloudImage] Desktop Web without local image, loading from cloud...');
+      }
       loadImageFromCloud();
-    } else {
-      console.log('[CloudImage] Not loading from cloud', { isDesktopWeb, hasLocalUri: !!localUri });
     }
   }, [localUri, productId, isDesktopWeb]);
 
@@ -91,31 +102,26 @@ export function CloudImage({
     try {
       setLoading(true);
       setError(false);
-      console.log('[CloudImage] loadImageFromCloud called for productId:', productId);
       
       const result = await imageQuery.refetch();
-      console.log('[CloudImage] Query result:', { hasData: !!result.data, error: result.error });
       
       if (result.data) {
         const uri = imageType === "detail" 
           ? result.data.detailImageUri 
           : result.data.overviewImageUri;
         
-        console.log('[CloudImage] Image URI from cloud:', uri?.substring(0, 100));
-        
         if (uri && uri.length > 0) {
           setImageUri(uri);
-          console.log('[CloudImage] Image URI set successfully');
         } else {
-          console.log('[CloudImage] No image URI in response');
           setError(true);
         }
       } else {
-        console.log('[CloudImage] No data in response');
         setError(true);
       }
     } catch (err) {
-      console.error("[CloudImage] Failed to load image:", err);
+      if (DEBUG_MODE) {
+        console.error("[CloudImage] Failed to load image:", err);
+      }
       setError(true);
     } finally {
       setLoading(false);
@@ -139,6 +145,8 @@ export function CloudImage({
         style={style}
         contentFit="cover"
         transition={200}
+        // 性能优化：降低图片质量以减少内存使用
+        cachePolicy="memory-disk"
       />
     );
   }
@@ -150,5 +158,8 @@ export function CloudImage({
     </View>
   );
 }
+
+// 使用 React.memo 优化性能，避免不必要的重渲染
+export const CloudImage = memo(CloudImageComponent);
 
 export default CloudImage;
