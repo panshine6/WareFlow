@@ -67,7 +67,8 @@ export function extractBaseSku(sku: string): string {
 export async function scanForDuplicateSKUs(): Promise<DuplicateSKUWarning[]> {
   console.log("[SKU Duplicate Check] Starting scan...");
   
-  const products = await ProductStorage.getAll();
+  // 使用轻量级查询，避免加载 base64 图片数据导致内存溢出
+  const products = await ProductStorage.getAllLight();
   
   // 使用基础SKU作为key进行分组
   const baseSkuMap = new Map<string, Array<{ id: string; sku: string }>>();
@@ -133,7 +134,8 @@ export async function checkSkuConflict(
   newSku: string,
   excludeProductId?: string
 ): Promise<{ hasConflict: boolean; conflictingSkus: string[]; conflictingProductIds: string[] }> {
-  const products = await ProductStorage.getAll();
+  // 使用轻量级查询，避免加载 base64 图片数据导致内存溢出
+  const products = await ProductStorage.getAllLight();
   const newBaseSku = extractBaseSku(newSku);
   
   if (!newBaseSku) {

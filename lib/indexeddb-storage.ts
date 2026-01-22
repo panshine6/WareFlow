@@ -618,6 +618,36 @@ class IndexedDBStorage {
   // ==================== 轻量级查询（不包含图片数据） ====================
 
   /**
+   * 获取所有产品列表（不包含图片数据）
+   * 使用游标逐条读取，避免一次性加载所有数据到内存
+   * 用于 SKU 重复检查等不需要图片的场景
+   */
+  async getAllProductsLight(): Promise<Product[]> {
+    return await this.withRetry(async () => {
+      const products: Product[] = [];
+      const tx = this.db!.transaction('products', 'readonly');
+      const store = tx.objectStore('products');
+      
+      // 使用游标逐条读取，避免 getAll() 一次性加载所有数据
+      let cursor = await store.openCursor();
+      while (cursor) {
+        const p = cursor.value;
+        // 创建不包含图片数据的产品对象
+        products.push({
+          ...p,
+          // 清空 base64 图片数据，保留 URL 类型的图片引用
+          detailImageUri: p.detailImageUri?.startsWith('data:') ? '' : (p.detailImageUri || ''),
+          overviewImageUri: p.overviewImageUri?.startsWith('data:') ? '' : (p.overviewImageUri || ''),
+          localUri: p.localUri?.startsWith('data:') ? '' : (p.localUri || ''),
+        });
+        cursor = await cursor.continue();
+      }
+      
+      return products;
+    }, '获取轻量级所有产品');
+  }
+
+  /**
    * 获取活跃产品列表（不包含图片数据）
    * 使用游标逐条读取，避免一次性加载所有数据到内存
    * 每条记录处理完后立即释放，减少内存峰值

@@ -134,13 +134,13 @@ export async function performDuplicateCheck(
       console.log("[Dedup] Extraction successful, base64 length:", newImageBase64.length);
     }
     
-    // 2. 获取所有活跃产品
+    // 2. 获取所有活跃产品（使用轻量级查询，不加载图片数据）
     const isWeb = Platform.OS === 'web';
-    console.log("[Dedup] Loading active products from", isWeb ? "local storage" : "cloud", "...");
+    console.log("[Dedup] Loading active products from", isWeb ? "local storage (light)" : "cloud", "...");
     const allProducts = isWeb 
-      ? await ProductStorage.getActive()
+      ? await ProductStorage.getActiveLight()  // 使用轻量级查询，避免加载大量 base64 图片
       : await ProductAPI.getActive();
-    console.log("[Dedup] Loaded", allProducts.length, "active products");
+    console.log("[Dedup] Loaded", allProducts.length, "active products (light mode, no images)");
     
     if (allProducts.length === 0) {
       console.log("[Dedup] No existing products, skipping comparison");
@@ -231,25 +231,54 @@ export async function performDuplicateCheck(
       };
     }
     
-    // 5. 直接从产品的 detailImageUri（Data URL）提取 Base64
-    // 由于图片已经存储在 IndexedDB 中，无需网络请求
-    console.log("[Dedup] Extracting base64 from product images (direct from IndexedDB)...");
+    // 5. 按需从 IndexedDB 加载产品图片数据
+    // 使用 getProductImage 函数逐个加载，避免一次性加载所有图片到内存
+    console.log("[Dedup] Loading product images on-demand from IndexedDB...");
     const existingImages: Array<{ id: string; base64: string }> = [];
     
     const extractStartTime = Date.now();
-    for (const product of productsToCompare) {
-      try {
-        // 直接从 Data URL 提取 Base64，无需网络请求
-        const base64 = extractBase64FromDataUrl(product.detailImageUri);
-        existingImages.push({ id: product.id, base64 });
-      } catch (error: any) {
-        console.error(`[Dedup] Failed to extract base64 for product ${product.sku}:`, error.message);
-        // 跳过无法提取的产品
+    // 分批加载图片，每批 5 个，避免内存峰值
+    const BATCH_SIZE = 5;
+    for (let i = 0; i < productsToCompare.length; i += BATCH_SIZE) {
+      const batch = productsToCompare.slice(i, i + BATCH_SIZE);
+      const batchPromises = batch.map(async (product) => {
+        try {
+          // 按需从 IndexedDB 加载单个产品的图片
+          if (isWeb) {
+            const imageData = await ProductStorage.getProductImage(product.id);
+            if (imageData && imageData.detailImageUri) {
+              const base64 = extractBase64FromDataUrl(imageData.detailImageUri);
+              return { id: product.id, base64 };
+            }
+          } else {
+            // 非 Web 平台使用原有逻辑
+            if (product.detailImageUri) {
+              const base64 = extractBase64FromDataUrl(product.detailImageUri);
+              return { id: product.id, base64 };
+            }
+          }
+          return null;
+        } catch (error: any) {
+          console.error(`[Dedup] Failed to load image for product ${product.sku}:`, error.message);
+          return null;
+        }
+      });
+      
+      const batchResults = await Promise.all(batchPromises);
+      batchResults.forEach(result => {
+        if (result) {
+          existingImages.push(result);
+        }
+      });
+      
+      // 短暂暂停，让浏览器有机会释放内存
+      if (i + BATCH_SIZE < productsToCompare.length) {
+        await new Promise(resolve => setTimeout(resolve, 10));
       }
     }
     const extractDuration = Date.now() - extractStartTime;
     
-    console.log(`[Dedup] Extracted ${existingImages.length}/${productsToCompare.length} images in ${extractDuration}ms (no network requests)`);
+    console.log(`[Dedup] Loaded ${existingImages.length}/${productsToCompare.length} images in ${extractDuration}ms (on-demand loading)`);
     
     if (existingImages.length === 0) {
       console.log("[Dedup] No images to compare, skipping");

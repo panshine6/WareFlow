@@ -49,6 +49,19 @@ export const ProductStorageAdapter = {
   },
 
   /**
+   * 获取所有产品（轻量级，不包含图片数据）
+   * 用于 SKU 重复检查等不需要图片的场景
+   */
+  async getAllLight(): Promise<Product[]> {
+    if (Platform.OS === 'web') {
+      return await indexedDBStorage.getAllProductsLight();
+    } else {
+      // 原生平台暂时使用完整数据
+      return await this.getAll();
+    }
+  },
+
+  /**
    * 获取产品总数（用于上传同步计算进度）
    */
   async getProductCount(): Promise<{ total: number; active: number }> {
