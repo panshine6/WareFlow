@@ -128,10 +128,8 @@ export const SyncService = {
     try {
       console.log("[Sync] Starting batch upload to cloud...");
       
-      // 1. 获取本地所有产品的 ID 列表（不加载完整数据）
-      const allProducts = await ProductStorage.getAll();
-      const totalCount = allProducts.length;
-      const activeCount = allProducts.filter(p => !p.isDeleted).length;
+      // 1. 获取产品数量（不加载完整数据，避免内存溢出）
+      const { total: totalCount, active: activeCount } = await ProductStorage.getProductCount();
       
       console.log(`[Sync] Found ${totalCount} local products (${activeCount} active)`);
       
@@ -145,7 +143,7 @@ export const SyncService = {
         };
       }
       
-      // 2. 分批处理和上传
+      // 2. 分批处理和上传（每次只加载一批数据到内存）
       let uploadedCount = 0;
       const batchCount = Math.ceil(totalCount / UPLOAD_BATCH_SIZE);
       
@@ -154,7 +152,9 @@ export const SyncService = {
       for (let batchIndex = 0; batchIndex < batchCount; batchIndex++) {
         const startIndex = batchIndex * UPLOAD_BATCH_SIZE;
         const endIndex = Math.min(startIndex + UPLOAD_BATCH_SIZE, totalCount);
-        const batchProducts = allProducts.slice(startIndex, endIndex);
+        
+        // 分批获取产品数据（每次只加载一批，避免内存溢出）
+        const batchProducts = await ProductStorage.getProductsBatch(UPLOAD_BATCH_SIZE, batchIndex);
         
         console.log(`[Sync] Processing batch ${batchIndex + 1}/${batchCount} (products ${startIndex + 1}-${endIndex})`);
         
@@ -342,26 +342,26 @@ export const SyncService = {
     try {
       console.log("[Sync] Starting auto sync...");
       
-      // 1. 获取本地和云端数据数量
-      const localProducts = await ProductStorage.getAll();
+      // 1. 获取本地和云端数据数量（使用轻量级查询，避免内存溢出）
+      const { total: localCount } = await ProductStorage.getProductCount();
       const { cloudCount } = await trpcClient.sync.status.query();
       
-      console.log(`[Sync] Local: ${localProducts.length}, Cloud: ${cloudCount}`);
+      console.log(`[Sync] Local: ${localCount}, Cloud: ${cloudCount}`);
       
       // 2. 如果云端为空，本地有数据 → 上传
-      if (cloudCount === 0 && localProducts.length > 0) {
+      if (cloudCount === 0 && localCount > 0) {
         console.log("[Sync] Cloud is empty, uploading local data...");
         return await this.uploadToCloud(trpcClient, onProgress);
       }
       
       // 3. 如果本地为空，云端有数据 → 下载
-      if (localProducts.length === 0 && cloudCount > 0) {
+      if (localCount === 0 && cloudCount > 0) {
         console.log("[Sync] Local is empty, downloading from cloud...");
         return await this.downloadFromCloud(trpcClient);
       }
       
       // 4. 如果都为空，无需同步
-      if (localProducts.length === 0 && cloudCount === 0) {
+      if (localCount === 0 && cloudCount === 0) {
         console.log("[Sync] Both local and cloud are empty, nothing to sync");
         return {
           success: true,
@@ -370,20 +370,17 @@ export const SyncService = {
         };
       }
       
-      // 5. 如果都有数据，比较最后更新时间
+      // 5. 如果都有数据，简单策略：检查最后同步时间
       const lastSyncTime = await AsyncStorage.getItem(LAST_SYNC_TIME_KEY);
-      const localLatest = localProducts.reduce((latest, p) => {
-        const time = new Date(p.updatedAt || p.createdAt).getTime();
-        return time > latest ? time : latest;
-      }, 0);
       
-      // 简单策略：如果本地有更新（或从未同步），上传；否则下载
-      if (!lastSyncTime || localLatest > new Date(lastSyncTime).getTime()) {
-        console.log("[Sync] Local has updates, uploading...");
+      // 简单策略：如果从未同步，默认上传本地数据
+      if (!lastSyncTime) {
+        console.log("[Sync] Never synced before, uploading local data...");
         return await this.uploadToCloud(trpcClient, onProgress);
       } else {
-        console.log("[Sync] Cloud may have updates, downloading...");
-        return await this.downloadFromCloud(trpcClient);
+        // 已经同步过，默认上传（本地优先）
+        console.log("[Sync] Has sync history, uploading local data...");
+        return await this.uploadToCloud(trpcClient, onProgress);
       }
     } catch (error: any) {
       console.error("[Sync] Auto sync failed:", error);
@@ -401,15 +398,16 @@ export const SyncService = {
    */
   async getStatus(trpcClient: any): Promise<SyncStatus> {
     try {
-      const localProducts = await ProductStorage.getAll();
+      // 使用轻量级查询获取本地产品数量，避免内存溢出
+      const { total: localCount } = await ProductStorage.getProductCount();
       const { cloudCount } = await trpcClient.sync.status.query();
       const lastSyncTime = await AsyncStorage.getItem(LAST_SYNC_TIME_KEY);
       
       // 判断是否需要同步（本地和云端数量不一致）
-      const needsSync = localProducts.length !== cloudCount;
+      const needsSync = localCount !== cloudCount;
       
       return {
-        localCount: localProducts.length,
+        localCount,
         cloudCount,
         lastSyncTime,
         needsSync,

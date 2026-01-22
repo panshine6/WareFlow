@@ -518,6 +518,71 @@ class IndexedDBStorage {
     }, '获取历史记录数量');
   }
 
+  // ==================== 分批查询（用于上传同步） ====================
+
+  /**
+   * 获取产品总数
+   * 用于上传同步时计算进度
+   */
+  async getProductCount(): Promise<{ total: number; active: number }> {
+    return await this.withRetry(async () => {
+      const tx = this.db!.transaction('products', 'readonly');
+      const store = tx.objectStore('products');
+      
+      let total = 0;
+      let active = 0;
+      
+      let cursor = await store.openCursor();
+      while (cursor) {
+        total++;
+        if (!cursor.value.isDeleted) {
+          active++;
+        }
+        cursor = await cursor.continue();
+      }
+      
+      return { total, active };
+    }, '获取产品数量');
+  }
+
+  /**
+   * 分批获取产品（包含完整数据）
+   * 使用游标逐条读取，每次返回指定数量的产品
+   * 用于上传同步时分批处理
+   * 
+   * @param batchSize 每批数量
+   * @param batchIndex 批次索引（0-based）
+   * @returns 当前批次的产品列表
+   */
+  async getProductsBatch(batchSize: number, batchIndex: number): Promise<Product[]> {
+    return await this.withRetry(async () => {
+      const products: Product[] = [];
+      const tx = this.db!.transaction('products', 'readonly');
+      const store = tx.objectStore('products');
+      
+      const startIndex = batchIndex * batchSize;
+      const endIndex = startIndex + batchSize;
+      let currentIndex = 0;
+      
+      let cursor = await store.openCursor();
+      while (cursor) {
+        if (currentIndex >= startIndex && currentIndex < endIndex) {
+          products.push(cursor.value);
+        }
+        currentIndex++;
+        
+        // 如果已经读取到足够的数据，提前结束
+        if (currentIndex >= endIndex) {
+          break;
+        }
+        
+        cursor = await cursor.continue();
+      }
+      
+      return products;
+    }, `获取产品批次 ${batchIndex + 1}`);
+  }
+
   // ==================== 轻量级查询（不包含图片数据） ====================
 
   /**

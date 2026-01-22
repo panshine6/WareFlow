@@ -49,6 +49,43 @@ export const ProductStorageAdapter = {
   },
 
   /**
+   * 获取产品总数（用于上传同步计算进度）
+   */
+  async getProductCount(): Promise<{ total: number; active: number }> {
+    if (Platform.OS === 'web') {
+      return await indexedDBStorage.getProductCount();
+    } else {
+      try {
+        const products = await this.getAll();
+        const active = products.filter((p) => !p.isDeleted).length;
+        return { total: products.length, active };
+      } catch (error) {
+        console.error('Failed to get product count:', error);
+        return { total: 0, active: 0 };
+      }
+    }
+  },
+
+  /**
+   * 分批获取产品（用于上传同步）
+   * 每次只加载一批产品到内存，避免内存溢出
+   */
+  async getProductsBatch(batchSize: number, batchIndex: number): Promise<Product[]> {
+    if (Platform.OS === 'web') {
+      return await indexedDBStorage.getProductsBatch(batchSize, batchIndex);
+    } else {
+      try {
+        const products = await this.getAll();
+        const startIndex = batchIndex * batchSize;
+        return products.slice(startIndex, startIndex + batchSize);
+      } catch (error) {
+        console.error('Failed to get products batch:', error);
+        return [];
+      }
+    }
+  },
+
+  /**
    * 获取回收站产品（已删除的）
    */
   async getDeleted(): Promise<Product[]> {
