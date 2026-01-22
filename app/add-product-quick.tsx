@@ -206,9 +206,10 @@ export default function AddProductQuickScreen() {
         }
 
         // 加载所有产品（用于手动搜索）
-        const products = await ProductStorage.getActive();
+        // 使用轻量级查询，避免加载大量 base64 图片数据导致内存溢出
+        const products = await ProductStorage.getActiveLight();
         setAllProducts(products);
-        console.log("[QuickAdd] Loaded", products.length, "products for manual search");
+        console.log("[QuickAdd] Loaded", products.length, "products for manual search (light)");
       } catch (error) {
         console.error("[QuickAdd] Failed to load defaults:", error);
       }

@@ -518,6 +518,128 @@ class IndexedDBStorage {
     }, '获取历史记录数量');
   }
 
+  // ==================== 轻量级查询（不包含图片数据） ====================
+
+  /**
+   * 获取活跃产品列表（不包含图片数据）
+   * 用于列表显示和统计，避免加载大量 base64 图片数据导致内存溢出
+   */
+  async getActiveProductsLight(): Promise<Omit<Product, 'detailImageUri' | 'overviewImageUri' | 'localUri'>[]> {
+    return await this.withRetry(async () => {
+      const allProducts = await this.db!.getAll('products');
+      return allProducts
+        .filter(p => !p.isDeleted)
+        .map(p => {
+          // 创建不包含图片数据的产品对象
+          const { detailImageUri, overviewImageUri, localUri, ...lightProduct } = p;
+          return {
+            ...lightProduct,
+            // 保留图片 URL 但不包含 base64 数据
+            detailImageUri: p.detailImageUri?.startsWith('data:') ? '' : (p.detailImageUri || ''),
+            overviewImageUri: p.overviewImageUri?.startsWith('data:') ? '' : (p.overviewImageUri || ''),
+            localUri: p.localUri?.startsWith('data:') ? '' : (p.localUri || ''),
+          };
+        });
+    }, '获取轻量级活跃产品');
+  }
+
+  /**
+   * 获取首页统计数据
+   * 只返回必要的统计信息，不加载完整产品数据
+   */
+  async getHomeStats(): Promise<{
+    totalSKU: number;
+    totalQuantity: number;
+    todayCount: number;
+  }> {
+    return await this.withRetry(async () => {
+      const allProducts = await this.db!.getAll('products');
+      const activeProducts = allProducts.filter(p => !p.isDeleted);
+      
+      const today = new Date().toDateString();
+      let todayCount = 0;
+      let totalQuantity = 0;
+      
+      for (const p of activeProducts) {
+        totalQuantity += p.quantity || 0;
+        const productDate = new Date(p.createdAt).toDateString();
+        if (today === productDate) {
+          todayCount++;
+        }
+      }
+      
+      return {
+        totalSKU: activeProducts.length,
+        totalQuantity,
+        todayCount,
+      };
+    }, '获取首页统计');
+  }
+
+  /**
+   * 获取入库历史记录（轻量级）
+   * 只返回入库相关的数据，不包含完整图片
+   */
+  async getInboundHistoryLight(): Promise<Array<{
+    productId: string;
+    sku: string;
+    timestamp: string;
+    quantity: number;
+    location: string;
+    operatorName: string;
+    type: string;
+  }>> {
+    return await this.withRetry(async () => {
+      const allProducts = await this.db!.getAll('products');
+      const activeProducts = allProducts.filter(p => !p.isDeleted);
+      
+      const records: Array<{
+        productId: string;
+        sku: string;
+        timestamp: string;
+        quantity: number;
+        location: string;
+        operatorName: string;
+        type: string;
+      }> = [];
+      
+      for (const product of activeProducts) {
+        // 添加初始入库记录
+        records.push({
+          productId: product.id,
+          sku: product.sku,
+          timestamp: product.createdAt,
+          quantity: product.initialQuantity || product.quantity,
+          location: product.storageLocation,
+          operatorName: product.operatorName || '未知',
+          type: 'inbound',
+        });
+        
+        // 添加历史记录中的入库记录
+        if (product.history) {
+          for (const entry of product.history) {
+            if (entry.type === 'inbound' && entry.quantity > 0) {
+              records.push({
+                productId: product.id,
+                sku: product.sku,
+                timestamp: entry.timestamp,
+                quantity: entry.quantity,
+                location: entry.location || product.storageLocation,
+                operatorName: entry.operatorName || '未知',
+                type: 'inbound',
+              });
+            }
+          }
+        }
+      }
+      
+      // 按时间倒序排序
+      records.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+      
+      return records;
+    }, '获取入库历史');
+  }
+
   // ==================== 诊断工具 ====================
 
   // 获取数据库连接状态

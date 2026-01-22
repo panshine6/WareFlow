@@ -72,12 +72,13 @@ export default function InventoryScreen() {
       const isWeb = Platform.OS === 'web';
       
       // 统一使用 ProductStorage（Web 使用 IndexedDB/AsyncStorage）
-      console.log('[InventoryScreen] Loading products from ProductStorage...');
+      // 使用轻量级查询，避免加载大量 base64 图片数据导致内存溢出
+      console.log('[InventoryScreen] Loading products from ProductStorage (light)...');
       const [data, allBoxes] = await Promise.all([
-        ProductStorage.getActive(),
+        ProductStorage.getActiveLight(),
         BoxGenerator.getAllBoxes()
       ]);
-      console.log('[InventoryScreen] Loaded', data.length, 'products');
+      console.log('[InventoryScreen] Loaded', data.length, 'products (light)');
       setProducts(data);
       setBoxes(allBoxes);
     } catch (error) {

@@ -101,15 +101,16 @@ export default function HomeScreen() {
     todayOutboundQuantity: 0,
   });
 
-  // 加载产品列表（Web 使用 IndexedDB，原生使用 SQLite）
+  // 加载产品列表（使用轻量级查询，不加载图片数据）
   const loadProducts = async () => {
     try {
       const isWeb = Platform.OS === 'web';
       let data: Product[] = [];
       
       try {
+        // 使用轻量级查询，避免加载大量 base64 图片数据导致内存溢出
         data = isWeb 
-          ? await ProductStorage.getActive()
+          ? await ProductStorage.getActiveLight()
           : await ProductAPI.getActive();
       } catch (dbError: any) {
         console.error("[Home] Database error:", dbError);

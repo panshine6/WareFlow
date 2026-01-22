@@ -98,13 +98,14 @@ export default function InboundScreen() {
     }, [viewMode])
   );
 
-  // 加载入库历史
+  // 加载入库历史（使用轻量级查询，不加载图片数据）
   const loadInboundHistory = async () => {
     setLoadingHistory(true);
     try {
       let products: Product[] = [];
       try {
-        products = await ProductStorage.getActive();
+        // 使用轻量级查询，避免加载大量 base64 图片数据导致内存溢出
+        products = await ProductStorage.getActiveLight();
       } catch (dbError: any) {
         console.error("[Inbound] Database error:", dbError);
         Alert.alert(
@@ -132,7 +133,7 @@ export default function InboundScreen() {
             operatorName: product.operatorName || "未知",
             quantity: product.initialQuantity || product.quantity,
             location: product.storageLocation,
-            detailImageUri: product.detailImageUri,
+            detailImageUri: product.detailImageUri || '',
             overviewImageUri: product.overviewImageUri || "",
             type: "inbound",
           },

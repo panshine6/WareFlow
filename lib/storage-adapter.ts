@@ -450,6 +450,114 @@ export const ProductStorageAdapter = {
   },
 
   /**
+   * 获取活跃产品列表（轻量级，不包含图片数据）
+   * 用于列表显示，避免加载大量 base64 图片数据导致内存溢出
+   */
+  async getActiveLight(): Promise<Product[]> {
+    if (Platform.OS === 'web') {
+      return await indexedDBStorage.getActiveProductsLight() as Product[];
+    } else {
+      // 原生平台暂时使用完整数据
+      return await this.getActive();
+    }
+  },
+
+  /**
+   * 获取首页统计数据（轻量级）
+   * 只返回必要的统计信息，不加载完整产品数据
+   */
+  async getHomeStats(): Promise<{
+    totalSKU: number;
+    totalQuantity: number;
+    todayCount: number;
+  }> {
+    if (Platform.OS === 'web') {
+      return await indexedDBStorage.getHomeStats();
+    } else {
+      // 原生平台使用完整数据计算
+      const products = await this.getActive();
+      const today = new Date().toDateString();
+      let todayCount = 0;
+      let totalQuantity = 0;
+      
+      for (const p of products) {
+        totalQuantity += p.quantity || 0;
+        const productDate = new Date(p.createdAt).toDateString();
+        if (today === productDate) {
+          todayCount++;
+        }
+      }
+      
+      return {
+        totalSKU: products.length,
+        totalQuantity,
+        todayCount,
+      };
+    }
+  },
+
+  /**
+   * 获取入库历史记录（轻量级）
+   * 只返回入库相关的数据，不包含完整图片
+   */
+  async getInboundHistoryLight(): Promise<Array<{
+    productId: string;
+    sku: string;
+    timestamp: string;
+    quantity: number;
+    location: string;
+    operatorName: string;
+    type: string;
+  }>> {
+    if (Platform.OS === 'web') {
+      return await indexedDBStorage.getInboundHistoryLight();
+    } else {
+      // 原生平台使用完整数据
+      const products = await this.getActive();
+      const records: Array<{
+        productId: string;
+        sku: string;
+        timestamp: string;
+        quantity: number;
+        location: string;
+        operatorName: string;
+        type: string;
+      }> = [];
+      
+      for (const product of products) {
+        records.push({
+          productId: product.id,
+          sku: product.sku,
+          timestamp: product.createdAt,
+          quantity: product.initialQuantity || product.quantity,
+          location: product.storageLocation,
+          operatorName: product.operatorName || '未知',
+          type: 'inbound',
+        });
+        
+        if (product.history) {
+          for (const entry of product.history) {
+            if (entry.type === 'inbound' && entry.quantity > 0) {
+              records.push({
+                productId: product.id,
+                sku: product.sku,
+                timestamp: entry.timestamp,
+                quantity: entry.quantity,
+                location: entry.location || product.storageLocation,
+                operatorName: entry.operatorName || '未知',
+                type: 'inbound',
+              });
+            }
+          }
+        }
+      }
+      
+      records.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+      return records;
+    }
+  },
+
+  /**
    * 获取统计信息
    */
   async getStats(): Promise<{

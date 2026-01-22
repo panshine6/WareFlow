@@ -129,7 +129,8 @@ export default function OutboundScreen() {
 
     setSearching(true);
     try {
-      const allProducts = await ProductStorage.getActive();
+      // 使用轻量级查询，避免加载大量 base64 图片数据导致内存溢出
+      const allProducts = await ProductStorage.getActiveLight();
       const query = searchQuery.trim().toLowerCase();
 
       // 搜索匹配的产品（按 Box 位置或 SKU）
