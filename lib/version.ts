@@ -1,7 +1,13 @@
-/**
- * 应用版本信息
- * 每次修改后自动更新版本号
- */
-export const APP_VERSION = "1.3.13";
-export const APP_BUILD = "20260124-zip-backup";
-export const APP_AUTHOR = "潘章杰（By Manus）";
+// 应用版本号
+// 格式：主版本.次版本.修订版本
+export const APP_VERSION = '1.3.14';
+
+// 版本更新说明
+export const VERSION_NOTES = {
+  '1.3.14': '添加备份文件验证功能',
+  '1.3.13': '改进备份功能 - 使用 ZIP 打包导出',
+  '1.3.12': '修复备份页面加载崩溃问题',
+  '1.3.11': '优化分片导出功能，避免 IndexedDB 连接断开',
+  '1.3.10': '修复 getProductCount 方法重复定义问题',
+  '1.3.9': '添加分片备份导出和合并导入功能',
+};

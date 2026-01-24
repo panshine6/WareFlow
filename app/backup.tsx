@@ -31,6 +31,7 @@ import {
   importFromZip,
   type ExportProgressCallback,
   type ImportProgressCallback,
+import { validateBackupFile, generateValidationReport, type BackupValidationResult } from '@/lib/backup-validator';
 } from '@/lib/chunked-backup';
 
 /**
@@ -62,6 +63,12 @@ export default function BackupScreen() {
   // 合并导入相关状态
   const [selectedFiles, setSelectedFiles] = useState<{ filename: string; data: string }[]>([]);
   const [showMergePanel, setShowMergePanel] = useState(false);
+  
+  // 验证相关状态
+  const [validating, setValidating] = useState(false);
+  const [validationResult, setValidationResult] = useState<BackupValidationResult | null>(null);
+  const [showValidationResult, setShowValidationResult] = useState(false);
+  const validateFileInputRef = useRef<HTMLInputElement | null>(null);
   
   // 文件输入引用
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -451,6 +458,44 @@ export default function BackupScreen() {
   };
 
   // ZIP 导入
+  // 验证备份文件
+  const handleValidateBackup = () => {
+    if (Platform.OS === 'web') {
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.accept = '.json,.zip,application/json,application/zip';
+      
+      input.onchange = async (e: any) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        
+        setValidating(true);
+        setShowValidationResult(false);
+        
+        try {
+          const result = await validateBackupFile(file);
+          setValidationResult(result);
+          setShowValidationResult(true);
+        } catch (error) {
+          console.error('Validation failed:', error);
+          window.alert('验证失败：' + (error instanceof Error ? error.message : '未知错误'));
+        } finally {
+          setValidating(false);
+        }
+      };
+      
+      input.click();
+    } else {
+      Alert.alert('提示', '验证功能目前仅支持 Web 平台');
+    }
+  };
+
+  // 关闭验证结果
+  const handleCloseValidationResult = () => {
+    setShowValidationResult(false);
+    setValidationResult(null);
+  };
+
   const handleZipImport = () => {
     if (Platform.OS === 'web') {
       if (!window.confirm('导入数据将覆盖当前所有数据，是否继续？')) {
@@ -637,6 +682,105 @@ export default function BackupScreen() {
             📤 单文件导出（传统方式）
           </ThemedText>
         </Pressable>
+        {/* 验证备份文件按钮 */}
+        <Pressable
+          style={({ pressed }) => [
+            styles.actionButton,
+            { backgroundColor: '#9C27B0' },
+            {
+              opacity: pressed || validating ? 0.7 : 1,
+            },
+          ]}
+          onPress={handleValidateBackup}
+          disabled={validating || exporting || importing || merging}
+        >
+          {validating ? (
+            <ActivityIndicator color="#fff" />
+          ) : (
+            <ThemedText style={styles.actionButtonText}>
+              🔍 验证备份文件
+            </ThemedText>
+          )}
+        </Pressable>
+        {/* 验证结果显示 */}
+        {showValidationResult && validationResult && (
+          <View style={[styles.statsCard, { backgroundColor: validationResult.isValid ? '#E8F5E9' : '#FFEBEE' }]}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+              <ThemedText style={styles.statsTitle}>
+                {validationResult.isValid ? '✅ 验证通过' : '❌ 验证失败'}
+              </ThemedText>
+              <Pressable onPress={handleCloseValidationResult}>
+                <ThemedText style={{ fontSize: 18, color: '#666' }}>✕</ThemedText>
+              </Pressable>
+            </View>
+            <View style={styles.statsRow}>
+              <ThemedText style={styles.statsLabel}>文件类型</ThemedText>
+              <ThemedText style={styles.statsValue}>{validationResult.fileType.toUpperCase()}</ThemedText>
+            </View>
+            <View style={styles.statsRow}>
+              <ThemedText style={styles.statsLabel}>文件大小</ThemedText>
+              <ThemedText style={styles.statsValue}>{validationResult.fileSizeFormatted}</ThemedText>
+            </View>
+            <View style={styles.statsRow}>
+              <ThemedText style={styles.statsLabel}>总产品数</ThemedText>
+              <ThemedText style={styles.statsValue}>{validationResult.totalProducts}</ThemedText>
+            </View>
+            <View style={styles.statsRow}>
+              <ThemedText style={styles.statsLabel}>有效产品</ThemedText>
+              <ThemedText style={styles.statsValue}>{validationResult.activeProducts}</ThemedText>
+            </View>
+            <View style={styles.statsRow}>
+              <ThemedText style={styles.statsLabel}>已删除</ThemedText>
+              <ThemedText style={styles.statsValue}>{validationResult.deletedProducts}</ThemedText>
+            </View>
+            <View style={styles.statsRow}>
+              <ThemedText style={styles.statsLabel}>有细节图</ThemedText>
+              <ThemedText style={styles.statsValue}>{validationResult.productsWithDetailImage}</ThemedText>
+            </View>
+            <View style={styles.statsRow}>
+              <ThemedText style={styles.statsLabel}>有全景图</ThemedText>
+              <ThemedText style={styles.statsValue}>{validationResult.productsWithOverviewImage}</ThemedText>
+            </View>
+            <View style={styles.statsRow}>
+              <ThemedText style={styles.statsLabel}>无图片</ThemedText>
+              <ThemedText style={styles.statsValue}>{validationResult.productsWithoutImage}</ThemedText>
+            </View>
+            {validationResult.hasHistory && (
+              <View style={styles.statsRow}>
+                <ThemedText style={styles.statsLabel}>历史记录</ThemedText>
+                <ThemedText style={styles.statsValue}>{validationResult.historyCount} 条</ThemedText>
+              </View>
+            )}
+            {validationResult.hasBoxes && (
+              <View style={styles.statsRow}>
+                <ThemedText style={styles.statsLabel}>盒子数据</ThemedText>
+                <ThemedText style={styles.statsValue}>{validationResult.boxCount} 个</ThemedText>
+              </View>
+            )}
+            {validationResult.exportDate && (
+              <View style={styles.statsRow}>
+                <ThemedText style={styles.statsLabel}>导出时间</ThemedText>
+                <ThemedText style={styles.statsValue}>{new Date(validationResult.exportDate).toLocaleString('zh-CN')}</ThemedText>
+              </View>
+            )}
+            {validationResult.warnings.length > 0 && (
+              <View style={{ marginTop: 12, padding: 8, backgroundColor: '#FFF3CD', borderRadius: 8 }}>
+                <ThemedText style={{ fontWeight: '600', marginBottom: 4, color: '#856404' }}>⚠️ 警告</ThemedText>
+                {validationResult.warnings.map((warning, index) => (
+                  <ThemedText key={index} style={{ fontSize: 13, color: '#856404' }}>• {warning}</ThemedText>
+                ))}
+              </View>
+            )}
+            {validationResult.errors.length > 0 && (
+              <View style={{ marginTop: 12, padding: 8, backgroundColor: '#F8D7DA', borderRadius: 8 }}>
+                <ThemedText style={{ fontWeight: '600', marginBottom: 4, color: '#721C24' }}>❌ 错误</ThemedText>
+                {validationResult.errors.map((error, index) => (
+                  <ThemedText key={index} style={{ fontSize: 13, color: '#721C24' }}>• {error}</ThemedText>
+                ))}
+              </View>
+            )}
+          </View>
+        )}
 
         {/* 分隔线 */}
         <View style={styles.divider} />
