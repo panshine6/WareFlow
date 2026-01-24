@@ -635,12 +635,14 @@ export const ProductStorageAdapter = {
     deletedProducts: number;
   }> {
     if (Platform.OS === 'web') {
-      const [totalProducts, activeProducts, deletedProducts] = await Promise.all([
-        indexedDBStorage.getProductCount(),
-        indexedDBStorage.getActiveProductCount(),
-        indexedDBStorage.getDeletedProductCount(),
-      ]);
-      return { totalProducts, activeProducts, deletedProducts };
+      // getProductCount 返回 { total, active } 对象
+      const countResult = await indexedDBStorage.getProductCount();
+      const deletedProducts = await indexedDBStorage.getDeletedProductCount();
+      return {
+        totalProducts: countResult.total,
+        activeProducts: countResult.active,
+        deletedProducts,
+      };
     } else {
       const products = await this.getAll();
       const activeProducts = products.filter((p) => !p.isDeleted).length;
