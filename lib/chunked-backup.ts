@@ -1,12 +1,12 @@
 /**
  * 分片备份工具库
- * 支持将大型备份数据分成多个小文件导出，以及合并多个分片文件导入
+ * 支持将大型备份数据导出为单个 ZIP 文件，以及从 ZIP 文件导入
  * 专为 iPhone Safari 的内存限制优化
  * 
- * v1.3.11 优化：
- * - 每个分片只包含 1 个产品，避免内存溢出
- * - 使用流式处理，逐个产品导出
- * - 增加暂停时间，让浏览器有机会回收内存
+ * v1.3.13 优化：
+ * - 导出为单个 ZIP 文件，内部包含多个分片 JSON
+ * - 每个分片包含 20 个产品
+ * - 用户只需下载一个文件
  */
 
 import { Platform } from 'react-native';
@@ -15,8 +15,8 @@ import { ProductStorageAdapter, SettingsStorageAdapter } from './storage-adapter
 import type { Product } from '@/types/product';
 
 // 分片大小配置（每个分片的产品数量）
-// 优化：每个分片只包含 1 个产品，避免内存溢出
-const PRODUCTS_PER_CHUNK = 1;
+// 20 个产品约 40MB，在内存限制内
+const PRODUCTS_PER_CHUNK = 20;
 
 // 分片元数据接口
 export interface ChunkMetadata {
@@ -80,141 +80,283 @@ export function calculateChunkCount(totalProducts: number): number {
  */
 async function forceGC(): Promise<void> {
   // 给浏览器足够的时间进行垃圾回收
-  await new Promise(resolve => setTimeout(resolve, 500));
+  await new Promise(resolve => setTimeout(resolve, 300));
 }
 
 /**
- * 分片导出数据
- * 返回一个生成器，逐个生成分片数据
- * 
- * 优化策略：
- * 1. 每个分片只包含 1 个产品
- * 2. 每次只从数据库读取 1 个产品
- * 3. 生成 JSON 后立即释放产品数据
- * 4. 增加暂停时间让浏览器回收内存
+ * 导出为单个 ZIP 文件
+ * 内部包含多个分片 JSON 文件
  */
-export async function* exportChunks(
+export async function exportToZip(
   onProgress?: ExportProgressCallback
-): AsyncGenerator<{ filename: string; data: string; chunkIndex: number; totalChunks: number }> {
+): Promise<{ success: boolean; filename?: string; blob?: Blob; error?: string }> {
   const backupId = generateBackupId();
   
-  // 获取产品总数（轻量级操作）
-  let totalProducts = 0;
   try {
-    const countResult = await ProductStorageAdapter.getProductCount();
-    totalProducts = countResult.total;
-  } catch (error) {
-    console.error('[ChunkedBackup] Failed to get product count:', error);
-    throw new Error('无法获取产品数量，请刷新页面重试');
-  }
-  
-  const totalChunks = calculateChunkCount(totalProducts);
-  
-  console.log(`[ChunkedBackup] Starting export: ${totalProducts} products, ${totalChunks} chunks`);
-  
-  // 等待一下，让之前的操作完成
-  await forceGC();
-  
-  // 获取设置（只在第一个分片中包含）- 轻量级数据
-  let settings: any = null;
-  try {
-    settings = await SettingsStorageAdapter.get();
-  } catch (error) {
-    console.warn('[ChunkedBackup] Failed to get settings:', error);
-  }
-  
-  // 获取 Box 数据（只在第一个分片中包含）- 轻量级数据
-  let boxes: any[] = [];
-  try {
-    const { getAllBoxes } = await import('./box-storage');
-    boxes = await getAllBoxes();
-  } catch (error) {
-    console.warn('[ChunkedBackup] Failed to get boxes:', error);
-  }
-  
-  // 等待一下
-  await forceGC();
-  
-  // 逐个产品导出
-  for (let chunkIndex = 0; chunkIndex < totalChunks; chunkIndex++) {
+    // 获取产品总数
+    let totalProducts = 0;
+    try {
+      const countResult = await ProductStorageAdapter.getProductCount();
+      totalProducts = countResult.total;
+    } catch (error) {
+      console.error('[ChunkedBackup] Failed to get product count:', error);
+      return { success: false, error: '无法获取产品数量，请刷新页面重试' };
+    }
+    
+    const totalChunks = calculateChunkCount(totalProducts);
+    
+    console.log(`[ChunkedBackup] Starting ZIP export: ${totalProducts} products, ${totalChunks} chunks`);
+    
     onProgress?.({
-      currentChunk: chunkIndex + 1,
+      currentChunk: 0,
       totalChunks,
-      currentProduct: chunkIndex,
+      currentProduct: 0,
       totalProducts,
-      status: `正在导出第 ${chunkIndex + 1}/${totalChunks} 个产品...`,
+      status: '正在准备导出...',
     });
     
-    // 获取单个产品
-    let products: Product[] = [];
-    try {
-      products = await ProductStorageAdapter.getProductsBatch(PRODUCTS_PER_CHUNK, chunkIndex);
-    } catch (error) {
-      console.error(`[ChunkedBackup] Failed to get product ${chunkIndex + 1}:`, error);
-      throw new Error(`获取产品 ${chunkIndex + 1} 失败，请刷新页面重试`);
-    }
-    
-    // 构建分片数据
-    const chunk: BackupChunk = {
-      metadata: {
-        version: 3, // 版本 3 表示分片备份
-        chunkIndex,
-        totalChunks,
-        backupId,
-        exportDate: new Date().toISOString(),
-        productsInChunk: products.length,
-        totalProducts,
-        hasHistory: false,
-        hasBoxes: chunkIndex === 0 && boxes.length > 0,
-        hasSettings: chunkIndex === 0,
-      },
-      products,
-    };
-    
-    // 第一个分片包含额外数据
-    if (chunkIndex === 0) {
-      chunk.settings = settings;
-      if (boxes.length > 0) {
-        chunk.boxes = boxes;
-      }
-    }
-    
-    // 生成文件名
-    const filename = `WareFlow-backup-${backupId}-part${chunkIndex + 1}.json`;
-    
-    // 序列化数据（不使用缩进，减少内存占用）
-    const data = JSON.stringify(chunk);
-    
-    console.log(`[ChunkedBackup] Generated chunk ${chunkIndex + 1}/${totalChunks}, size: ${(data.length / 1024 / 1024).toFixed(2)}MB`);
-    
-    yield {
-      filename,
-      data,
-      chunkIndex,
-      totalChunks,
-    };
-    
-    // 清理引用，帮助垃圾回收
-    products.length = 0;
-    
-    // 等待较长时间，让浏览器有机会释放内存
+    // 等待一下，让之前的操作完成
     await forceGC();
+    
+    // 获取设置（只在第一个分片中包含）
+    let settings: any = null;
+    try {
+      settings = await SettingsStorageAdapter.get();
+    } catch (error) {
+      console.warn('[ChunkedBackup] Failed to get settings:', error);
+    }
+    
+    // 获取 Box 数据（只在第一个分片中包含）
+    let boxes: any[] = [];
+    try {
+      const { getAllBoxes } = await import('./box-storage');
+      boxes = await getAllBoxes();
+    } catch (error) {
+      console.warn('[ChunkedBackup] Failed to get boxes:', error);
+    }
+    
+    await forceGC();
+    
+    // 收集所有分片数据
+    const chunkDataList: { filename: string; data: string }[] = [];
+    
+    // 逐个分片导出
+    for (let chunkIndex = 0; chunkIndex < totalChunks; chunkIndex++) {
+      const startProduct = chunkIndex * PRODUCTS_PER_CHUNK;
+      
+      onProgress?.({
+        currentChunk: chunkIndex + 1,
+        totalChunks,
+        currentProduct: startProduct,
+        totalProducts,
+        status: `正在处理第 ${chunkIndex + 1}/${totalChunks} 个分片...`,
+      });
+      
+      // 获取当前分片的产品
+      let products: Product[] = [];
+      try {
+        products = await ProductStorageAdapter.getProductsBatch(PRODUCTS_PER_CHUNK, chunkIndex);
+      } catch (error) {
+        console.error(`[ChunkedBackup] Failed to get products for chunk ${chunkIndex + 1}:`, error);
+        return { success: false, error: `获取产品数据失败，请刷新页面重试` };
+      }
+      
+      // 构建分片数据
+      const chunk: BackupChunk = {
+        metadata: {
+          version: 3,
+          chunkIndex,
+          totalChunks,
+          backupId,
+          exportDate: new Date().toISOString(),
+          productsInChunk: products.length,
+          totalProducts,
+          hasHistory: false,
+          hasBoxes: chunkIndex === 0 && boxes.length > 0,
+          hasSettings: chunkIndex === 0,
+        },
+        products,
+      };
+      
+      // 第一个分片包含额外数据
+      if (chunkIndex === 0) {
+        chunk.settings = settings;
+        if (boxes.length > 0) {
+          chunk.boxes = boxes;
+        }
+      }
+      
+      // 生成文件名
+      const filename = `part${String(chunkIndex + 1).padStart(3, '0')}.json`;
+      
+      // 序列化数据
+      const data = JSON.stringify(chunk);
+      
+      console.log(`[ChunkedBackup] Generated chunk ${chunkIndex + 1}/${totalChunks}, size: ${(data.length / 1024 / 1024).toFixed(2)}MB`);
+      
+      chunkDataList.push({ filename, data });
+      
+      // 清理引用
+      products.length = 0;
+      
+      // 等待垃圾回收
+      await forceGC();
+    }
+    
+    onProgress?.({
+      currentChunk: totalChunks,
+      totalChunks,
+      currentProduct: totalProducts,
+      totalProducts,
+      status: '正在打包 ZIP 文件...',
+    });
+    
+    // 创建 ZIP 文件（使用简单的 ZIP 格式）
+    const zipBlob = await createZipBlob(chunkDataList, backupId);
+    
+    const zipFilename = `WareFlow-backup-${backupId}.zip`;
+    
+    onProgress?.({
+      currentChunk: totalChunks,
+      totalChunks,
+      currentProduct: totalProducts,
+      totalProducts,
+      status: '导出完成！',
+    });
+    
+    return { success: true, filename: zipFilename, blob: zipBlob };
+  } catch (error) {
+    console.error('[ChunkedBackup] Export failed:', error);
+    return { success: false, error: error instanceof Error ? error.message : '导出失败' };
   }
-  
-  onProgress?.({
-    currentChunk: totalChunks,
-    totalChunks,
-    currentProduct: totalProducts,
-    totalProducts,
-    status: '导出完成！',
-  });
 }
 
 /**
- * 下载单个分片文件（Web 平台）
+ * 创建 ZIP Blob（简单实现，不依赖外部库）
+ * 使用 STORE 方法（无压缩），避免内存问题
  */
-export function downloadChunk(filename: string, data: string): void {
-  const blob = new Blob([data], { type: 'application/json' });
+async function createZipBlob(
+  files: { filename: string; data: string }[],
+  backupId: string
+): Promise<Blob> {
+  const encoder = new TextEncoder();
+  const parts: Uint8Array[] = [];
+  const centralDirectory: Uint8Array[] = [];
+  let offset = 0;
+  
+  // 添加 manifest 文件
+  const manifest = {
+    version: 3,
+    backupId,
+    exportDate: new Date().toISOString(),
+    totalChunks: files.length,
+    files: files.map(f => f.filename),
+  };
+  const manifestData = JSON.stringify(manifest, null, 2);
+  files.unshift({ filename: 'manifest.json', data: manifestData });
+  
+  for (const file of files) {
+    const fileData = encoder.encode(file.data);
+    const filenameBytes = encoder.encode(file.filename);
+    
+    // Local file header
+    const localHeader = new Uint8Array(30 + filenameBytes.length);
+    const view = new DataView(localHeader.buffer);
+    
+    view.setUint32(0, 0x04034b50, true); // Local file header signature
+    view.setUint16(4, 20, true); // Version needed to extract
+    view.setUint16(6, 0, true); // General purpose bit flag
+    view.setUint16(8, 0, true); // Compression method (STORE)
+    view.setUint16(10, 0, true); // File last modification time
+    view.setUint16(12, 0, true); // File last modification date
+    view.setUint32(14, crc32(fileData), true); // CRC-32
+    view.setUint32(18, fileData.length, true); // Compressed size
+    view.setUint32(22, fileData.length, true); // Uncompressed size
+    view.setUint16(26, filenameBytes.length, true); // File name length
+    view.setUint16(28, 0, true); // Extra field length
+    localHeader.set(filenameBytes, 30);
+    
+    // Central directory header
+    const centralHeader = new Uint8Array(46 + filenameBytes.length);
+    const centralView = new DataView(centralHeader.buffer);
+    
+    centralView.setUint32(0, 0x02014b50, true); // Central directory signature
+    centralView.setUint16(4, 20, true); // Version made by
+    centralView.setUint16(6, 20, true); // Version needed to extract
+    centralView.setUint16(8, 0, true); // General purpose bit flag
+    centralView.setUint16(10, 0, true); // Compression method
+    centralView.setUint16(12, 0, true); // File last modification time
+    centralView.setUint16(14, 0, true); // File last modification date
+    centralView.setUint32(16, crc32(fileData), true); // CRC-32
+    centralView.setUint32(20, fileData.length, true); // Compressed size
+    centralView.setUint32(24, fileData.length, true); // Uncompressed size
+    centralView.setUint16(28, filenameBytes.length, true); // File name length
+    centralView.setUint16(30, 0, true); // Extra field length
+    centralView.setUint16(32, 0, true); // File comment length
+    centralView.setUint16(34, 0, true); // Disk number start
+    centralView.setUint16(36, 0, true); // Internal file attributes
+    centralView.setUint32(38, 0, true); // External file attributes
+    centralView.setUint32(42, offset, true); // Relative offset of local header
+    centralHeader.set(filenameBytes, 46);
+    
+    parts.push(localHeader);
+    parts.push(fileData);
+    centralDirectory.push(centralHeader);
+    
+    offset += localHeader.length + fileData.length;
+  }
+  
+  // End of central directory
+  const centralDirSize = centralDirectory.reduce((sum, arr) => sum + arr.length, 0);
+  const endOfCentralDir = new Uint8Array(22);
+  const endView = new DataView(endOfCentralDir.buffer);
+  
+  endView.setUint32(0, 0x06054b50, true); // End of central directory signature
+  endView.setUint16(4, 0, true); // Number of this disk
+  endView.setUint16(6, 0, true); // Disk where central directory starts
+  endView.setUint16(8, files.length, true); // Number of central directory records on this disk
+  endView.setUint16(10, files.length, true); // Total number of central directory records
+  endView.setUint32(12, centralDirSize, true); // Size of central directory
+  endView.setUint32(16, offset, true); // Offset of start of central directory
+  endView.setUint16(20, 0, true); // Comment length
+  
+  return new Blob([...parts, ...centralDirectory, endOfCentralDir], { type: 'application/zip' });
+}
+
+/**
+ * CRC32 计算
+ */
+function crc32(data: Uint8Array): number {
+  let crc = 0xFFFFFFFF;
+  const table = getCrc32Table();
+  
+  for (let i = 0; i < data.length; i++) {
+    crc = (crc >>> 8) ^ table[(crc ^ data[i]) & 0xFF];
+  }
+  
+  return (crc ^ 0xFFFFFFFF) >>> 0;
+}
+
+let crc32Table: Uint32Array | null = null;
+
+function getCrc32Table(): Uint32Array {
+  if (crc32Table) return crc32Table;
+  
+  crc32Table = new Uint32Array(256);
+  for (let i = 0; i < 256; i++) {
+    let c = i;
+    for (let j = 0; j < 8; j++) {
+      c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+    }
+    crc32Table[i] = c;
+  }
+  return crc32Table;
+}
+
+/**
+ * 下载 ZIP 文件
+ */
+export function downloadZip(filename: string, blob: Blob): void {
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.href = url;
@@ -223,10 +365,166 @@ export function downloadChunk(filename: string, data: string): void {
   link.click();
   document.body.removeChild(link);
   
-  // 立即释放 URL
+  // 延迟释放 URL
   setTimeout(() => {
     URL.revokeObjectURL(url);
-  }, 100);
+  }, 1000);
+}
+
+/**
+ * 从 ZIP 文件导入数据
+ */
+export async function importFromZip(
+  zipFile: File,
+  onProgress?: ImportProgressCallback
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    onProgress?.({
+      currentFile: 0,
+      totalFiles: 1,
+      currentProduct: 0,
+      totalProducts: 0,
+      status: '正在读取 ZIP 文件...',
+    });
+    
+    // 读取 ZIP 文件
+    const arrayBuffer = await zipFile.arrayBuffer();
+    const files = await parseZip(new Uint8Array(arrayBuffer));
+    
+    // 查找 manifest
+    const manifestFile = files.find(f => f.filename === 'manifest.json');
+    if (!manifestFile) {
+      return { success: false, error: 'ZIP 文件中缺少 manifest.json' };
+    }
+    
+    const manifest = JSON.parse(manifestFile.data);
+    const totalChunks = manifest.totalChunks || files.length - 1;
+    
+    onProgress?.({
+      currentFile: 0,
+      totalFiles: totalChunks,
+      currentProduct: 0,
+      totalProducts: 0,
+      status: '正在解析备份数据...',
+    });
+    
+    // 收集所有分片
+    const chunks: { filename: string; data: string }[] = [];
+    for (const file of files) {
+      if (file.filename.startsWith('part') && file.filename.endsWith('.json')) {
+        chunks.push(file);
+      }
+    }
+    
+    // 按文件名排序
+    chunks.sort((a, b) => a.filename.localeCompare(b.filename));
+    
+    // 合并并导入
+    const mergeResult = await mergeChunks(chunks, onProgress);
+    if (!mergeResult.success) {
+      return { success: false, error: mergeResult.error };
+    }
+    
+    // 导入数据
+    const importResult = await importMergedData(mergeResult.mergedData!, onProgress);
+    return importResult;
+  } catch (error) {
+    console.error('[ChunkedBackup] Import from ZIP failed:', error);
+    return { success: false, error: error instanceof Error ? error.message : '导入失败' };
+  }
+}
+
+/**
+ * 解析 ZIP 文件（简单实现）
+ */
+async function parseZip(data: Uint8Array): Promise<{ filename: string; data: string }[]> {
+  const decoder = new TextDecoder();
+  const files: { filename: string; data: string }[] = [];
+  let offset = 0;
+  
+  while (offset < data.length - 4) {
+    const view = new DataView(data.buffer, data.byteOffset + offset);
+    const signature = view.getUint32(0, true);
+    
+    if (signature === 0x04034b50) { // Local file header
+      const filenameLength = view.getUint16(26, true);
+      const extraLength = view.getUint16(28, true);
+      const compressedSize = view.getUint32(18, true);
+      
+      const filenameStart = offset + 30;
+      const filename = decoder.decode(data.slice(filenameStart, filenameStart + filenameLength));
+      
+      const dataStart = filenameStart + filenameLength + extraLength;
+      const fileData = decoder.decode(data.slice(dataStart, dataStart + compressedSize));
+      
+      files.push({ filename, data: fileData });
+      
+      offset = dataStart + compressedSize;
+    } else if (signature === 0x02014b50) { // Central directory header
+      break; // 到达中央目录，停止解析
+    } else {
+      offset++;
+    }
+  }
+  
+  return files;
+}
+
+// ==================== 保留旧的分片导出接口（用于兼容） ====================
+
+/**
+ * 分片导出数据（生成器版本，保留用于兼容）
+ */
+export async function* exportChunks(
+  onProgress?: ExportProgressCallback
+): AsyncGenerator<{ filename: string; data: string; chunkIndex: number; totalChunks: number }> {
+  // 使用新的 ZIP 导出，但保持接口兼容
+  const result = await exportToZip(onProgress);
+  if (result.success && result.blob) {
+    // 将 ZIP 转换为单个"分片"
+    const reader = new FileReader();
+    const base64 = await new Promise<string>((resolve, reject) => {
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = reject;
+      reader.readAsDataURL(result.blob!);
+    });
+    
+    yield {
+      filename: result.filename!,
+      data: base64,
+      chunkIndex: 0,
+      totalChunks: 1,
+    };
+  }
+}
+
+/**
+ * 下载单个分片文件（Web 平台）- 保留用于兼容
+ */
+export function downloadChunk(filename: string, data: string): void {
+  // 检查是否是 base64 数据（ZIP 文件）
+  if (data.startsWith('data:application/zip')) {
+    const link = document.createElement('a');
+    link.href = data;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  } else {
+    // 普通 JSON 数据
+    const blob = new Blob([data], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    
+    setTimeout(() => {
+      URL.revokeObjectURL(url);
+    }, 100);
+  }
 }
 
 /**
@@ -300,7 +598,6 @@ export async function mergeChunks(
     
     // 检查是否是旧版本的完整备份
     if (parsedChunks.length === 1 && !parsedChunks[0].chunk.metadata) {
-      // 直接返回原始数据
       return { success: true, mergedData: chunks[0].data };
     }
     
@@ -365,7 +662,7 @@ export async function mergeChunks(
     
     // 构建合并后的数据
     const mergedData = {
-      version: 2, // 合并后使用标准版本
+      version: 2,
       exportDate: firstChunk.metadata?.exportDate || new Date().toISOString(),
       productsCount: allProducts.length,
       historyCount: firstChunk.history?.length || 0,
@@ -418,7 +715,6 @@ export async function importMergedData(
     if (Platform.OS === 'web') {
       await indexedDBStorage.importData(jsonString);
     } else {
-      // 原生平台
       await ProductStorageAdapter.replaceAll(data.products);
       
       if (data.settings) {
@@ -461,7 +757,7 @@ export async function getExportEstimate(): Promise<{
   const { total: totalProducts } = await ProductStorageAdapter.getProductCount();
   const estimatedChunks = calculateChunkCount(totalProducts);
   
-  // 估算每个分片大小（每个产品平均 2MB）
+  // 估算每个分片大小
   const avgProductSize = 2; // MB
   const estimatedSizePerChunk = `${(PRODUCTS_PER_CHUNK * avgProductSize).toFixed(0)}MB`;
   

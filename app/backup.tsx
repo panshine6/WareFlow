@@ -26,6 +26,9 @@ import {
   importMergedData,
   getExportEstimate,
   validateChunk,
+  exportToZip,
+  downloadZip,
+  importFromZip,
   type ExportProgressCallback,
   type ImportProgressCallback,
 } from '@/lib/chunked-backup';
@@ -82,7 +85,7 @@ export default function BackupScreen() {
     loadStats();
   }, []);
 
-  // 分片导出数据
+  // ZIP 导出数据（推荐）
   const handleChunkedExport = async () => {
     setExporting(true);
     setExportProgress('准备导出...');
@@ -92,44 +95,42 @@ export default function BackupScreen() {
         setExportProgress(progress.status);
       };
       
-      let downloadedCount = 0;
-      const totalChunks = exportEstimate?.estimatedChunks || 1;
-      
       // 等待一下，让页面稳定
       await new Promise(resolve => setTimeout(resolve, 500));
       
-      // 逐个下载分片
-      for await (const chunk of exportChunks(onProgress)) {
-        // 下载当前分片
-        downloadChunk(chunk.filename, chunk.data);
-        downloadedCount++;
-        
-        // 每个分片下载后等待较长时间，让浏览器有时间释放内存
-        if (downloadedCount < totalChunks) {
-          setExportProgress(`已下载 ${downloadedCount}/${totalChunks} 个产品，准备下一个...`);
-          // 增加等待时间到 2 秒，让浏览器有足够时间回收内存
-          await new Promise(resolve => setTimeout(resolve, 2000));
-        }
+      // 导出为 ZIP 文件
+      const result = await exportToZip(onProgress);
+      
+      if (!result.success) {
+        throw new Error(result.error || '导出失败');
+      }
+      
+      // 下载 ZIP 文件
+      if (result.blob && result.filename) {
+        downloadZip(result.filename, result.blob);
       }
       
       setExportProgress('');
+      
+      // 计算文件大小
+      const fileSizeMB = result.blob ? (result.blob.size / (1024 * 1024)).toFixed(1) : '未知';
       
       // 显示完成提示
       if (Platform.OS === 'web') {
         setTimeout(() => {
           window.alert(
             `✅ 备份导出完成！\n\n` +
-            `📁 共导出 ${downloadedCount} 个分片文件\n` +
-            `📝 文件命名格式：WareFlow-backup-xxx-partN.json\n\n` +
+            `📁 文件名：${result.filename}\n` +
+            `📊 文件大小：${fileSizeMB} MB\n\n` +
             `💡 下载完成后如何找到文件：\n` +
             `• iPhone：打开「文件」App → 「下载」文件夹\n` +
             `• Android：打开「下载」或「文件管理器」\n` +
             `• 电脑：查看浏览器下载列表或下载文件夹\n\n` +
-            `⚠️ 请妥善保存所有分片文件，导入时需要全部文件`
+            `📦 这是一个 ZIP 压缩包，导入时直接选择此文件即可`
           );
         }, 500);
       } else {
-        Alert.alert('成功', `备份导出完成，共 ${downloadedCount} 个分片文件`);
+        Alert.alert('成功', `备份导出完成：${result.filename}`);
       }
     } catch (error) {
       console.error('Export failed:', error);
@@ -449,6 +450,76 @@ export default function BackupScreen() {
     }
   };
 
+  // ZIP 导入
+  const handleZipImport = () => {
+    if (Platform.OS === 'web') {
+      if (!window.confirm('导入数据将覆盖当前所有数据，是否继续？')) {
+        return;
+      }
+      
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.accept = '.zip,application/zip,application/json,.json';
+      
+      input.onchange = async (e: any) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        
+        setImporting(true);
+        setImportProgress('正在读取文件...');
+        
+        try {
+          // 检查文件类型
+          if (file.name.endsWith('.zip') || file.type === 'application/zip') {
+            // ZIP 文件
+            const result = await importFromZip(file, (progress) => {
+              setImportProgress(progress.status);
+            });
+            
+            if (!result.success) {
+              throw new Error(result.error || '导入失败');
+            }
+            
+            await loadStats();
+            window.alert('✅ 数据导入成功！');
+          } else {
+            // JSON 文件（传统格式）
+            const reader = new FileReader();
+            reader.onload = async (event) => {
+              try {
+                const jsonString = event.target?.result as string;
+                setImportProgress('正在导入数据...');
+                await BackupAdapter.importData(jsonString);
+                await loadStats();
+                window.alert('✅ 数据导入成功！');
+              } catch (error) {
+                console.error('Import failed:', error);
+                const errorMessage = error instanceof Error ? error.message : String(error);
+                window.alert(`导入失败：${errorMessage}`);
+              } finally {
+                setImporting(false);
+                setImportProgress('');
+              }
+            };
+            reader.readAsText(file);
+            return; // 让 FileReader 处理完成
+          }
+        } catch (error) {
+          console.error('Import failed:', error);
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          window.alert(`导入失败：${errorMessage}`);
+        } finally {
+          setImporting(false);
+          setImportProgress('');
+        }
+      };
+      
+      input.click();
+    } else {
+      Alert.alert('提示', '原生平台请使用单文件导入');
+    }
+  };
+
   return (
     <ThemedView style={styles.container}>
       <ScrollView
@@ -478,10 +549,10 @@ export default function BackupScreen() {
         <View style={styles.infoCard}>
           <ThemedText style={styles.infoTitle}>📦 备份说明</ThemedText>
           <ThemedText style={styles.infoText}>
-            • 分片导出：将数据分成多个小文件导出（推荐）
+            • ZIP 导出：将所有数据打包成一个 ZIP 文件（推荐）
           </ThemedText>
           <ThemedText style={styles.infoText}>
-            • 合并导入：选择多个分片文件，自动合并后导入
+            • ZIP 导入：选择 ZIP 文件，自动解压并导入
           </ThemedText>
           <ThemedText style={styles.infoText}>
             • 建议定期备份数据到 iCloud Drive 或其他云存储
@@ -545,7 +616,7 @@ export default function BackupScreen() {
             <ActivityIndicator color="#fff" />
           ) : (
             <ThemedText style={styles.actionButtonText}>
-              📤 分片导出数据（推荐）
+              📤 ZIP 导出数据（推荐）
             </ThemedText>
           )}
         </Pressable>
@@ -638,7 +709,7 @@ export default function BackupScreen() {
           </View>
         )}
 
-        {/* 合并导入按钮 */}
+        {/* ZIP 导入按钮 */}
         {!showMergePanel && (
           <Pressable
             style={({ pressed }) => [
@@ -648,14 +719,14 @@ export default function BackupScreen() {
                 opacity: pressed || importing || merging ? 0.7 : 1,
               },
             ]}
-            onPress={() => confirmImport(false)}
+            onPress={() => handleZipImport()}
             disabled={importing || exporting || merging}
           >
             {importing ? (
               <ActivityIndicator color="#fff" />
             ) : (
               <ThemedText style={styles.actionButtonText}>
-                📥 合并导入（多文件）
+                📥 ZIP 导入（推荐）
               </ThemedText>
             )}
           </Pressable>
@@ -688,10 +759,10 @@ export default function BackupScreen() {
             • 导入前建议先导出当前数据作为备份
           </ThemedText>
           <ThemedText style={styles.warningText}>
-            • 分片备份时，请确保所有分片文件都已保存
+            • ZIP 备份文件包含所有数据，请妥善保存
           </ThemedText>
           <ThemedText style={styles.warningText}>
-            • 合并导入时，需要选择同一次备份的所有分片文件
+            • 导入时直接选择 ZIP 文件即可
           </ThemedText>
         </View>
       </ScrollView>
