@@ -1,7 +1,7 @@
 /**
  * Web 平台相机组件
  * 使用 HTML5 input[type=file] 实现，兼容 iOS Safari
- * 拍照后自动压缩图片到 2048×2048 以内
+ * 拍照后自动压缩图片到 512×512 以内（与云端存储一致）
  */
 import { useRef, useState } from "react";
 import { ActivityIndicator, Platform, Pressable, StyleSheet, View } from "react-native";
@@ -16,9 +16,9 @@ interface WebCameraProps {
   subHint?: string;
 }
 
-// 图片压缩配置
-const IMAGE_MAX_SIZE = 2048; // 最大边长
-const IMAGE_QUALITY = 0.85; // JPEG 质量
+// 图片压缩配置 - 与云端存储一致，减少本地存储占用
+const IMAGE_MAX_SIZE = 512; // 最大边长（与云端一致）
+const IMAGE_QUALITY = 0.6; // JPEG 质量（与云端一致）
 
 export function WebCamera({
   onPhotoTaken,
@@ -53,7 +53,7 @@ export function WebCamera({
       const originalBase64 = result.split(",")[1];
       console.log("[WebCamera] Original base64 length:", originalBase64.length);
 
-      // 压缩图片到 2048×2048 以内
+      // 压缩图片到 512×512 以内（与云端一致）
       console.log("[WebCamera] Compressing image to max", IMAGE_MAX_SIZE, "px...");
       const compressedBase64 = await compressImage(originalBase64, IMAGE_MAX_SIZE, IMAGE_QUALITY);
       
